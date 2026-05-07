@@ -296,6 +296,45 @@ class SIPPSyncService {
   }
 
   /**
+   * Fetch jadwal sidang dan persist ke tabel jadwal_sidang.
+   * Strategi: DELETE existing + INSERT new dalam satu transaction.
+   *
+   * @param {string} nomorPerkara
+   * @param {import('puppeteer').Page} page - reused page instance
+   * @returns {Promise<number>} jumlah jadwal yang ke-cache
+   */
+  async fetchAndCacheJadwal(nomorPerkara, page) {
+    const jadwal = await this._fetchJadwalFromPage(page, nomorPerkara);
+    const fetchedAt = new Date().toISOString();
+
+    const del = this.db.prepare('DELETE FROM jadwal_sidang WHERE nomor_perkara = ?');
+    const ins = this.db.prepare(`
+      INSERT INTO jadwal_sidang
+      (nomor_perkara, nomor, tanggal, jam, agenda, ruangan, alasan_ditunda, fetched_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const tx = this.db.transaction((entries) => {
+      del.run(nomorPerkara);
+      for (const e of entries) {
+        ins.run(
+          nomorPerkara,
+          parseInt(e.nomor) || null,
+          e.tanggal || null,
+          e.jam || null,
+          e.agenda || null,
+          e.ruangan || null,
+          e.alasanDitunda || null,
+          fetchedAt
+        );
+      }
+    });
+
+    tx(jadwal);
+    return jadwal.length;
+  }
+
+  /**
    * Deteksi jenis perkara dari nomor perkara
    * Contoh: 4/Pdt.P/2026/PN Ntn -> Perdata
    *          22/Pid.B/2026/PN Ntn -> Pidana
