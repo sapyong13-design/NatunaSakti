@@ -3,8 +3,9 @@
 // Fetch dan sync data perkara dari SIPP PN Natuna
 // ============================================
 
-const fetch = require('node-fetch');
+const axios = require('axios');
 const cheerio = require('cheerio');
+const puppeteer = require('puppeteer');
 
 class SIPPSyncService {
   constructor(db) {
@@ -13,13 +14,110 @@ class SIPPSyncService {
   }
 
   /**
-   * Fetch HTML dari website SIPP
+   * Fetch HTML dari website SIPP menggunakan Puppeteer (untuk pagination JavaScript)
    */
-  async fetchSIPPData() {
-    console.log('[SIPP] Fetching data from', this.sippUrl);
-    const response = await this.fetchWithRetry(this.sippUrl);
-    const html = await response.text();
-    return this.parsePerkaraTable(html);
+  async fetchSIPPData(progressCallback = null) {
+    console.log('[SIPP] Fetching data from', this.sippUrl, 'using Puppeteer...');
+
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu'
+      ]
+    });
+
+    try {
+      const page = await browser.newPage();
+      await page.goto(this.sippUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+      // Wait for table to load
+      await page.waitForSelector('table', { timeout: 10000 });
+
+      const perkaraList = [];
+      let currentPage = 1;
+      const maxPages = 10; // Up to 200 perkara (20 per page)
+
+      while (currentPage <= maxPages) {
+        console.log(`[SIPP] Scraping page ${currentPage}...`);
+
+        // Navigate directly to the page hash for more reliable pagination
+        if (currentPage > 1) {
+          await page.goto(`${this.sippUrl}#page-${currentPage}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+          await new Promise(r => setTimeout(r, 1000)); // Wait for AJAX
+        }
+
+        // Get data from current page
+        const pageData = await page.evaluate(() => {
+          const data = [];
+          const rows = document.querySelectorAll('table tr');
+
+          rows.forEach((row, i) => {
+            if (i === 0) return; // Skip header
+
+            const cols = row.querySelectorAll('td');
+            if (cols.length < 7) return;
+
+            const nomorPerkara = cols[1]?.textContent?.trim();
+            // Must be valid nomor perkara (starts with digit)
+            if (!nomorPerkara || !/^\d/.test(nomorPerkara)) return;
+
+            data.push({
+              nomor_perkara: nomorPerkara,
+              sipp_tanggal_register: cols[2]?.textContent?.trim() || '',
+              sipp_klasifikasi: cols[3]?.textContent?.trim() || '',
+              para_pihak: cols[4]?.textContent?.trim() || '',
+              sipp_status: cols[5]?.textContent?.trim() || '',
+              sipp_lama_proses: cols[6]?.textContent?.trim() || ''
+            });
+          });
+
+          return data;
+        });
+
+        if (pageData.length === 0) {
+          console.log(`[SIPP] No more data on page ${currentPage}`);
+          break;
+        }
+
+        // Process each perkara
+        for (const item of pageData) {
+          const jenis = this.detectJenisPerkara(item.nomor_perkara);
+          perkaraList.push({
+            ...item,
+            jenis_perkara: jenis,
+            nama_perkara: item.sipp_klasifikasi,
+            tahun_masuk: this.extractTahun(item.nomor_perkara),
+            sipp_synced: 1,
+            sipp_last_sync: new Date().toISOString()
+          });
+        }
+
+        console.log(`[SIPP] Page ${currentPage}: ${pageData.length} perkara (total: ${perkaraList.length})`);
+
+        // Report progress
+        if (progressCallback) {
+          progressCallback({
+            current: perkaraList.length,
+            page: currentPage
+          });
+        }
+
+        currentPage++;
+      }
+
+      await page.close();
+      console.log(`[SIPP] Total fetched: ${perkaraList.length} perkara`);
+      return perkaraList;
+
+    } finally {
+      await browser.close();
+    }
   }
 
   /**
@@ -28,21 +126,16 @@ class SIPPSyncService {
   async fetchWithRetry(url, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-        const response = await fetch(url, {
-          signal: controller.signal
+        const response = await axios.get(url, {
+          timeout: 30000,
+          responseType: 'text'
         });
-        clearTimeout(timeoutId);
 
-        if (response.ok) return response;
-
-        if (i < maxRetries - 1) {
-          const backoff = 5000 * (i + 1);
-          console.log(`[SIPP] Retry ${i + 1}/${maxRetries} in ${backoff}ms`);
-          await new Promise(r => setTimeout(r, backoff));
-        }
+        // Return object with text() method for compatibility
+        return {
+          text: () => Promise.resolve(response.data),
+          ok: true
+        };
       } catch (error) {
         if (i < maxRetries - 1) {
           const backoff = 5000 * (i + 1);
@@ -95,6 +188,102 @@ class SIPPSyncService {
   }
 
   /**
+   * Fetch jadwal sidang untuk satu perkara
+   */
+  async fetchJadwalSidang(nomorPerkara) {
+    console.log('[SIPP] Fetching jadwal for:', nomorPerkara);
+
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    });
+
+    try {
+      const page = await browser.newPage();
+
+      // Search for the perkara
+      await page.goto(this.sippUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForSelector('table', { timeout: 10000 });
+
+      // Search the perkara in the table
+      const found = await page.evaluate((nomor) => {
+        const rows = document.querySelectorAll('table tr');
+        for (let i = 1; i < rows.length; i++) {
+          const cols = rows[i].querySelectorAll('td');
+          if (cols.length >= 2) {
+            const nomorPerkara = cols[1]?.textContent?.trim();
+            if (nomorPerkara === nomor) {
+              // Click the detail link
+              const link = cols[0]?.querySelector('a');
+              if (link) {
+                link.click();
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      }, nomorPerkara);
+
+      if (!found) {
+        await browser.close();
+        return [];
+      }
+
+      // Wait for detail page to load
+      await new Promise(r => setTimeout(r, 3000));
+
+      // Get jadwal sidang from detail page
+      const jadwal = await page.evaluate(() => {
+        const sidangList = [];
+        const tables = document.querySelectorAll('table');
+
+        tables.forEach(table => {
+          const headers = table.querySelectorAll('th');
+          let isJadwalTable = false;
+
+          headers.forEach(h => {
+            if (h.textContent.includes('jadwal') || h.textContent.includes('sidang')) {
+              isJadwalTable = true;
+            }
+          });
+
+          if (isJadwalTable) {
+            const rows = table.querySelectorAll('tr');
+            rows.forEach((row, i) => {
+              if (i === 0) return; // Skip header
+
+              const cols = row.querySelectorAll('td');
+              if (cols.length >= 3) {
+                const nomor = cols[0]?.textContent?.trim() || '';
+                const tanggal = cols[1]?.textContent?.trim() || '';
+                const agenda = cols[2]?.textContent?.trim() || '';
+                const ruangan = cols.length > 3 ? cols[3]?.textContent?.trim() : '';
+                const alasanDitunda = cols.length > 4 ? cols[4]?.textContent?.trim() : '';
+
+                if (nomor || tanggal || agenda) {
+                  sidangList.push({ nomor, tanggal, agenda, ruangan, alasanDitunda });
+                }
+              }
+            });
+          }
+        });
+
+        return sidangList;
+      });
+
+      await browser.close();
+      console.log('[SIPP] Found', jadwal.length, 'sidang schedules');
+      return jadwal;
+
+    } catch (error) {
+      console.error('[SIPP] Error fetching jadwal:', error.message);
+      await browser.close();
+      return [];
+    }
+  }
+
+  /**
    * Deteksi jenis perkara dari nomor perkara
    * Contoh: 4/Pdt.P/2026/PN Ntn -> Perdata
    *          22/Pid.B/2026/PN Ntn -> Pidana
@@ -102,6 +291,8 @@ class SIPPSyncService {
   detectJenisPerkara(nomorPerkara) {
     const upper = nomorPerkara.toUpperCase();
 
+    // Check PRK first because Pid.Sus-PRK contains both /PID and PRK
+    if (upper.includes('PRK')) return 'Perikanan';
     if (upper.includes('/PDT')) return 'Perdata';
     if (upper.includes('/PID')) return 'Pidana';
 

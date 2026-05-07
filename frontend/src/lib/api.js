@@ -4,15 +4,19 @@
 
 const API_BASE = 'http://localhost:3000/api';
 
-// Get all perkara
+// Get all perkara (paginated)
 export const getPerkara = async (filters = {}) => {
     const params = new URLSearchParams();
     if (filters.jenis_perkara) params.append('jenis_perkara', filters.jenis_perkara);
     if (filters.tahun_masuk) params.append('tahun_masuk', filters.tahun_masuk);
+    params.append('page', filters.page || 1);
+    params.append('limit', filters.limit || 100);
 
     const response = await fetch(`${API_BASE}/perkara?${params}`);
     if (!response.ok) throw new Error('Failed to fetch data');
-    return response.json();
+    const result = await response.json();
+    // Return data array from paginated response
+    return result.data || result;
 };
 
 // Get perkara by ID
@@ -70,4 +74,45 @@ export const getPerkaraByMonth = async (month, year, filters = {}) => {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
     return getPerkaraByDateRange(startDate, endDate, filters);
+};
+
+// ========================
+// SIPP SYNC API
+// ========================
+
+// Get SIPP sync status
+export const getSippStatus = async () => {
+    const response = await fetch(`${API_BASE}/perkara/sipp/status`);
+    if (!response.ok) throw new Error('Failed to fetch SIPP status');
+    return response.json();
+};
+
+// Trigger manual SIPP sync
+export const syncSippData = async () => {
+    const response = await fetch(`${API_BASE}/perkara/sipp/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    });
+    if (!response.ok) throw new Error('Failed to sync SIPP data');
+    return response.json();
+};
+
+// Get jadwal sidang for a perkara
+export const getJadwalSidang = async (nomorPerkara) => {
+    const encoded = encodeURIComponent(nomorPerkara);
+    const response = await fetch(`${API_BASE}/perkara/sipp/jadwal/${encoded}`);
+    if (!response.ok) throw new Error('Failed to fetch jadwal sidang');
+    return response.json();
+};
+
+// Subscribe to sync progress via SSE
+export const subscribeSyncProgress = (onProgress) => {
+    const eventSource = new EventSource(`${API_BASE}/perkara/sipp/progress`);
+
+    eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        onProgress(data);
+    };
+
+    return eventSource;
 };

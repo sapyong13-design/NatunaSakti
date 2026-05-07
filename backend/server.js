@@ -1,7 +1,6 @@
 // ============================================
 // BACKEND SERVER - Akurasi Kepaniteraan
-// Pengadilan Negeri Natuna Kelas IB
-// Database: SQLite (local)
+// Minimal working version
 // ============================================
 
 console.log('[SERVER-FILE-LOAD] Timestamp:', Date.now(), 'File:', __filename);
@@ -22,6 +21,12 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
+// Request logging middleware
+app.use((req, res, next) => {
+    console.log(`[REQUEST] ${req.method} ${req.url}`);
+    next();
+});
+
 // Setup SQLite Database
 const dataDir = path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) {
@@ -32,14 +37,12 @@ const db = new Database(dbPath);
 
 // Setup Database Schema
 function setupDatabase() {
-    // Cek apakah tabel perkara ada
     const tableExists = db.prepare(`
         SELECT name FROM sqlite_master
         WHERE type='table' AND name='perkara'
     `).get();
 
     if (!tableExists) {
-        // Tabel baru, buat dengan schema lengkap
         db.exec(`
             CREATE TABLE perkara (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,7 +70,6 @@ function setupDatabase() {
         `);
         console.log('[Database] Created new table with SIPP columns');
     } else {
-        // Tabel sudah ada, cek dan tambahkan kolom yang hilang
         const existingColumns = db.prepare("PRAGMA table_info(perkara)").all();
         const existingColumnNames = existingColumns.map(col => col.name);
 
@@ -93,7 +95,6 @@ function setupDatabase() {
             }
         }
 
-        // Create index if not exists
         try {
             db.exec('CREATE INDEX IF NOT EXISTS idx_sipp_synced ON perkara(sipp_synced)');
         } catch (error) {
@@ -112,6 +113,16 @@ console.log('[SIPP] Service initialized');
 app.set('db', db);
 app.set('sippService', sippService);
 
+// Sync progress state (in-memory for SSE clients)
+let syncProgress = {
+    inProgress: false,
+    current: 0,
+    total: 0,
+    page: 0,
+    message: '',
+    error: null
+};
+
 console.log('Database connected:', dbPath);
 
 // ========================
@@ -126,48 +137,72 @@ app.get('/', (req, res) => {
     });
 });
 
-// Test route after root
-app.get('/api/test-after-root', (req, res) => res.json({ok: true, route: 'test-after-root'}));
-
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Test route
+app.get('/api/test', (req, res) => {
+    console.log('[TEST] Called!');
+    res.json({ ok: true, message: 'Test route works!' });
+});
+
 // Get all perkara
 app.get('/api/perkara', (req, res) => {
     try {
-        const { jenis_perkara, tahun_masuk } = req.query;
+        const { jenis_perkara, tahun_masuk, page = 1, limit = 50 } = req.query;
 
-        let query = 'SELECT * FROM perkara ORDER BY created_at DESC';
+        const offset = (parseInt(page) - 1) * parseInt(limit);
+
+        let query = 'SELECT * FROM perkara';
+        let countQuery = 'SELECT COUNT(*) as total FROM perkara';
         const params = [];
+        const countParams = [];
 
         if (jenis_perkara || tahun_masuk) {
             const conditions = [];
             if (jenis_perkara) {
                 conditions.push('jenis_perkara = ?');
                 params.push(jenis_perkara);
+                countParams.push(jenis_perkara);
             }
             if (tahun_masuk) {
                 conditions.push('tahun_masuk = ?');
                 params.push(tahun_masuk);
+                countParams.push(tahun_masuk);
             }
             query += ' WHERE ' + conditions.join(' AND ');
+            countQuery += ' WHERE ' + conditions.join(' AND ');
         }
+
+        query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+        params.push(parseInt(limit), offset);
 
         const stmt = db.prepare(query);
         const data = stmt.all(...params);
-        res.json(data);
+
+        const countStmt = db.prepare(countQuery);
+        const countResult = countStmt.get(...countParams);
+        const total = countResult.total;
+
+        res.json({
+            data,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                total,
+                pages: Math.ceil(total / parseInt(limit))
+            }
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-// Test route BEFORE range - inline
-app.get('/api/before-range-test', (req, res) => res.json({ok: true, test: 'before-range'}));
-
-// Get perkara by date range (untuk laporan)
+// Get perkara by date range
 app.get('/api/perkara/range', (req, res) => {
+    console.log('[RANGE] Called!');
     try {
         const { start_date, end_date, jenis_perkara } = req.query;
 
@@ -194,20 +229,18 @@ app.get('/api/perkara/range', (req, res) => {
     }
 });
 
-// Test route immediately after range
+// Test route for debugging
 app.get('/api/immediate-test', (req, res) => {
-    console.log('[TEST-ROUTE] CALLED!!!');
+    console.log('[IMMEDIATE-TEST] Called!');
     res.json({ message: 'Immediate test works!', timestamp: Date.now() });
 });
 
-// ========================
-// SIPP SYNC ROUTES
-// ========================
-// NOTE: Must be before /api/perkara/:id to avoid route conflicts
+// SIPP Router - MUST come before /api/perkara/:id
+app.use('/api/perkara/sipp', sippRoutes);
 
-// Sync status endpoint
+// Inline SIPP status endpoint
 app.get('/api/perkara/sipp/status', (req, res) => {
-    console.log('[SIPP-STATUS-ROUTE] CALLED!!!');
+    console.log('[SIPP-STATUS] Called!');
     try {
         const stmt = db.prepare(`
             SELECT
@@ -223,33 +256,108 @@ app.get('/api/perkara/sipp/status', (req, res) => {
     }
 });
 
+// SSE endpoint for sync progress
+app.get('/api/perkara/sipp/progress', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Send current progress immediately
+    res.write(`data: ${JSON.stringify(syncProgress)}\n\n`);
+
+    // Keep connection open and send updates
+    const interval = setInterval(() => {
+        res.write(`data: ${JSON.stringify(syncProgress)}\n\n`);
+    }, 500);
+
+    req.on('close', () => {
+        clearInterval(interval);
+    });
+});
+
 // Manual sync endpoint
-/*
 app.post('/api/perkara/sipp/sync', async (req, res) => {
+    console.log('[SIPP-SYNC] Called!');
     try {
-        console.log('[SIPP] Manual sync triggered');
-        const data = await sippService.fetchSIPPData();
+        syncProgress = {
+            inProgress: true,
+            current: 0,
+            total: 200, // Target (10 pages × 20)
+            page: 0,
+            message: 'Memulai sync...',
+            error: null
+        };
+
+        // Get old count
+        const oldCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get().c;
+
+        console.log('[SIPP-SYNC] Starting fetch...');
+        syncProgress.message = 'Mengambil data dari SIPP...';
+
+        const data = await sippService.fetchSIPPData((progress) => {
+            // Progress callback during fetch
+            syncProgress.current = progress.current;
+            syncProgress.page = progress.page;
+            syncProgress.message = `Fetching halaman ${progress.page}... (${progress.current} perkara)`;
+            console.log(`[SIPP-SYNC] ${syncProgress.message}`);
+        });
+
+        console.log(`[SIPP-SYNC] Fetched ${data.length} items`);
+        syncProgress.message = 'Menyimpan ke database...';
+
+        console.log('[SIPP-SYNC] Starting save...');
         const count = await sippService.saveToDatabase(data);
+        console.log(`[SIPP-SYNC] Saved count: ${count}`);
+
+        // Get actual DB count
+        const dbCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get();
+        console.log(`[SIPP-SYNC] Actual DB count: ${dbCount.c}`);
+
+        syncProgress.inProgress = false;
+        syncProgress.message = `Selesai! ${count} perkara di-sync`;
+        syncProgress.current = count;
+
         res.json({
             success: true,
-            synced: count,
+            fetched: count,
+            total_in_db: dbCount.c,
+            new_items: dbCount.c - oldCount,
             timestamp: new Date().toISOString(),
-            message: `Synced ${count} perkara from SIPP`
+            message: `Synced ${count} perkara from SIPP (${dbCount.c} total in DB)`
         });
     } catch (error) {
         console.error('[SIPP] Sync error:', error.message);
+        syncProgress.inProgress = false;
+        syncProgress.error = error.message;
+        syncProgress.message = 'Error: ' + error.message;
         res.status(500).json({
             success: false,
             error: error.message
         });
     }
 });
-*/
 
-console.log('[DEBUG] SIPP routes registered!');
+// Get jadwal sidang for a perkara
+app.get('/api/perkara/sipp/jadwal/:nomor', async (req, res) => {
+    console.log('[SIPP-JADWAL] Called for:', req.params.nomor);
+    try {
+        const nomorPerkara = decodeURIComponent(req.params.nomor);
+        const jadwal = await sippService.fetchJadwalSidang(nomorPerkara);
+        res.json({
+            nomor_perkara: nomorPerkara,
+            jadwal
+        });
+    } catch (error) {
+        console.error('[SIPP] Jadwal error:', error.message);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
 
-// Get perkara by ID
+// Get perkara by ID - MUST be last
 app.get('/api/perkara/:id', (req, res) => {
+    console.log('[PERKARA-ID] Called with id:', req.params.id);
     try {
         const stmt = db.prepare('SELECT * FROM perkara WHERE id = ?');
         const data = stmt.get(req.params.id);
@@ -336,6 +444,29 @@ app.use((req, res) => {
     console.log('[404] Route not found:', req.method, req.url);
     res.status(404).json({ error: 'Not found', path: req.url });
 });
+
+// ========================
+// AUTO-SYNC CRON JOB
+// ========================
+// Run every hour: 0 * * * *
+console.log('[CRON] Setting up SIPP sync schedule (every hour)');
+
+const syncTask = cron.schedule('0 * * * *', async () => {
+    try {
+        console.log('[CRON] Starting scheduled SIPP sync...');
+        const data = await sippService.fetchSIPPData();
+        const count = await sippService.saveToDatabase(data);
+        console.log(`[CRON] Sync completed: ${count} perkara updated`);
+    } catch (error) {
+        console.error('[CRON] Sync error:', error.message);
+    }
+}, {
+    scheduled: false // Don't start immediately
+});
+
+// Start the cron job
+syncTask.start();
+console.log('[CRON] Auto-sync enabled (runs every hour at minute 0)');
 
 // Start server
 app.listen(PORT, () => {

@@ -15,8 +15,8 @@ const handleSelect = (key) => {
     <el-container class="app-container">
         <el-header class="app-header">
             <div class="header-content">
-                <h1 class="app-title">Akurasi Kepaniteraan</h1>
-                <span class="app-subtitle">Pengadilan Negeri Natuna Kelas IB</span>
+                <h1 class="app-title">Natuna Sakti</h1>
+                <span class="app-subtitle">Pengadilan Negeri Natuna Kelas II</span>
             </div>
         </el-header>
 
@@ -27,6 +27,10 @@ const handleSelect = (key) => {
                     class="el-menu-vertical"
                     @select="handleSelect"
                 >
+                    <el-menu-item index="/data">
+                        <el-icon><Document /></el-icon>
+                        <span>Akurasi Kepaniteraan</span>
+                    </el-menu-item>
                     <el-menu-item index="/bulanan">
                         <el-icon><Calendar /></el-icon>
                         <span>Laporan Bulanan</span>
@@ -34,14 +38,6 @@ const handleSelect = (key) => {
                     <el-menu-item index="/mingguan">
                         <el-icon><Timer /></el-icon>
                         <span>Laporan Mingguan</span>
-                    </el-menu-item>
-                    <el-menu-item index="/input">
-                        <el-icon><Edit /></el-icon>
-                        <span>Input Perkara</span>
-                    </el-menu-item>
-                    <el-menu-item index="/data">
-                        <el-icon><Document /></el-icon>
-                        <span>Data Perkara</span>
                     </el-menu-item>
                 </el-menu>
             </el-aside>
@@ -54,11 +50,11 @@ const handleSelect = (key) => {
 </template>
 
 <script>
-import { Calendar, Timer, Edit, Document } from '@element-plus/icons-vue'
+import { Calendar, Timer, Document } from '@element-plus/icons-vue'
 
 export default {
     components: {
-        Calendar, Timer, Edit, Document
+        Calendar, Timer, Document
     }
 }
 </script>
@@ -69,7 +65,7 @@ export default {
 }
 
 .app-header {
-    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%);
     color: white;
     display: flex;
     align-items: center;
@@ -93,12 +89,12 @@ export default {
 }
 
 .app-sidebar {
-    background: #f5f7fa;
-    border-right: 1px solid #e4e7ed;
+    background: #f1f8f1;
+    border-right: 1px solid #c8e6c9;
 }
 
 .app-main {
-    background: #f0f2f5;
+    background: #f5f9f5;
     padding: 20px;
 }
 
