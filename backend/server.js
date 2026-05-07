@@ -101,6 +101,22 @@ function setupDatabase() {
             // Index might already exist
         }
     }
+
+    // jadwal_sidang cache (per design: 2026-05-07-jadwal-sidang-cache-design.md)
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS jadwal_sidang (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nomor_perkara TEXT NOT NULL,
+            nomor INTEGER,
+            tanggal TEXT,
+            jam TEXT,
+            agenda TEXT,
+            ruangan TEXT,
+            alasan_ditunda TEXT,
+            fetched_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_jadwal_nomor ON jadwal_sidang(nomor_perkara);
+    `);
 }
 
 setupDatabase();
