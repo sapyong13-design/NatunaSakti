@@ -13,6 +13,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const SIPPSyncService = require('./services/sippSyncService');
+const sippRoutes = require('./routes/sipp');
 
 const app = express();
 const PORT = 3000;
@@ -106,6 +107,10 @@ setupDatabase();
 // Initialize SIPP Sync Service
 const sippService = new SIPPSyncService(db);
 console.log('[SIPP] Service initialized');
+
+// Make db and sippService available to routes
+app.set('db', db);
+app.set('sippService', sippService);
 
 console.log('Database connected:', dbPath);
 
