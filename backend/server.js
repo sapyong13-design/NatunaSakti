@@ -4,11 +4,15 @@
 // Database: SQLite (local)
 // ============================================
 
+console.log('[SERVER-FILE-LOAD] Timestamp:', Date.now(), 'File:', __filename);
+
 const express = require('express');
 const cors = require('cors');
+const cron = require('node-cron');
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const SIPPSyncService = require('./services/sippSyncService');
 
 const app = express();
 const PORT = 3000;
@@ -99,6 +103,10 @@ function setupDatabase() {
 
 setupDatabase();
 
+// Initialize SIPP Sync Service
+const sippService = new SIPPSyncService(db);
+console.log('[SIPP] Service initialized');
+
 console.log('Database connected:', dbPath);
 
 // ========================
@@ -112,6 +120,9 @@ app.get('/', (req, res) => {
         database: 'SQLite (local)'
     });
 });
+
+// Test route after root
+app.get('/api/test-after-root', (req, res) => res.json({ok: true, route: 'test-after-root'}));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -147,6 +158,9 @@ app.get('/api/perkara', (req, res) => {
     }
 });
 
+// Test route BEFORE range - inline
+app.get('/api/before-range-test', (req, res) => res.json({ok: true, test: 'before-range'}));
+
 // Get perkara by date range (untuk laporan)
 app.get('/api/perkara/range', (req, res) => {
     try {
@@ -174,6 +188,60 @@ app.get('/api/perkara/range', (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// Test route immediately after range
+app.get('/api/immediate-test', (req, res) => {
+    console.log('[TEST-ROUTE] CALLED!!!');
+    res.json({ message: 'Immediate test works!', timestamp: Date.now() });
+});
+
+// ========================
+// SIPP SYNC ROUTES
+// ========================
+// NOTE: Must be before /api/perkara/:id to avoid route conflicts
+
+// Sync status endpoint
+app.get('/api/perkara/sipp/status', (req, res) => {
+    console.log('[SIPP-STATUS-ROUTE] CALLED!!!');
+    try {
+        const stmt = db.prepare(`
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN sipp_synced = 1 THEN 1 ELSE 0 END) as sipp_synced,
+                MAX(sipp_last_sync) as last_sync
+            FROM perkara
+        `);
+        const stats = stmt.get();
+        res.json(stats);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Manual sync endpoint
+/*
+app.post('/api/perkara/sipp/sync', async (req, res) => {
+    try {
+        console.log('[SIPP] Manual sync triggered');
+        const data = await sippService.fetchSIPPData();
+        const count = await sippService.saveToDatabase(data);
+        res.json({
+            success: true,
+            synced: count,
+            timestamp: new Date().toISOString(),
+            message: `Synced ${count} perkara from SIPP`
+        });
+    } catch (error) {
+        console.error('[SIPP] Sync error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+*/
+
+console.log('[DEBUG] SIPP routes registered!');
 
 // Get perkara by ID
 app.get('/api/perkara/:id', (req, res) => {
@@ -250,6 +318,18 @@ app.delete('/api/perkara/:id', (req, res) => {
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
+});
+
+// Error handler (should be last)
+app.use((err, req, res, next) => {
+    console.error('[ERROR] Unhandled error:', err);
+    res.status(500).json({ error: err.message });
+});
+
+// 404 handler
+app.use((req, res) => {
+    console.log('[404] Route not found:', req.method, req.url);
+    res.status(404).json({ error: 'Not found', path: req.url });
 });
 
 // Start server
