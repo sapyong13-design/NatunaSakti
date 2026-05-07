@@ -188,7 +188,13 @@ class SIPPSyncService {
   }
 
   /**
-   * Fetch jadwal sidang untuk satu perkara
+   * Fetch jadwal sidang untuk satu perkara.
+   *
+   * Flow:
+   *   1. Submit SIPP search form for the nomor perkara
+   *   2. Grab the `show_detil` URL from the matching row
+   *   3. Open detail page, click the Jadwal Sidang tab (#tabs4)
+   *   4. Wait for the AJAX-loaded table inside #tabs4 and scrape it
    */
   async fetchJadwalSidang(nomorPerkara) {
     console.log('[SIPP] Fetching jadwal for:', nomorPerkara);
@@ -201,85 +207,83 @@ class SIPPSyncService {
     try {
       const page = await browser.newPage();
 
-      // Search for the perkara
+      // 1. Open SIPP and submit the search form
       await page.goto(this.sippUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForSelector('table', { timeout: 10000 });
+      await page.waitForSelector('#search-box', { timeout: 10000 });
+      await page.click('#search-box');
+      await page.type('#search-box', nomorPerkara, { delay: 25 });
 
-      // Search the perkara in the table
-      const found = await page.evaluate((nomor) => {
+      await Promise.all([
+        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }),
+        page.evaluate(() => {
+          const form = document.querySelector('form[action*="search"]');
+          if (form) form.submit();
+        })
+      ]);
+
+      // 2. Find the detail URL for the matching row
+      const detilUrl = await page.evaluate((nomor) => {
         const rows = document.querySelectorAll('table tr');
-        for (let i = 1; i < rows.length; i++) {
-          const cols = rows[i].querySelectorAll('td');
-          if (cols.length >= 2) {
-            const nomorPerkara = cols[1]?.textContent?.trim();
-            if (nomorPerkara === nomor) {
-              // Click the detail link
-              const link = cols[0]?.querySelector('a');
-              if (link) {
-                link.click();
-                return true;
-              }
-            }
+        for (const row of rows) {
+          const cols = row.querySelectorAll('td');
+          if (cols.length >= 2 && cols[1].textContent.trim() === nomor) {
+            const a = row.querySelector('a[href*="show_detil"]');
+            return a ? a.href : null;
           }
         }
-        return false;
+        return null;
       }, nomorPerkara);
 
-      if (!found) {
-        await browser.close();
+      if (!detilUrl) {
+        console.log('[SIPP] Perkara not found in search results:', nomorPerkara);
         return [];
       }
 
-      // Wait for detail page to load
-      await new Promise(r => setTimeout(r, 3000));
-
-      // Get jadwal sidang from detail page
-      const jadwal = await page.evaluate(() => {
-        const sidangList = [];
-        const tables = document.querySelectorAll('table');
-
-        tables.forEach(table => {
-          const headers = table.querySelectorAll('th');
-          let isJadwalTable = false;
-
-          headers.forEach(h => {
-            if (h.textContent.includes('jadwal') || h.textContent.includes('sidang')) {
-              isJadwalTable = true;
-            }
-          });
-
-          if (isJadwalTable) {
-            const rows = table.querySelectorAll('tr');
-            rows.forEach((row, i) => {
-              if (i === 0) return; // Skip header
-
-              const cols = row.querySelectorAll('td');
-              if (cols.length >= 3) {
-                const nomor = cols[0]?.textContent?.trim() || '';
-                const tanggal = cols[1]?.textContent?.trim() || '';
-                const agenda = cols[2]?.textContent?.trim() || '';
-                const ruangan = cols.length > 3 ? cols[3]?.textContent?.trim() : '';
-                const alasanDitunda = cols.length > 4 ? cols[4]?.textContent?.trim() : '';
-
-                if (nomor || tanggal || agenda) {
-                  sidangList.push({ nomor, tanggal, agenda, ruangan, alasanDitunda });
-                }
-              }
-            });
-          }
-        });
-
-        return sidangList;
+      // 3. Open detail page and click the Jadwal Sidang tab
+      await page.goto(detilUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForSelector('a[href*="#tabs4"]', { timeout: 10000 });
+      await page.evaluate(() => {
+        const tab = document.querySelector('a[href*="#tabs4"]');
+        if (tab) tab.click();
       });
 
-      await browser.close();
+      // 4. Wait for AJAX content inside #tabs4, then scrape
+      await page.waitForFunction(
+        () => {
+          const t = document.getElementById('tabs4');
+          return t && t.querySelector('table tr td');
+        },
+        { timeout: 15000 }
+      ).catch(() => null);
+
+      const jadwal = await page.evaluate(() => {
+        const t = document.getElementById('tabs4');
+        if (!t) return [];
+        const out = [];
+        t.querySelectorAll('table tr').forEach((row, i) => {
+          if (i === 0) return; // header
+          const cols = row.querySelectorAll('td');
+          if (cols.length < 5) return;
+          out.push({
+            nomor: cols[0]?.textContent?.trim() || '',
+            tanggal: cols[1]?.textContent?.trim() || '',
+            jam: cols[2]?.textContent?.trim() || '',
+            agenda: cols[3]?.textContent?.trim() || '',
+            ruangan: cols[4]?.textContent?.trim().replace(/\s+/g, ' ') || '',
+            alasanDitunda: cols[5]?.textContent?.trim() || ''
+          });
+        });
+        return out;
+      });
+
       console.log('[SIPP] Found', jadwal.length, 'sidang schedules');
       return jadwal;
 
     } catch (error) {
       console.error('[SIPP] Error fetching jadwal:', error.message);
-      await browser.close();
       return [];
+    } finally {
+      await browser.close();
     }
   }
 
