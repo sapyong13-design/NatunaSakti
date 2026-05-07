@@ -188,13 +188,7 @@ class SIPPSyncService {
   }
 
   /**
-   * Fetch jadwal sidang untuk satu perkara.
-   *
-   * Flow:
-   *   1. Submit SIPP search form for the nomor perkara
-   *   2. Grab the `show_detil` URL from the matching row
-   *   3. Open detail page, click the Jadwal Sidang tab (#tabs4)
-   *   4. Wait for the AJAX-loaded table inside #tabs4 and scrape it
+   * Fetch jadwal sidang untuk satu perkara (single-call: launch browser sendiri).
    */
   async fetchJadwalSidang(nomorPerkara) {
     console.log('[SIPP] Fetching jadwal for:', nomorPerkara);
@@ -206,85 +200,99 @@ class SIPPSyncService {
 
     try {
       const page = await browser.newPage();
-
-      // 1. Open SIPP and submit the search form
-      await page.goto(this.sippUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForSelector('#search-box', { timeout: 10000 });
-      await page.click('#search-box');
-      await page.type('#search-box', nomorPerkara, { delay: 25 });
-
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }),
-        page.evaluate(() => {
-          const form = document.querySelector('form[action*="search"]');
-          if (form) form.submit();
-        })
-      ]);
-
-      // 2. Find the detail URL for the matching row
-      const detilUrl = await page.evaluate((nomor) => {
-        const rows = document.querySelectorAll('table tr');
-        for (const row of rows) {
-          const cols = row.querySelectorAll('td');
-          if (cols.length >= 2 && cols[1].textContent.trim() === nomor) {
-            const a = row.querySelector('a[href*="show_detil"]');
-            return a ? a.href : null;
-          }
-        }
-        return null;
-      }, nomorPerkara);
-
-      if (!detilUrl) {
-        console.log('[SIPP] Perkara not found in search results:', nomorPerkara);
-        return [];
-      }
-
-      // 3. Open detail page and click the Jadwal Sidang tab
-      await page.goto(detilUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForSelector('a[href*="#tabs4"]', { timeout: 10000 });
-      await page.evaluate(() => {
-        const tab = document.querySelector('a[href*="#tabs4"]');
-        if (tab) tab.click();
-      });
-
-      // 4. Wait for AJAX content inside #tabs4, then scrape
-      await page.waitForFunction(
-        () => {
-          const t = document.getElementById('tabs4');
-          return t && t.querySelector('table tr td');
-        },
-        { timeout: 15000 }
-      ).catch(() => null);
-
-      const jadwal = await page.evaluate(() => {
-        const t = document.getElementById('tabs4');
-        if (!t) return [];
-        const out = [];
-        t.querySelectorAll('table tr').forEach((row, i) => {
-          if (i === 0) return; // header
-          const cols = row.querySelectorAll('td');
-          if (cols.length < 5) return;
-          out.push({
-            nomor: cols[0]?.textContent?.trim() || '',
-            tanggal: cols[1]?.textContent?.trim() || '',
-            jam: cols[2]?.textContent?.trim() || '',
-            agenda: cols[3]?.textContent?.trim() || '',
-            ruangan: cols[4]?.textContent?.trim().replace(/\s+/g, ' ') || '',
-            alasanDitunda: cols[5]?.textContent?.trim() || ''
-          });
-        });
-        return out;
-      });
-
-      console.log('[SIPP] Found', jadwal.length, 'sidang schedules');
-      return jadwal;
-
+      return await this._fetchJadwalFromPage(page, nomorPerkara);
     } catch (error) {
       console.error('[SIPP] Error fetching jadwal:', error.message);
       return [];
     } finally {
       await browser.close();
     }
+  }
+
+  /**
+   * Core scrape logic — terima Page yang sudah ready. Dipanggil oleh
+   * fetchJadwalSidang (single) dan cacheJadwalCurrentYear (batch).
+   *
+   * Flow:
+   *   1. Submit SIPP search form for the nomor perkara
+   *   2. Grab the `show_detil` URL from the matching row
+   *   3. Open detail page, click the Jadwal Sidang tab (#tabs4)
+   *   4. Wait for the AJAX-loaded table inside #tabs4 and scrape it
+   */
+  async _fetchJadwalFromPage(page, nomorPerkara) {
+    // 1. Open SIPP and submit the search form
+    await page.goto(this.sippUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForSelector('#search-box', { timeout: 10000 });
+    await page.click('#search-box');
+    // Clear input first (in case batch reuses page after a previous search)
+    await page.$eval('#search-box', (el) => { el.value = ''; });
+    await page.type('#search-box', nomorPerkara, { delay: 25 });
+
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }),
+      page.evaluate(() => {
+        const form = document.querySelector('form[action*="search"]');
+        if (form) form.submit();
+      })
+    ]);
+
+    // 2. Find the detail URL for the matching row
+    const detilUrl = await page.evaluate((nomor) => {
+      const rows = document.querySelectorAll('table tr');
+      for (const row of rows) {
+        const cols = row.querySelectorAll('td');
+        if (cols.length >= 2 && cols[1].textContent.trim() === nomor) {
+          const a = row.querySelector('a[href*="show_detil"]');
+          return a ? a.href : null;
+        }
+      }
+      return null;
+    }, nomorPerkara);
+
+    if (!detilUrl) {
+      console.log('[SIPP] Perkara not found in search results:', nomorPerkara);
+      return [];
+    }
+
+    // 3. Open detail page and click the Jadwal Sidang tab
+    await page.goto(detilUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForSelector('a[href*="#tabs4"]', { timeout: 10000 });
+    await page.evaluate(() => {
+      const tab = document.querySelector('a[href*="#tabs4"]');
+      if (tab) tab.click();
+    });
+
+    // 4. Wait for AJAX content inside #tabs4, then scrape
+    await page.waitForFunction(
+      () => {
+        const t = document.getElementById('tabs4');
+        return t && t.querySelector('table tr td');
+      },
+      { timeout: 15000 }
+    ).catch(() => null);
+
+    const jadwal = await page.evaluate(() => {
+      const t = document.getElementById('tabs4');
+      if (!t) return [];
+      const out = [];
+      t.querySelectorAll('table tr').forEach((row, i) => {
+        if (i === 0) return; // header
+        const cols = row.querySelectorAll('td');
+        if (cols.length < 5) return;
+        out.push({
+          nomor: cols[0]?.textContent?.trim() || '',
+          tanggal: cols[1]?.textContent?.trim() || '',
+          jam: cols[2]?.textContent?.trim() || '',
+          agenda: cols[3]?.textContent?.trim() || '',
+          ruangan: cols[4]?.textContent?.trim().replace(/\s+/g, ' ') || '',
+          alasanDitunda: cols[5]?.textContent?.trim() || ''
+        });
+      });
+      return out;
+    });
+
+    console.log('[SIPP] Found', jadwal.length, 'sidang schedules for', nomorPerkara);
+    return jadwal;
   }
 
   /**
