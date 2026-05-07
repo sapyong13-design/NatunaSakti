@@ -25,25 +25,79 @@ if (!fs.existsSync(dataDir)) {
 const dbPath = path.join(dataDir, 'akurasi.db');
 const db = new Database(dbPath);
 
-// Create table if not exists
-db.exec(`
-    CREATE TABLE IF NOT EXISTS perkara (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nama_perkara TEXT NOT NULL,
-        nomor_perkara TEXT UNIQUE NOT NULL,
-        para_pihak TEXT NOT NULL,
-        tahun_masuk INTEGER NOT NULL,
-        tanggal_putus TEXT,
-        keterangan TEXT,
-        jenis_perkara TEXT NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
+// Setup Database Schema
+function setupDatabase() {
+    // Cek apakah tabel perkara ada
+    const tableExists = db.prepare(`
+        SELECT name FROM sqlite_master
+        WHERE type='table' AND name='perkara'
+    `).get();
 
-    CREATE INDEX IF NOT EXISTS idx_tahun_masuk ON perkara(tahun_masuk);
-    CREATE INDEX IF NOT EXISTS idx_jenis_perkara ON perkara(jenis_perkara);
-    CREATE INDEX IF NOT EXISTS idx_tanggal_putus ON perkara(tanggal_putus);
-`);
+    if (!tableExists) {
+        // Tabel baru, buat dengan schema lengkap
+        db.exec(`
+            CREATE TABLE perkara (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nama_perkara TEXT NOT NULL,
+                nomor_perkara TEXT UNIQUE NOT NULL,
+                para_pihak TEXT NOT NULL,
+                tahun_masuk INTEGER NOT NULL,
+                tanggal_putus TEXT,
+                keterangan TEXT,
+                jenis_perkara TEXT NOT NULL,
+                sipp_synced INTEGER DEFAULT 0,
+                sipp_status TEXT,
+                sipp_lama_proses TEXT,
+                sipp_tanggal_register TEXT,
+                sipp_klasifikasi TEXT,
+                sipp_last_sync TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX idx_tahun_masuk ON perkara(tahun_masuk);
+            CREATE INDEX idx_jenis_perkara ON perkara(jenis_perkara);
+            CREATE INDEX idx_tanggal_putus ON perkara(tanggal_putus);
+            CREATE INDEX idx_sipp_synced ON perkara(sipp_synced);
+        `);
+        console.log('[Database] Created new table with SIPP columns');
+    } else {
+        // Tabel sudah ada, cek dan tambahkan kolom yang hilang
+        const existingColumns = db.prepare("PRAGMA table_info(perkara)").all();
+        const existingColumnNames = existingColumns.map(col => col.name);
+
+        const sippColumns = {
+            sipp_synced: 'INTEGER DEFAULT 0',
+            sipp_status: 'TEXT',
+            sipp_lama_proses: 'TEXT',
+            sipp_tanggal_register: 'TEXT',
+            sipp_klasifikasi: 'TEXT',
+            sipp_last_sync: 'TEXT'
+        };
+
+        for (const [col, colDef] of Object.entries(sippColumns)) {
+            if (!existingColumnNames.includes(col)) {
+                try {
+                    db.exec(`ALTER TABLE perkara ADD COLUMN ${col} ${colDef}`);
+                    console.log(`[Migration] Added column: ${col}`);
+                } catch (error) {
+                    if (!error.message.includes('duplicate column')) {
+                        console.log(`[Migration] Warning for ${col}:`, error.message);
+                    }
+                }
+            }
+        }
+
+        // Create index if not exists
+        try {
+            db.exec('CREATE INDEX IF NOT EXISTS idx_sipp_synced ON perkara(sipp_synced)');
+        } catch (error) {
+            // Index might already exist
+        }
+    }
+}
+
+setupDatabase();
 
 console.log('Database connected:', dbPath);
 
