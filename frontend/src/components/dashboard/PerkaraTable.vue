@@ -1,4 +1,6 @@
 <script setup>
+import { pihakUtama } from '../../lib/pihak'
+
 defineProps({
     rows: { type: Array, required: true }
 })
@@ -39,7 +41,7 @@ function jenisColor(jenis) {
                     </span>
                 </div>
                 <div style="flex: 1; min-width: 180px;" class="ns-mono">{{ row.nomor_perkara }}</div>
-                <div style="flex: 1; min-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="row.para_pihak">{{ row.para_pihak }}</div>
+                <div style="flex: 1; min-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="row.para_pihak">{{ pihakUtama(row.para_pihak) }}</div>
                 <div style="width: 110px; font-size: 12px; color: var(--text-2);">{{ row.sipp_tanggal_register || '—' }}</div>
                 <div style="width: 130px; font-size: 12px;">{{ row.sipp_status || '—' }}</div>
                 <div style="width: 90px; font-size: 12px; color: var(--text-2);">{{ row.sipp_lama_proses || '—' }}</div>

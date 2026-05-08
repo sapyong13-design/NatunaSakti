@@ -23,7 +23,7 @@ function isGroupActive(group) {
 }
 
 function isGroupExpanded(group) {
-    return props.expandedGroups[group.id] || isGroupActive(group)
+    return !!props.expandedGroups[group.id]
 }
 </script>
 

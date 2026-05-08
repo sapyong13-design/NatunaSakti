@@ -2,7 +2,7 @@ export const SIDEBAR_ITEMS = [
     {
         type: 'item',
         id: 'akurasi',
-        label: 'Akurasi Kepaniteraan',
+        label: 'Dashboard',
         icon: 'chartBar',
         to: '/data'
     },
@@ -12,16 +12,22 @@ export const SIDEBAR_ITEMS = [
         label: 'Bulanan',
         icon: 'calendar',
         children: [
-            { id: 'bulanan-pidana',    label: 'Pidana',    icon: 'gavel', to: '/bulanan/pidana' },
-            { id: 'bulanan-perdata',   label: 'Perdata',   icon: 'scale', to: '/bulanan/perdata' },
-            { id: 'bulanan-perikanan', label: 'Perikanan', icon: 'fish',  to: '/bulanan/perikanan' }
+            { id: 'bulanan-pidana',    label: 'Pidana',    icon: 'gavel',     to: '/bulanan/pidana' },
+            { id: 'bulanan-perdata',   label: 'Perdata',   icon: 'scale',     to: '/bulanan/perdata' },
+            { id: 'bulanan-perikanan', label: 'Perikanan', icon: 'fish',      to: '/bulanan/perikanan' },
+            { id: 'bulanan-hukum',     label: 'Hukum',     icon: 'fileCheck', to: '/bulanan/hukum' }
         ]
     },
     {
-        type: 'item',
+        type: 'group',
         id: 'mingguan',
         label: 'Mingguan',
         icon: 'clock',
-        to: '/mingguan'
+        children: [
+            { id: 'mingguan-pidana',    label: 'Pidana',    icon: 'gavel',     to: '/mingguan/pidana' },
+            { id: 'mingguan-perdata',   label: 'Perdata',   icon: 'scale',     to: '/mingguan/perdata' },
+            { id: 'mingguan-perikanan', label: 'Perikanan', icon: 'fish',      to: '/mingguan/perikanan' },
+            { id: 'mingguan-hukum',     label: 'Hukum',     icon: 'fileCheck', to: '/mingguan/hukum' }
+        ]
     }
 ]

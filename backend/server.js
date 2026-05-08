@@ -13,6 +13,7 @@ const path = require('path');
 const fs = require('fs');
 const SIPPSyncService = require('./services/sippSyncService');
 const sippRoutes = require('./routes/sipp');
+const { generateLaporanBulanan } = require('./services/laporanService');
 
 const app = express();
 const PORT = 3000;
@@ -572,6 +573,40 @@ app.delete('/api/perkara/:id', (req, res) => {
         res.json({ message: 'Perkara deleted successfully' });
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// ========================
+// LAPORAN ROUTES
+// ========================
+
+app.get('/api/laporan/bulanan/:jenis', (req, res) => {
+    try {
+        const { jenis } = req.params;
+        const bulan = parseInt(req.query.bulan);
+        const tahun = parseInt(req.query.tahun);
+
+        if (!bulan || bulan < 1 || bulan > 12) {
+            return res.status(400).json({ error: 'bulan harus 1-12' });
+        }
+        if (!tahun || tahun < 2020 || tahun > 2100) {
+            return res.status(400).json({ error: 'tahun tidak valid' });
+        }
+
+        const BULAN_NAMES = ['Januari','Februari','Maret','April','Mei','Juni',
+                             'Juli','Agustus','September','Oktober','November','Desember'];
+        const bulanNama = BULAN_NAMES[bulan - 1];
+        const jenisCapital = jenis.charAt(0).toUpperCase() + jenis.slice(1).toLowerCase();
+
+        const buf = generateLaporanBulanan(db, jenisCapital, bulan, tahun);
+
+        const filename = `Akurasi_${jenisCapital}_${bulanNama}_${tahun}.docx`;
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(buf);
+    } catch (err) {
+        console.error('[LAPORAN] Error:', err.message);
+        res.status(500).json({ error: err.message });
     }
 });
 

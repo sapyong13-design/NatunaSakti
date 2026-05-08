@@ -4,8 +4,9 @@ import { useRoute } from 'vue-router'
 import PageHeader from '../components/shell/PageHeader.vue'
 import BulananFilterBar from '../components/report/BulananFilterBar.vue'
 import ReportTable from '../components/report/ReportTable.vue'
-import { getPerkaraByMonth } from '../lib/api'
-import { generateBulananPDF, downloadPDF, generateBulananDOCX, downloadDOCX } from '../lib/export'
+import { getPerkara } from '../lib/api'
+import { generateBulananPDF, downloadPDF } from '../lib/export'
+import { downloadLaporanBulanan } from '../lib/api'
 
 const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
                     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
@@ -27,7 +28,7 @@ const exporting = ref(false)
 async function fetchData() {
     loading.value = true
     try {
-        const data = await getPerkaraByMonth(bulan.value, tahun.value, { jenis_perkara: jenisCanonical.value })
+        const data = await getPerkara({ jenis_perkara: jenisCanonical.value, tahun_masuk: tahun.value, limit: 1000 })
         rows.value = Array.isArray(data) ? data : []
     } catch (err) {
         console.error('Fetch failed:', err.message)
@@ -51,10 +52,13 @@ async function handleExport() {
             })
             downloadPDF(doc, `${filenameBase}.pdf`)
         } else {
-            const doc = await generateBulananDOCX(rows.value, {
-                bulan: bulan.value, tahun: tahun.value, jenisPerkara: jenisCanonical.value
-            })
-            await downloadDOCX(doc, `${filenameBase}.docx`)
+            const blob = await downloadLaporanBulanan(jenisCanonical.value, bulan.value, tahun.value)
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `${filenameBase}.docx`
+            a.click()
+            URL.revokeObjectURL(url)
         }
         console.log(`File ${format.value.toUpperCase()} berhasil dibuat`)
     } catch (err) {
@@ -66,6 +70,7 @@ async function handleExport() {
 }
 
 watch(() => route.params.jenis, () => fetchData())
+watch(tahun, () => fetchData())
 
 onMounted(fetchData)
 </script>

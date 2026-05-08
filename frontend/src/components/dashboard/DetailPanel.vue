@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import Icon from '../Icon.vue'
 import { getJadwalSidang, refreshJadwal, deletePerkara } from '../../lib/api'
+import { pihakUtama } from '../../lib/pihak'
 
 const props = defineProps({
     row: { type: Object, default: null },
@@ -74,7 +75,7 @@ watch(() => props.row, (newRow) => {
                     <div>
                         <div class="ns-detail-eyebrow">{{ row.jenis_perkara }}</div>
                         <h2 class="ns-detail-title ns-mono">{{ row.nomor_perkara }}</h2>
-                        <div class="ns-detail-pihak">{{ row.para_pihak }}</div>
+                        <div class="ns-detail-pihak">{{ pihakUtama(row.para_pihak) }}</div>
                     </div>
                     <button class="ns-icon-btn" type="button" @click="emit('close')" aria-label="Close">
                         <Icon name="close" :size="18" />

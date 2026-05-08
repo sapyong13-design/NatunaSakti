@@ -7,7 +7,7 @@ import { SIDEBAR_ITEMS } from '../data/sidebarItems.js'
 
 const theme = useTheme()
 const collapsed = ref(false)
-const expandedGroups = reactive({ bulanan: true })
+const expandedGroups = reactive({})
 
 let mq = null
 function onMqChange(e) {

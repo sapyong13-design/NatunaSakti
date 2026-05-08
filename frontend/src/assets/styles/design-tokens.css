@@ -275,6 +275,7 @@
 
 /* ============ Toolbar ============ */
 .ns-toolbar {
+  position: relative; z-index: 10;
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: 12px 14px;
   background: var(--surface);
@@ -327,19 +328,20 @@
 .ns-chip-label { color: var(--text-3); font-weight: 400; }
 .ns-chip-value { font-weight: 500; }
 .ns-chip-menu {
-  position: absolute; top: calc(100% + 6px); left: 0; z-index: 10;
-  min-width: 140px;
+  z-index: 9999;
+  min-width: 160px;
   background: var(--bg-2);
-  backdrop-filter: blur(28px);
-  -webkit-backdrop-filter: blur(28px);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 4px;
-  box-shadow: 0 12px 32px -8px rgba(0,0,0,0.3);
+  box-shadow: 0 8px 24px -4px rgba(0,0,0,0.32), 0 2px 8px -2px rgba(0,0,0,0.16);
   display: flex; flex-direction: column; gap: 1px;
-  animation: ns-slideDown 160ms ease-out;
+  animation: ns-slideDown 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-@keyframes ns-slideDown { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes ns-slideDown {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);    }
+}
 .ns-chip-option {
   display: flex; align-items: center; justify-content: space-between;
   padding: 7px 10px; border-radius: 7px;

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import Icon from '../Icon.vue'
 
 defineProps({
@@ -17,9 +17,19 @@ const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
                     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
 
 const openMenu = ref(null)
+const menuPos = reactive({ top: 0, left: 0 })
+const bulanBtn = ref(null)
+const formatBtn = ref(null)
 
 function toggleMenu(name) {
-    openMenu.value = openMenu.value === name ? null : name
+    if (openMenu.value === name) { openMenu.value = null; return }
+    const el = name === 'bulan' ? bulanBtn.value : formatBtn.value
+    if (el) {
+        const rect = el.getBoundingClientRect()
+        menuPos.top = rect.bottom + 6
+        menuPos.left = rect.left
+    }
+    openMenu.value = name
 }
 
 function selectBulan(idx) {
@@ -33,7 +43,9 @@ function selectFormat(f) {
 }
 
 function handleClickOutside(e) {
-    if (!e.target.closest('.ns-filter-chip')) openMenu.value = null
+    if (!e.target.closest('.ns-chip-teleport') && !e.target.closest('.ns-filter-chip')) {
+        openMenu.value = null
+    }
 }
 
 onMounted(() => document.addEventListener('click', handleClickOutside))
@@ -43,7 +55,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 <template>
     <div class="ns-toolbar">
         <div class="ns-toolbar-filters">
-            <div class="ns-filter-chip">
+            <div class="ns-filter-chip" ref="bulanBtn">
                 <button type="button" class="ns-chip-btn"
                         :class="{ 'is-open': openMenu === 'bulan' }"
                         @click.stop="toggleMenu('bulan')">
@@ -51,14 +63,6 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
                     <span class="ns-chip-value">{{ BULAN_NAMA[bulan - 1] }}</span>
                     <Icon name="chevronDown" :size="12" />
                 </button>
-                <div v-if="openMenu === 'bulan'" class="ns-chip-menu">
-                    <div v-for="(nama, idx) in BULAN_NAMA" :key="idx"
-                         class="ns-chip-option"
-                         :class="{ 'is-selected': idx + 1 === bulan }"
-                         @click="selectBulan(idx)">
-                        {{ nama }}
-                    </div>
-                </div>
             </div>
 
             <div class="ns-filter-chip">
@@ -72,7 +76,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
                 </span>
             </div>
 
-            <div class="ns-filter-chip">
+            <div class="ns-filter-chip" ref="formatBtn">
                 <button type="button" class="ns-chip-btn"
                         :class="{ 'is-open': openMenu === 'format' }"
                         @click.stop="toggleMenu('format')">
@@ -80,10 +84,6 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
                     <span class="ns-chip-value">{{ format.toUpperCase() }}</span>
                     <Icon name="chevronDown" :size="12" />
                 </button>
-                <div v-if="openMenu === 'format'" class="ns-chip-menu">
-                    <div class="ns-chip-option" :class="{ 'is-selected': format === 'pdf' }" @click="selectFormat('pdf')">PDF</div>
-                    <div class="ns-chip-option" :class="{ 'is-selected': format === 'docx' }" @click="selectFormat('docx')">DOCX (Word)</div>
-                </div>
             </div>
         </div>
 
@@ -98,4 +98,28 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
             </button>
         </div>
     </div>
+
+    <Teleport to="body">
+        <div
+            v-if="openMenu === 'bulan'"
+            class="ns-chip-menu ns-chip-teleport"
+            :style="{ position: 'fixed', top: menuPos.top + 'px', left: menuPos.left + 'px' }"
+        >
+            <div v-for="(nama, idx) in BULAN_NAMA" :key="idx"
+                 class="ns-chip-option"
+                 :class="{ 'is-selected': idx + 1 === bulan }"
+                 @click="selectBulan(idx)">
+                {{ nama }}
+            </div>
+        </div>
+
+        <div
+            v-if="openMenu === 'format'"
+            class="ns-chip-menu ns-chip-teleport"
+            :style="{ position: 'fixed', top: menuPos.top + 'px', left: menuPos.left + 'px' }"
+        >
+            <div class="ns-chip-option" :class="{ 'is-selected': format === 'pdf' }" @click="selectFormat('pdf')">PDF</div>
+            <div class="ns-chip-option" :class="{ 'is-selected': format === 'docx' }" @click="selectFormat('docx')">DOCX (Word)</div>
+        </div>
+    </Teleport>
 </template>

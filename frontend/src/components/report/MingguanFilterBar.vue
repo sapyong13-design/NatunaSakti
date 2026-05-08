@@ -1,9 +1,8 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import Icon from '../Icon.vue'
 
 defineProps({
-    jenis: { type: String, default: 'Perdata' },
     start: { type: String, default: '' },
     end: { type: String, default: '' },
     format: { type: String, default: 'pdf' },
@@ -12,18 +11,21 @@ defineProps({
     canExport: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['update:jenis', 'update:start', 'update:end', 'update:format', 'fetch', 'export'])
+const emit = defineEmits(['update:start', 'update:end', 'update:format', 'fetch', 'export'])
 
-const JENIS_OPTIONS = ['Pidana', 'Perdata', 'Perikanan']
 const openMenu = ref(null)
+const menuPos = reactive({ top: 0, left: 0 })
+const formatBtn = ref(null)
 
 function toggleMenu(name) {
-    openMenu.value = openMenu.value === name ? null : name
-}
-
-function selectJenis(j) {
-    emit('update:jenis', j)
-    openMenu.value = null
+    if (openMenu.value === name) { openMenu.value = null; return }
+    const el = formatBtn.value
+    if (el) {
+        const rect = el.getBoundingClientRect()
+        menuPos.top = rect.bottom + 6
+        menuPos.left = rect.left
+    }
+    openMenu.value = name
 }
 
 function selectFormat(f) {
@@ -32,7 +34,9 @@ function selectFormat(f) {
 }
 
 function handleClickOutside(e) {
-    if (!e.target.closest('.ns-filter-chip')) openMenu.value = null
+    if (!e.target.closest('.ns-chip-teleport') && !e.target.closest('.ns-filter-chip')) {
+        openMenu.value = null
+    }
 }
 
 onMounted(() => document.addEventListener('click', handleClickOutside))
@@ -42,24 +46,6 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 <template>
     <div class="ns-toolbar">
         <div class="ns-toolbar-filters">
-            <div class="ns-filter-chip">
-                <button type="button" class="ns-chip-btn"
-                        :class="{ 'is-open': openMenu === 'jenis' }"
-                        @click.stop="toggleMenu('jenis')">
-                    <span class="ns-chip-label">Jenis:</span>
-                    <span class="ns-chip-value">{{ jenis }}</span>
-                    <Icon name="chevronDown" :size="12" />
-                </button>
-                <div v-if="openMenu === 'jenis'" class="ns-chip-menu">
-                    <div v-for="opt in JENIS_OPTIONS" :key="opt"
-                         class="ns-chip-option"
-                         :class="{ 'is-selected': opt === jenis }"
-                         @click="selectJenis(opt)">
-                        {{ opt }}
-                    </div>
-                </div>
-            </div>
-
             <div class="ns-filter-chip">
                 <span class="ns-chip-btn" style="cursor: default;">
                     <span class="ns-chip-label">Mulai:</span>
@@ -80,7 +66,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
                 </span>
             </div>
 
-            <div class="ns-filter-chip">
+            <div class="ns-filter-chip" ref="formatBtn">
                 <button type="button" class="ns-chip-btn"
                         :class="{ 'is-open': openMenu === 'format' }"
                         @click.stop="toggleMenu('format')">
@@ -88,10 +74,6 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
                     <span class="ns-chip-value">{{ format.toUpperCase() }}</span>
                     <Icon name="chevronDown" :size="12" />
                 </button>
-                <div v-if="openMenu === 'format'" class="ns-chip-menu">
-                    <div class="ns-chip-option" :class="{ 'is-selected': format === 'pdf' }" @click="selectFormat('pdf')">PDF</div>
-                    <div class="ns-chip-option" :class="{ 'is-selected': format === 'docx' }" @click="selectFormat('docx')">DOCX (Word)</div>
-                </div>
             </div>
         </div>
 
@@ -106,4 +88,15 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
             </button>
         </div>
     </div>
+
+    <Teleport to="body">
+        <div
+            v-if="openMenu === 'format'"
+            class="ns-chip-menu ns-chip-teleport"
+            :style="{ position: 'fixed', top: menuPos.top + 'px', left: menuPos.left + 'px' }"
+        >
+            <div class="ns-chip-option" :class="{ 'is-selected': format === 'pdf' }" @click="selectFormat('pdf')">PDF</div>
+            <div class="ns-chip-option" :class="{ 'is-selected': format === 'docx' }" @click="selectFormat('docx')">DOCX (Word)</div>
+        </div>
+    </Teleport>
 </template>

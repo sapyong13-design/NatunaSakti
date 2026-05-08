@@ -82,7 +82,7 @@ const tahunOptions = computed(() => {
     return Array.from(set).sort((a, b) => b - a)
 })
 
-const jenisOptions = ['Semua', 'Pidana', 'Perdata', 'Perikanan']
+const jenisOptions = ['Semua', 'Pidana', 'Perdata', 'Perikanan', 'Hukum']
 
 async function loadAll() {
     try {
@@ -110,7 +110,7 @@ onMounted(loadAll)
 <template>
     <div>
         <PageHeader
-            eyebrow="Akurasi Kepaniteraan"
+            eyebrow="Dashboard"
             title="Data Perkara"
             sub="Daftar perkara aktif disinkronkan dengan SIPP"
         >

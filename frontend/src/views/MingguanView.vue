@@ -1,12 +1,19 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import PageHeader from '../components/shell/PageHeader.vue'
 import MingguanFilterBar from '../components/report/MingguanFilterBar.vue'
 import ReportTable from '../components/report/ReportTable.vue'
 import { getPerkaraByDateRange } from '../lib/api'
 import { generateMingguanPDF, downloadPDF, generateMingguanDOCX, downloadDOCX } from '../lib/export'
 
-const jenis = ref('Perdata')
+const route = useRoute()
+
+const jenisCanonical = computed(() => {
+    const j = (route.params.jenis || 'pidana').toLowerCase()
+    return j.charAt(0).toUpperCase() + j.slice(1)
+})
+
 const start = ref('')
 const end = ref('')
 const format = ref('pdf')
@@ -30,7 +37,7 @@ async function fetchData() {
     }
     loading.value = true
     try {
-        const data = await getPerkaraByDateRange(start.value, end.value, { jenis_perkara: jenis.value })
+        const data = await getPerkaraByDateRange(start.value, end.value, { jenis_perkara: jenisCanonical.value })
         rows.value = Array.isArray(data) ? data : []
     } catch (err) {
         console.error('Fetch failed:', err.message)
@@ -39,6 +46,8 @@ async function fetchData() {
         loading.value = false
     }
 }
+
+watch(() => route.params.jenis, () => { rows.value = [] })
 
 async function handleExport() {
     if (!rows.value.length) {
@@ -49,15 +58,15 @@ async function handleExport() {
     try {
         const startStr = formatDateForFilename(start.value)
         const endStr = formatDateForFilename(end.value)
-        const filenameBase = `Akurasi_${jenis.value}_${startStr}_s_d_${endStr}`
+        const filenameBase = `Akurasi_${jenisCanonical.value}_${startStr}_s_d_${endStr}`
         if (format.value === 'pdf') {
             const doc = generateMingguanPDF(rows.value, {
-                startDate: start.value, endDate: end.value, jenisPerkara: jenis.value
+                startDate: start.value, endDate: end.value, jenisPerkara: jenisCanonical.value
             })
             downloadPDF(doc, `${filenameBase}.pdf`)
         } else {
             const doc = await generateMingguanDOCX(rows.value, {
-                startDate: start.value, endDate: end.value, jenisPerkara: jenis.value
+                startDate: start.value, endDate: end.value, jenisPerkara: jenisCanonical.value
             })
             await downloadDOCX(doc, `${filenameBase}.docx`)
         }
@@ -75,7 +84,7 @@ async function handleExport() {
     <div>
         <PageHeader
             eyebrow="Laporan"
-            title="Mingguan"
+            :title="`Perkara ${jenisCanonical}`"
             sub="Rekapitulasi per rentang tanggal."
         >
             <div class="ns-c-page-stats-strip">
@@ -87,7 +96,6 @@ async function handleExport() {
         </PageHeader>
 
         <MingguanFilterBar
-            v-model:jenis="jenis"
             v-model:start="start"
             v-model:end="end"
             v-model:format="format"

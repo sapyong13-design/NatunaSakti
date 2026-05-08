@@ -124,6 +124,17 @@ export const getPerkaraTrend = async (weeks = 8) => {
     return response.json();
 };
 
+// Download Laporan Bulanan as .docx (generated from official template)
+export const downloadLaporanBulanan = async (jenis, bulan, tahun) => {
+    const params = new URLSearchParams({ bulan, tahun });
+    const response = await fetch(`${API_BASE}/laporan/bulanan/${jenis}?${params}`);
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Gagal membuat laporan' }));
+        throw new Error(err.error || 'Gagal membuat laporan');
+    }
+    return response.blob();
+};
+
 // Force refresh jadwal sidang (bypass cache, re-scrape SIPP)
 export const refreshJadwal = async (nomorPerkara) => {
     const encoded = encodeURIComponent(nomorPerkara);

@@ -17,6 +17,10 @@ const routes = [
     },
     {
         path: '/mingguan',
+        redirect: '/mingguan/pidana'
+    },
+    {
+        path: '/mingguan/:jenis',
         name: 'Mingguan',
         component: () => import('../views/MingguanView.vue')
     },
