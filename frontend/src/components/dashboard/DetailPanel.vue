@@ -65,75 +65,98 @@ watch(() => props.row, (newRow) => {
 
 <template>
     <Teleport to="body">
-        <div v-if="open" class="ns-detail-backdrop" @click="emit('close')" />
-        <aside v-if="open && row" class="ns-detail-panel">
-            <header class="ns-detail-head">
-                <div>
-                    <div class="ns-detail-eyebrow">{{ row.jenis_perkara }}</div>
-                    <h2 class="ns-detail-title ns-mono">{{ row.nomor_perkara }}</h2>
-                    <div class="ns-detail-pihak">{{ row.para_pihak }}</div>
-                </div>
-                <button class="ns-icon-btn" type="button" @click="emit('close')" aria-label="Close">
-                    <Icon name="close" :size="18" />
-                </button>
-            </header>
-
-            <div class="ns-detail-body">
-                <div class="ns-detail-status-card">
-                    <span class="ns-detail-status-pulse" />
+        <Transition name="ns-backdrop">
+            <div v-if="open" class="ns-detail-backdrop" @click="emit('close')" />
+        </Transition>
+        <Transition name="ns-panel">
+            <aside v-if="open && row" class="ns-detail-panel">
+                <header class="ns-detail-head">
                     <div>
-                        <div>{{ row.sipp_status || 'Status tidak diketahui' }}</div>
-                        <div class="ns-detail-status-sub">Lama proses: {{ row.sipp_lama_proses || '—' }}</div>
+                        <div class="ns-detail-eyebrow">{{ row.jenis_perkara }}</div>
+                        <h2 class="ns-detail-title ns-mono">{{ row.nomor_perkara }}</h2>
+                        <div class="ns-detail-pihak">{{ row.para_pihak }}</div>
+                    </div>
+                    <button class="ns-icon-btn" type="button" @click="emit('close')" aria-label="Close">
+                        <Icon name="close" :size="18" />
+                    </button>
+                </header>
+
+                <div class="ns-detail-body">
+                    <div class="ns-detail-status-card">
+                        <span class="ns-detail-status-pulse" />
+                        <div>
+                            <div>{{ row.sipp_status || 'Status tidak diketahui' }}</div>
+                            <div class="ns-detail-status-sub">Lama proses: {{ row.sipp_lama_proses || '—' }}</div>
+                        </div>
+                    </div>
+
+                    <div class="ns-detail-section">
+                        <div class="ns-detail-section-title">Informasi Perkara</div>
+                        <div class="ns-detail-grid">
+                            <div class="ns-detail-field">
+                                <div class="ns-detail-field-label">Klasifikasi</div>
+                                <div class="ns-detail-field-value">{{ row.sipp_klasifikasi || '—' }}</div>
+                            </div>
+                            <div class="ns-detail-field">
+                                <div class="ns-detail-field-label">Tanggal Register</div>
+                                <div class="ns-detail-field-value">{{ row.sipp_tanggal_register || '—' }}</div>
+                            </div>
+                            <div class="ns-detail-field">
+                                <div class="ns-detail-field-label">Tahun Masuk</div>
+                                <div class="ns-detail-field-value">{{ row.tahun_masuk }}</div>
+                            </div>
+                            <div class="ns-detail-field">
+                                <div class="ns-detail-field-label">Tanggal Putus</div>
+                                <div class="ns-detail-field-value">{{ row.tanggal_putus || '—' }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ns-detail-section">
+                        <div class="ns-detail-section-title">Jadwal Sidang</div>
+                        <div v-if="loadingJadwal" style="padding: 16px; color: var(--text-3); font-size: 13px;">Memuat...</div>
+                        <div v-else-if="!jadwal.length" class="ns-empty">Tidak ada jadwal sidang</div>
+                        <div v-else style="display: flex; flex-direction: column; gap: 10px;">
+                            <div v-for="(j, i) in jadwal" :key="i" class="ns-detail-agenda">
+                                <div style="font-weight: 600;">{{ j.tanggal }}<span v-if="j.jam" style="color: var(--text-3); font-weight: 400; margin-left: 8px;">{{ j.jam }}</span></div>
+                                <div style="margin-top: 4px;">{{ j.agenda }}</div>
+                                <div v-if="j.ruangan" class="ns-detail-status-sub">{{ j.ruangan }}</div>
+                                <div v-if="j.alasanDitunda && j.alasanDitunda !== '0'" style="margin-top: 4px; font-size: 11.5px; color: var(--warn);">Ditunda: {{ j.alasanDitunda }}</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="ns-detail-section">
-                    <div class="ns-detail-section-title">Informasi Perkara</div>
-                    <div class="ns-detail-grid">
-                        <div class="ns-detail-field">
-                            <div class="ns-detail-field-label">Klasifikasi</div>
-                            <div class="ns-detail-field-value">{{ row.sipp_klasifikasi || '—' }}</div>
-                        </div>
-                        <div class="ns-detail-field">
-                            <div class="ns-detail-field-label">Tanggal Register</div>
-                            <div class="ns-detail-field-value">{{ row.sipp_tanggal_register || '—' }}</div>
-                        </div>
-                        <div class="ns-detail-field">
-                            <div class="ns-detail-field-label">Tahun Masuk</div>
-                            <div class="ns-detail-field-value">{{ row.tahun_masuk }}</div>
-                        </div>
-                        <div class="ns-detail-field">
-                            <div class="ns-detail-field-label">Tanggal Putus</div>
-                            <div class="ns-detail-field-value">{{ row.tanggal_putus || '—' }}</div>
-                        </div>
-                    </div>
+                <div class="ns-detail-actions">
+                    <button class="ns-btn ns-btn-ghost" type="button" :disabled="refreshing" @click="handleRefreshJadwal">
+                        <Icon name="refresh" :size="14" />
+                        {{ refreshing ? 'Refreshing...' : 'Refresh Jadwal' }}
+                    </button>
+                    <button class="ns-btn ns-btn-danger" type="button" :disabled="deleting" @click="handleDelete">
+                        <Icon name="trash" :size="14" />
+                        {{ deleting ? 'Deleting...' : 'Delete' }}
+                    </button>
                 </div>
-
-                <div class="ns-detail-section">
-                    <div class="ns-detail-section-title">Jadwal Sidang</div>
-                    <div v-if="loadingJadwal" style="padding: 16px; color: var(--text-3); font-size: 13px;">Memuat...</div>
-                    <div v-else-if="!jadwal.length" class="ns-empty">Tidak ada jadwal sidang</div>
-                    <div v-else style="display: flex; flex-direction: column; gap: 10px;">
-                        <div v-for="(j, i) in jadwal" :key="i" class="ns-detail-agenda">
-                            <div style="font-weight: 600;">{{ j.tanggal }}<span v-if="j.jam" style="color: var(--text-3); font-weight: 400; margin-left: 8px;">{{ j.jam }}</span></div>
-                            <div style="margin-top: 4px;">{{ j.agenda }}</div>
-                            <div v-if="j.ruangan" class="ns-detail-status-sub">{{ j.ruangan }}</div>
-                            <div v-if="j.alasanDitunda && j.alasanDitunda !== '0'" style="margin-top: 4px; font-size: 11.5px; color: var(--warn);">Ditunda: {{ j.alasanDitunda }}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="ns-detail-actions">
-                <button class="ns-btn ns-btn-ghost" type="button" :disabled="refreshing" @click="handleRefreshJadwal">
-                    <Icon name="refresh" :size="14" />
-                    {{ refreshing ? 'Refreshing...' : 'Refresh Jadwal' }}
-                </button>
-                <button class="ns-btn ns-btn-danger" type="button" :disabled="deleting" @click="handleDelete">
-                    <Icon name="trash" :size="14" />
-                    {{ deleting ? 'Deleting...' : 'Delete' }}
-                </button>
-            </div>
-        </aside>
+            </aside>
+        </Transition>
     </Teleport>
 </template>
+
+<style scoped>
+.ns-backdrop-enter-active,
+.ns-backdrop-leave-active {
+    transition: opacity 200ms ease;
+}
+.ns-backdrop-enter-from,
+.ns-backdrop-leave-to {
+    opacity: 0;
+}
+.ns-panel-enter-active,
+.ns-panel-leave-active {
+    transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.ns-panel-enter-from,
+.ns-panel-leave-to {
+    transform: translateX(100%);
+}
+</style>
