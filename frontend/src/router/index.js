@@ -25,6 +25,11 @@ const routes = [
         path: '/data',
         name: 'Data',
         component: () => import('../views/DataView.vue')
+    },
+    {
+        path: '/test-foundation',
+        name: 'test-foundation',
+        component: () => import('../views/FoundationTest.vue')
     }
 ]
 
