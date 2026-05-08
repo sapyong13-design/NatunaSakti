@@ -517,4 +517,15 @@ console.log('[CRON] Auto-sync enabled (runs every hour at minute 0)');
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Database: ${dbPath}`);
+
+    // Initial populate jadwal cache kalau kosong (fire-and-forget, jangan blok startup)
+    const cachedCount = db.prepare('SELECT COUNT(*) AS n FROM jadwal_sidang').get().n;
+    if (cachedCount === 0) {
+        console.log('[CACHE] empty on startup, populating jadwal cache for current year...');
+        sippService.cacheJadwalCurrentYear()
+            .then(r => console.log('[CACHE] startup populate done:', r))
+            .catch(e => console.error('[CACHE] startup populate error:', e.message));
+    } else {
+        console.log(`[CACHE] ${cachedCount} jadwal rows already cached, skipping initial populate`);
+    }
 });
