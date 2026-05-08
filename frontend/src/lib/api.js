@@ -116,3 +116,21 @@ export const subscribeSyncProgress = (onProgress) => {
 
     return eventSource;
 };
+
+// Get trend data for last N weeks
+export const getPerkaraTrend = async (weeks = 8) => {
+    const response = await fetch(`${API_BASE}/perkara/trend?weeks=${weeks}`);
+    if (!response.ok) throw new Error('Failed to fetch trend');
+    return response.json();
+};
+
+// Force refresh jadwal sidang (bypass cache, re-scrape SIPP)
+export const refreshJadwal = async (nomorPerkara) => {
+    const encoded = encodeURIComponent(nomorPerkara);
+    const response = await fetch(`${API_BASE}/perkara/sipp/jadwal/${encoded}/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    });
+    if (!response.ok) throw new Error('Failed to refresh jadwal');
+    return response.json();
+};
