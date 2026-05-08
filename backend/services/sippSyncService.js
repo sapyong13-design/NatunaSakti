@@ -316,17 +316,24 @@ class SIPPSyncService {
 
     const tx = this.db.transaction((entries) => {
       del.run(nomorPerkara);
-      for (const e of entries) {
-        ins.run(
-          nomorPerkara,
-          parseInt(e.nomor) || null,
-          e.tanggal || null,
-          e.jam || null,
-          e.agenda || null,
-          e.ruangan || null,
-          e.alasanDitunda || null,
-          fetchedAt
-        );
+      if (entries.length === 0) {
+        // Sentinel: marks "we fetched, found 0 jadwal". Distinguishes
+        // "no cache yet" from "cached and confirmed empty" — keeps the
+        // endpoint from thrashing puppeteer for perkara not yet sched.
+        ins.run(nomorPerkara, null, null, null, null, null, null, fetchedAt);
+      } else {
+        for (const e of entries) {
+          ins.run(
+            nomorPerkara,
+            parseInt(e.nomor) || null,
+            e.tanggal || null,
+            e.jam || null,
+            e.agenda || null,
+            e.ruangan || null,
+            e.alasanDitunda || null,
+            fetchedAt
+          );
+        }
       }
     });
 

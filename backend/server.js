@@ -366,23 +366,29 @@ app.get('/api/perkara/sipp/jadwal/:nomor', async (req, res) => {
         ).get(nomorPerkara);
 
         if (row?.tahun_masuk === currentYear) {
-            // Cache hit path: baca dari DB, instant
-            const cached = db.prepare(`
-                SELECT nomor, tanggal, jam, agenda, ruangan,
-                       alasan_ditunda AS alasanDitunda
-                FROM jadwal_sidang
-                WHERE nomor_perkara = ?
-                ORDER BY id
-            `).all(nomorPerkara);
+            // Cache existence check: any row (real or sentinel) means we
+            // already fetched this perkara. Real entries have nomor IS NOT NULL;
+            // sentinel rows have all-null data and just mark "fetched, was empty".
+            const hasCacheEntry = db.prepare(
+                'SELECT 1 FROM jadwal_sidang WHERE nomor_perkara = ? LIMIT 1'
+            ).get(nomorPerkara);
 
-            if (cached.length > 0) {
+            if (hasCacheEntry) {
+                const cached = db.prepare(`
+                    SELECT nomor, tanggal, jam, agenda, ruangan,
+                           alasan_ditunda AS alasanDitunda
+                    FROM jadwal_sidang
+                    WHERE nomor_perkara = ? AND nomor IS NOT NULL
+                    ORDER BY id
+                `).all(nomorPerkara);
+
                 return res.json({
                     nomor_perkara: nomorPerkara,
                     jadwal: cached,
                     cached: true
                 });
             }
-            // 2026 tapi cache miss (mungkin populasi awal belum selesai) → fall through ke live
+            // 2026 tapi belum pernah ke-cache (populasi awal belum selesai) → fall through ke live
         }
 
         // Non-current-year atau cache miss → live scrape
