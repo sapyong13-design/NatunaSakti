@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useTheme } from '../composables/useTheme'
 import Sidebar from '../components/shell/Sidebar.vue'
 import TopBar from '../components/shell/TopBar.vue'
@@ -8,6 +8,21 @@ import { SIDEBAR_ITEMS } from '../data/sidebarItems.js'
 const theme = useTheme()
 const collapsed = ref(false)
 const expandedGroups = reactive({ bulanan: true })
+
+let mq = null
+function onMqChange(e) {
+    if (e.matches) collapsed.value = true
+}
+
+onMounted(() => {
+    mq = window.matchMedia('(max-width: 768px)')
+    if (mq.matches) collapsed.value = true
+    mq.addEventListener('change', onMqChange)
+})
+
+onUnmounted(() => {
+    if (mq) mq.removeEventListener('change', onMqChange)
+})
 
 function toggleGroup(id) {
     expandedGroups[id] = !expandedGroups[id]
