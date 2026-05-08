@@ -345,46 +345,63 @@ class SIPPSyncService {
    * Cache jadwal sidang untuk semua perkara tahun berjalan.
    * 1 browser instance dipakai ulang untuk seluruh batch.
    *
-   * @returns {Promise<{ok: number, failed: number, total: number}>}
+   * Concurrency-guarded: kalau call kedua masuk saat batch sebelumnya masih
+   * jalan (misal startup populate overlap dengan cron jam :00), call kedua
+   * langsung return dengan `skipped: true` tanpa launch browser baru.
+   *
+   * @returns {Promise<{ok: number, failed: number, total: number, skipped?: boolean}>}
    */
   async cacheJadwalCurrentYear() {
-    const year = new Date().getFullYear();
-    const perkara = this.db.prepare(
-      'SELECT nomor_perkara FROM perkara WHERE tahun_masuk = ?'
-    ).all(year);
-
-    console.log(`[CACHE] Caching jadwal for ${perkara.length} perkara tahun ${year}`);
-
-    if (perkara.length === 0) {
-      return { ok: 0, failed: 0, total: 0 };
+    if (this.cachePopulateInProgress) {
+      console.log('[CACHE] populate already in progress, skipping');
+      return { ok: 0, failed: 0, total: 0, skipped: true };
     }
+    this.cachePopulateInProgress = true;
 
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-    });
-
-    let ok = 0;
-    let failed = 0;
     try {
-      const page = await browser.newPage();
-      for (const p of perkara) {
-        try {
-          const n = await this.fetchAndCacheJadwal(p.nomor_perkara, page);
-          ok++;
-          console.log(`[CACHE] ${ok + failed}/${perkara.length}: ${p.nomor_perkara} -> ${n} jadwal`);
-        } catch (err) {
-          failed++;
-          console.error(`[CACHE] failed ${p.nomor_perkara}:`, err.message);
-        }
-        await new Promise(r => setTimeout(r, 200)); // throttle SIPP
-      }
-    } finally {
-      await browser.close();
-    }
+      const year = new Date().getFullYear();
+      const perkara = this.db.prepare(
+        'SELECT nomor_perkara FROM perkara WHERE tahun_masuk = ?'
+      ).all(year);
 
-    console.log(`[CACHE] done: ok=${ok}, failed=${failed}, total=${perkara.length}`);
-    return { ok, failed, total: perkara.length };
+      console.log(`[CACHE] Caching jadwal for ${perkara.length} perkara tahun ${year}`);
+
+      if (perkara.length === 0) {
+        return { ok: 0, failed: 0, total: 0 };
+      }
+
+      const browser = await puppeteer.launch({
+        headless: 'new',
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      });
+
+      let ok = 0;
+      let failed = 0;
+      try {
+        const page = await browser.newPage();
+        for (const p of perkara) {
+          try {
+            const n = await this.fetchAndCacheJadwal(p.nomor_perkara, page);
+            ok++;
+            console.log(`[CACHE] ${ok + failed}/${perkara.length}: ${p.nomor_perkara} -> ${n} jadwal`);
+          } catch (err) {
+            failed++;
+            console.error(`[CACHE] failed ${p.nomor_perkara}:`, err.message);
+            // Reset page state so a wedged page (crashed frame, dangling
+            // navigation) doesn't cascade into the next iteration.
+            try { await page.goto('about:blank'); } catch (_) { /* ignore */ }
+          }
+          await new Promise(r => setTimeout(r, 200)); // throttle SIPP
+        }
+      } finally {
+        await browser.close();
+      }
+
+      console.log(`[CACHE] done: ok=${ok}, failed=${failed}, total=${perkara.length}`);
+      return { ok, failed, total: perkara.length };
+    } finally {
+      this.cachePopulateInProgress = false;
+    }
   }
 
   /**
