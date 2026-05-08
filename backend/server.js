@@ -406,6 +406,42 @@ app.get('/api/perkara/sipp/jadwal/:nomor', async (req, res) => {
     }
 });
 
+// Force refresh jadwal sidang for a perkara (bypass cache, re-fetch from SIPP)
+app.post('/api/perkara/sipp/jadwal/:nomor/refresh', async (req, res) => {
+    const nomorPerkara = decodeURIComponent(req.params.nomor);
+    console.log('[SIPP-JADWAL-REFRESH] Called for:', nomorPerkara);
+    const puppeteer = require('puppeteer');
+    let browser;
+    try {
+        browser = await puppeteer.launch({
+            headless: 'new',
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        });
+        const page = await browser.newPage();
+        await sippService.fetchAndCacheJadwal(nomorPerkara, page);
+
+        const cached = db.prepare(`
+            SELECT nomor, tanggal, jam, agenda, ruangan,
+                   alasan_ditunda AS alasanDitunda
+            FROM jadwal_sidang
+            WHERE nomor_perkara = ? AND nomor IS NOT NULL
+            ORDER BY id
+        `).all(nomorPerkara);
+
+        res.json({
+            nomor_perkara: nomorPerkara,
+            jadwal: cached,
+            cached: true,
+            refreshed: true
+        });
+    } catch (error) {
+        console.error('[SIPP-JADWAL-REFRESH] error:', error.message);
+        res.status(500).json({ error: error.message });
+    } finally {
+        if (browser) await browser.close();
+    }
+});
+
 // Trend pendaftaran per minggu (last N weeks, max 52)
 app.get('/api/perkara/trend', (req, res) => {
     try {
