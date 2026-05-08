@@ -358,10 +358,39 @@ app.get('/api/perkara/sipp/jadwal/:nomor', async (req, res) => {
     console.log('[SIPP-JADWAL] Called for:', req.params.nomor);
     try {
         const nomorPerkara = decodeURIComponent(req.params.nomor);
+        const currentYear = new Date().getFullYear();
+
+        // Cek tahun perkara
+        const row = db.prepare(
+            'SELECT tahun_masuk FROM perkara WHERE nomor_perkara = ?'
+        ).get(nomorPerkara);
+
+        if (row?.tahun_masuk === currentYear) {
+            // Cache hit path: baca dari DB, instant
+            const cached = db.prepare(`
+                SELECT nomor, tanggal, jam, agenda, ruangan,
+                       alasan_ditunda AS alasanDitunda
+                FROM jadwal_sidang
+                WHERE nomor_perkara = ?
+                ORDER BY id
+            `).all(nomorPerkara);
+
+            if (cached.length > 0) {
+                return res.json({
+                    nomor_perkara: nomorPerkara,
+                    jadwal: cached,
+                    cached: true
+                });
+            }
+            // 2026 tapi cache miss (mungkin populasi awal belum selesai) → fall through ke live
+        }
+
+        // Non-current-year atau cache miss → live scrape
         const jadwal = await sippService.fetchJadwalSidang(nomorPerkara);
         res.json({
             nomor_perkara: nomorPerkara,
-            jadwal
+            jadwal,
+            cached: false
         });
     } catch (error) {
         console.error('[SIPP] Jadwal error:', error.message);
