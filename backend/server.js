@@ -502,6 +502,11 @@ const syncTask = cron.schedule('0 * * * *', async () => {
         const data = await sippService.fetchSIPPData();
         const count = await sippService.saveToDatabase(data);
         console.log(`[CRON] Sync completed: ${count} perkara updated`);
+
+        // Refresh jadwal cache untuk perkara tahun berjalan
+        console.log('[CRON] Refreshing jadwal cache...');
+        const cacheResult = await sippService.cacheJadwalCurrentYear();
+        console.log('[CRON] Jadwal cache refreshed:', cacheResult);
     } catch (error) {
         console.error('[CRON] Sync error:', error.message);
     }
