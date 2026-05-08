@@ -1,0 +1,260 @@
+/* ============================================================
+   Variation B (Command Center) + Variation C (Gov Modern) styles
+   ============================================================ */
+
+/* ============ B: Command Center ============ */
+.ns-skin-b .ns-grid-bg {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+  opacity: 0.4;
+}
+
+.ns-skin-b .ns-h1 { font-family: "Bookman Old Style", "Bookman", Georgia, serif; font-weight: 600; }
+
+.ns-skin-b .ns-cmd-banner {
+  position: relative;
+  padding: 18px 22px;
+  background: linear-gradient(135deg, var(--accent-soft), transparent 80%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.ns-skin-b .ns-cmd-banner::before {
+  content: ""; position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+.ns-cmd-banner-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.ns-cmd-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.1em;
+  color: var(--accent);
+  padding: 4px 10px; border-radius: 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--accent-soft);
+}
+.ns-blink-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+  animation: ns-blink 1.2s ease-in-out infinite;
+}
+.ns-cmd-meta {
+  display: flex; gap: 16px;
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  font-size: 11px; color: var(--text-3);
+}
+.ns-cmd-meta b { color: var(--text); font-weight: 600; }
+
+.ns-h1-cmd {
+  margin: 14px 0 4px;
+  font-family: "Bookman Old Style", "Bookman", Georgia, serif;
+  font-size: 32px; font-weight: 700; letter-spacing: -0.025em;
+  color: var(--text);
+}
+.ns-h1-year {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 18px; font-weight: 400;
+  color: var(--text-3);
+  margin-left: 6px;
+}
+.ns-h1-cmd-sub { margin: 0; font-size: 13px; color: var(--text-3); }
+
+.ns-skin-b .ns-topbar { background: var(--bg-2); border-bottom: 1px solid var(--border); }
+
+.ns-cmd-clock { display: flex; flex-direction: column; line-height: 1.1; }
+.ns-cmd-time {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 18px; font-weight: 600; color: var(--text);
+  letter-spacing: 0.02em;
+}
+.ns-cmd-date { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+.ns-cmd-status {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px; border-radius: 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  font-size: 11px;
+}
+.ns-cmd-status-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+}
+.ns-cmd-status-pill .ns-pulse-dot {
+  position: relative; width: 6px; height: 6px; inset: auto;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+  border-radius: 50%;
+}
+.ns-cmd-status-pill .ns-pulse-dot.is-syncing { animation: ns-blink 0.6s ease-in-out infinite; }
+.ns-mono { font-family: "JetBrains Mono", "SF Mono", monospace; }
+.ns-text-3 { color: var(--text-3); }
+
+.ns-cmd-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.ns-cmd-stat-card {
+  position: relative;
+  padding: 18px 18px 12px;
+  background: var(--surface);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: flex; flex-direction: column; gap: 8px;
+  overflow: hidden;
+  transition: all 200ms;
+}
+.ns-cmd-stat-card:hover { border-color: var(--accent-soft); }
+.ns-cmd-stat-corner {
+  position: absolute; width: 12px; height: 12px;
+  border: 1.5px solid var(--accent);
+  opacity: 0.7;
+}
+.ns-cmd-stat-corner-tl { top: 6px; left: 6px; border-right: 0; border-bottom: 0; }
+.ns-cmd-stat-corner-tr { top: 6px; right: 6px; border-left: 0; border-bottom: 0; }
+.ns-cmd-stat-corner-bl { bottom: 6px; left: 6px; border-right: 0; border-top: 0; }
+.ns-cmd-stat-corner-br { bottom: 6px; right: 6px; border-left: 0; border-top: 0; }
+
+.ns-cmd-stat-head { display: flex; align-items: center; justify-content: space-between; }
+.ns-cmd-stat-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--text-2);
+}
+.ns-cmd-stat-value-row { display: flex; align-items: baseline; }
+.ns-cmd-stat-value {
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  font-size: 44px; font-weight: 700; letter-spacing: -0.02em;
+  line-height: 1;
+  text-shadow: 0 0 24px currentColor;
+  filter: drop-shadow(0 0 12px currentColor);
+}
+.ns-cmd-stat-sub { font-size: 11px; color: var(--text-3); margin-top: -2px; }
+.ns-cmd-stat-spark { margin: 4px -4px -8px; }
+
+.ns-table-cmd .ns-cmd-table-head-banner {
+  padding: 8px 18px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between;
+  font-size: 10.5px; letter-spacing: 0.05em;
+}
+.ns-skin-b .ns-table-card { border-radius: 4px; }
+.ns-skin-b .ns-nomor-mono { font-weight: 500; }
+
+/* ============ C: Gov Modern ============ */
+.ns-skin-c {
+  background: var(--gradient-bg);
+}
+.ns-c-hero-bg {
+  position: absolute; top: 0; left: 0; right: 0; height: 220px;
+  background: linear-gradient(180deg, var(--accent-soft), transparent);
+  pointer-events: none; z-index: 0;
+}
+.ns-skin-c .ns-sidebar {
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+.ns-skin-c .ns-topbar-c {
+  background: transparent;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  border-bottom: 1px solid var(--border);
+}
+.ns-c-org { display: flex; flex-direction: column; line-height: 1.2; }
+.ns-c-org-line {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--accent);
+}
+.ns-c-org-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+.ns-c-page-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 24px; align-items: end;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.ns-c-eyebrow {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+  color: var(--accent); text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.ns-h1-c {
+  font-size: 40px;
+  margin: 0;
+}
+
+.ns-c-page-stats-strip {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 18px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.ns-c-strip-item { display: flex; flex-direction: column; align-items: flex-start; min-width: 60px; }
+.ns-c-strip-label { font-size: 10.5px; color: var(--text-3); letter-spacing: 0.04em; text-transform: uppercase; }
+.ns-c-strip-value {
+  font-family: "Bookman Old Style", "Bookman", Georgia, serif;
+  font-size: 26px; font-weight: 400; line-height: 1;
+  color: var(--text); font-variant-numeric: tabular-nums;
+}
+.ns-c-strip-divider {
+  width: 1px; height: 28px; background: var(--border);
+}
+
+.ns-c-cards-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+}
+.ns-c-big-card {
+  padding: 18px 20px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.ns-c-big-card-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.ns-c-bigchart { color: var(--text-3); }
+.ns-c-bigchart-legend {
+  display: flex; gap: 16px; font-size: 12px; color: var(--text-2);
+  padding-top: 4px; border-top: 1px solid var(--border);
+}
+.ns-c-side-cards { display: flex; flex-direction: column; gap: 14px; }
+.ns-c-mini-card {
+  flex: 1;
+  padding: 16px 18px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.ns-c-mini-value {
+  font-family: "Bookman Old Style", "Bookman", Georgia, serif;
+  font-size: 38px; font-weight: 400; letter-spacing: -0.02em; line-height: 1;
+  color: var(--text); font-variant-numeric: tabular-nums;
+}
+.ns-c-mini-unit {
+  font-size: 14px; color: var(--text-3);
+  margin-left: 4px; font-family: "Bookman Old Style", "Bookman", Georgia, serif;
+}
+
+.ns-skin-c .ns-table-card { background: var(--bg-2); box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+.ns-skin-c .ns-toolbar { background: var(--bg-2); box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
