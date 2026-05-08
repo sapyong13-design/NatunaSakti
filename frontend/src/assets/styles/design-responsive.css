@@ -1,0 +1,41 @@
+/* ============================================
+   Responsive breakpoints (Fase 5)
+   ============================================ */
+
+@media (max-width: 768px) {
+
+    /* Sidebar: narrow icon-only on mobile */
+    .ns-sidebar:not(.is-collapsed) { width: 64px; }
+    .ns-sidebar .ns-brand-text,
+    .ns-sidebar .ns-nav-label,
+    .ns-sidebar .ns-nav-chevron,
+    .ns-sidebar .ns-nav-children {
+        display: none;
+    }
+
+    /* Topbar */
+    .ns-c-org-line { font-size: 11px; }
+    .ns-c-org-sub { display: none; }
+    .ns-topbar-actions .ns-live { display: none; }
+
+    /* Cards row stacks */
+    .ns-c-cards-row { grid-template-columns: 1fr; }
+
+    /* Toolbar wraps */
+    .ns-toolbar { flex-wrap: wrap; gap: 8px; }
+    .ns-toolbar-filters { width: 100%; flex-wrap: wrap; }
+
+    /* Stats strip wraps */
+    .ns-c-page-stats-strip { flex-wrap: wrap; gap: 12px; }
+    .ns-c-strip-divider { display: none; }
+
+    /* Detail panel full-width */
+    .ns-detail-panel { width: 100% !important; max-width: 100%; }
+
+    /* Tables horizontal scroll */
+    .ns-table-card { overflow-x: auto; }
+    .ns-table-head, .ns-tr { min-width: 720px; }
+
+    /* PageHeader stacks */
+    .ns-c-page-header { grid-template-columns: 1fr; gap: 12px; }
+}

@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import './assets/styles/design-tokens.css'
 import './assets/styles/design-bookman.css'
+import './assets/styles/design-responsive.css'
 import App from './App.vue'
 import router from './router'
 
