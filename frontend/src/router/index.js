@@ -21,19 +21,9 @@ const routes = [
         component: () => import('../views/MingguanView.vue')
     },
     {
-        path: '/input',
-        name: 'Input',
-        component: () => import('../views/InputView.vue')
-    },
-    {
         path: '/data',
         name: 'Data',
         component: () => import('../views/DataView.vue')
-    },
-    {
-        path: '/test-foundation',
-        name: 'test-foundation',
-        component: () => import('../views/FoundationTest.vue')
     }
 ]
 
