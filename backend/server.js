@@ -406,6 +406,61 @@ app.get('/api/perkara/sipp/jadwal/:nomor', async (req, res) => {
     }
 });
 
+// Trend pendaftaran per minggu (last N weeks, max 52)
+app.get('/api/perkara/trend', (req, res) => {
+    try {
+        const weeks = Math.max(1, Math.min(52, parseInt(req.query.weeks) || 8));
+        const rows = db.prepare(`
+            SELECT jenis_perkara, sipp_tanggal_register
+            FROM perkara
+            WHERE sipp_tanggal_register IS NOT NULL AND sipp_tanggal_register != ''
+        `).all();
+
+        const monthMap = {
+            jan: 0, feb: 1, mar: 2, apr: 3, mei: 4, jun: 5,
+            jul: 6, agu: 7, sep: 8, okt: 9, nov: 10, des: 11
+        };
+
+        function parseTanggal(s) {
+            const parts = s.trim().split(/\s+/);
+            if (parts.length < 3) return null;
+            const day = parseInt(parts[0]);
+            const monKey = parts[1].toLowerCase().slice(0, 3);
+            const enMap = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
+            const mon = monthMap[monKey] ?? enMap[monKey];
+            const year = parseInt(parts[2]);
+            if (mon === undefined || isNaN(day) || isNaN(year)) return null;
+            return new Date(year, mon, day);
+        }
+
+        const now = new Date();
+        const weekMs = 7 * 24 * 60 * 60 * 1000;
+        const buckets = Array.from({ length: weeks }, () => ({ pidana: 0, perdata: 0 }));
+
+        for (const r of rows) {
+            const d = parseTanggal(r.sipp_tanggal_register);
+            if (!d) continue;
+            const diff = now - d;
+            if (diff < 0) continue;
+            const weekIdx = Math.floor(diff / weekMs);
+            if (weekIdx >= weeks) continue;
+            const bucketIdx = weeks - 1 - weekIdx;
+            if (r.jenis_perkara === 'Pidana') buckets[bucketIdx].pidana++;
+            else if (r.jenis_perkara === 'Perdata') buckets[bucketIdx].perdata++;
+        }
+
+        const result = buckets.map((b, i) => ({
+            week: `W${i + 1}`,
+            pidana: b.pidana,
+            perdata: b.perdata
+        }));
+        res.json(result);
+    } catch (error) {
+        console.error('[TREND] error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Get perkara by ID - MUST be last
 app.get('/api/perkara/:id', (req, res) => {
     console.log('[PERKARA-ID] Called with id:', req.params.id);
