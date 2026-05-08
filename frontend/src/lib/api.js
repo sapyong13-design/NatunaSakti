@@ -124,9 +124,9 @@ export const getPerkaraTrend = async (weeks = 8) => {
     return response.json();
 };
 
-// Download Laporan Bulanan as .docx (generated from official template)
-export const downloadLaporanBulanan = async (jenis, bulan, tahun) => {
-    const params = new URLSearchParams({ bulan, tahun });
+// Download Laporan Bulanan as .docx or .pdf (generated from official template)
+export const downloadLaporanBulanan = async (jenis, bulan, tahun, format = 'docx') => {
+    const params = new URLSearchParams({ bulan, tahun, format });
     const response = await fetch(`${API_BASE}/laporan/bulanan/${jenis}?${params}`);
     if (!response.ok) {
         const err = await response.json().catch(() => ({ error: 'Gagal membuat laporan' }));

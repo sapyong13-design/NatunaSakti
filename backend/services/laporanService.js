@@ -6,6 +6,8 @@
 const PizZip = require('pizzip')
 const fs = require('fs')
 const path = require('path')
+const os = require('os')
+const { execSync } = require('child_process')
 
 const BULAN_NAMES = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
                      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
@@ -354,4 +356,27 @@ function generateLaporanBulanan(db, jenis, bulan, tahun) {
     return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' })
 }
 
-module.exports = { generateLaporanBulanan }
+// Convert DOCX buffer → PDF buffer via Microsoft Word COM (Windows only)
+function convertDocxToPdf(docxBuffer) {
+    const tmpDocx = path.join(os.tmpdir(), `laporan_${Date.now()}.docx`)
+    const tmpPdf  = tmpDocx.replace('.docx', '.pdf')
+    try {
+        fs.writeFileSync(tmpDocx, docxBuffer)
+        const ps = `
+            $w = New-Object -ComObject Word.Application
+            $w.Visible = $false
+            $w.DisplayAlerts = 0
+            $d = $w.Documents.Open('${tmpDocx.replace(/\\/g, '\\\\')}')
+            $d.SaveAs([ref]'${tmpPdf.replace(/\\/g, '\\\\')}', [ref]17)
+            $d.Close($false)
+            $w.Quit()
+        `
+        execSync(`powershell -NonInteractive -Command "${ps.replace(/\n\s*/g, '; ')}"`, { timeout: 30000 })
+        return fs.readFileSync(tmpPdf)
+    } finally {
+        if (fs.existsSync(tmpDocx)) fs.unlinkSync(tmpDocx)
+        if (fs.existsSync(tmpPdf))  fs.unlinkSync(tmpPdf)
+    }
+}
+
+module.exports = { generateLaporanBulanan, convertDocxToPdf }

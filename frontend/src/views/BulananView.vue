@@ -4,9 +4,7 @@ import { useRoute } from 'vue-router'
 import PageHeader from '../components/shell/PageHeader.vue'
 import BulananFilterBar from '../components/report/BulananFilterBar.vue'
 import ReportTable from '../components/report/ReportTable.vue'
-import { getPerkara } from '../lib/api'
-import { generateBulananPDF, downloadPDF } from '../lib/export'
-import { downloadLaporanBulanan } from '../lib/api'
+import { getPerkara, downloadLaporanBulanan } from '../lib/api'
 
 const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
                     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
@@ -39,28 +37,17 @@ async function fetchData() {
 }
 
 async function handleExport() {
-    if (!rows.value.length) {
-        alert('Tidak ada data untuk diekspor')
-        return
-    }
     exporting.value = true
     try {
         const filenameBase = `Akurasi_${jenisCanonical.value}_${BULAN_NAMA[bulan.value - 1]}_${tahun.value}`
-        if (format.value === 'pdf') {
-            const doc = generateBulananPDF(rows.value, {
-                bulan: bulan.value, tahun: tahun.value, jenisPerkara: jenisCanonical.value
-            })
-            downloadPDF(doc, `${filenameBase}.pdf`)
-        } else {
-            const blob = await downloadLaporanBulanan(jenisCanonical.value, bulan.value, tahun.value)
-            const url = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = `${filenameBase}.docx`
-            a.click()
-            URL.revokeObjectURL(url)
-        }
-        console.log(`File ${format.value.toUpperCase()} berhasil dibuat`)
+        const ext  = format.value === 'pdf' ? 'pdf' : 'docx'
+        const blob = await downloadLaporanBulanan(jenisCanonical.value, bulan.value, tahun.value, format.value)
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = `${filenameBase}.${ext}`
+        a.click()
+        URL.revokeObjectURL(url)
     } catch (err) {
         console.error('Export failed:', err.message)
         alert('Gagal membuat file: ' + err.message)
@@ -96,7 +83,7 @@ onMounted(fetchData)
             v-model:format="format"
             :loading="loading"
             :exporting="exporting"
-            :can-export="rows.length > 0"
+            :can-export="true"
             @fetch="fetchData"
             @export="handleExport"
         />
