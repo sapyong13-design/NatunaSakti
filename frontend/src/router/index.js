@@ -8,6 +8,10 @@ const routes = [
     },
     {
         path: '/bulanan',
+        redirect: '/bulanan/pidana'
+    },
+    {
+        path: '/bulanan/:jenis',
         name: 'Bulanan',
         component: () => import('../views/BulananView.vue')
     },
