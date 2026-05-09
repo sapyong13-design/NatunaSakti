@@ -197,6 +197,17 @@ export const getPerkaraTrendMonthly = async (year = new Date().getFullYear()) =>
     }
 };
 
+// Get yearly trend data (all years)
+export const getPerkaraTrendYearly = async () => {
+    try {
+        const response = await fetchWithRetry(`${API_BASE}/perkara/trend/yearly`);
+        return response.json();
+    } catch (error) {
+        console.error('Failed to fetch yearly trend:', error);
+        return [];
+    }
+};
+
 // ========================
 // REPORTS EXPORT
 // ========================

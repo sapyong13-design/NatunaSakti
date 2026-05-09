@@ -26,24 +26,26 @@ const tooltipStyle = computed(() => {
 const barWidth = 24
 const barGap = 8
 
-const max = computed(() => Math.max(...props.data.map(d => (d.pidana || 0) + (d.perdata || 0)), 1))
+const max = computed(() => Math.max(...props.data.map(d => (d.pidana || 0) + (d.perdata || 0) + (d.perikanan || 0)), 1))
 
 const bars = computed(() => {
     const totalBarsWidth = props.data.length * barWidth + (props.data.length - 1) * barGap
     const startX = Math.max(12, (props.width - totalBarsWidth) / 2)
 
     return props.data.map((d, i) => {
-        const total = (d.pidana || 0) + (d.perdata || 0)
+        const total = (d.pidana || 0) + (d.perdata || 0) + (d.perikanan || 0)
         const totalH = (total / max.value) * props.height
         const pidH = ((d.pidana || 0) / max.value) * props.height
         const perH = ((d.perdata || 0) / max.value) * props.height
+        const perikH = ((d.perikanan || 0) / max.value) * props.height
         const x = startX + i * (barWidth + barGap)
         const y = props.height - totalH
 
         return {
-            x, y, pidH, perH, total,
+            x, y, pidH, perH, perikH, total,
             pidana: d.pidana || 0,
             perdata: d.perdata || 0,
+            perikanan: d.perikanan || 0,
             label: d.label || d.month,
             isPeak: d.isPeak || false,
             intensity: d.intensity || 1,
@@ -80,6 +82,10 @@ function handleLeave() {
                 <linearGradient id="gradPerdata" x1="0%" y1="0%" x2="0%" y2="100%">
                     <stop offset="0%" stop-color="var(--success)" stop-opacity="0.9" />
                     <stop offset="100%" stop-color="var(--success)" stop-opacity="0.6" />
+                </linearGradient>
+                <linearGradient id="gradPerikanan" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0.9" />
+                    <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.6" />
                 </linearGradient>
                 <linearGradient id="gradPeak" x1="0%" y1="0%" x2="0%" y2="100%">
                     <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.3" />
@@ -134,6 +140,19 @@ function handleLeave() {
                     :class="{ 'is-hovered': hovered?.index === b.index }"
                 />
 
+                <!-- Perikanan bar -->
+                <rect
+                    :x="b.x"
+                    :y="b.y + b.pidH + b.perH"
+                    :width="barWidth"
+                    :height="b.perikH"
+                    :rx="barWidth / 3"
+                    fill="#0ea5e9"
+                    :fill-opacity="0.5 + (b.intensity * 0.4)"
+                    class="ns-bar-rect ns-bar-perikanan"
+                    :class="{ 'is-hovered': hovered?.index === b.index }"
+                />
+
                 <!-- Peak crown -->
                 <g v-if="b.isPeak && hovered?.index !== b.index" class="ns-peak-crown">
                     <Icon name="crown" :size="12" />
@@ -179,8 +198,13 @@ function handleLeave() {
                     <span>Perdata:</span>
                     <strong>{{ hovered.perdata }}</strong>
                 </div>
+                <div class="ns-tooltip-row">
+                    <span class="ns-tooltip-dot ns-tooltip-perikanan"></span>
+                    <span>Perikanan:</span>
+                    <strong>{{ hovered.perikanan }}</strong>
+                </div>
                 <div class="ns-tooltip-total">
-                    Total: <strong>{{ hovered.pidana + hovered.perdata }}</strong>
+                    Total: <strong>{{ hovered.pidana + hovered.perdata + hovered.perikanan }}</strong>
                 </div>
             </div>
             </Transition>
@@ -208,6 +232,10 @@ function handleLeave() {
 
 .ns-bar-perdata.is-hovered {
     fill: url(#gradPerdata);
+}
+
+.ns-bar-perikanan.is-hovered {
+    fill: url(#gradPerikanan);
 }
 
 .ns-bar-group:hover .ns-bar-rect {
@@ -273,6 +301,10 @@ function handleLeave() {
 
 .ns-tooltip-perdata {
     background: var(--success);
+}
+
+.ns-tooltip-perikanan {
+    background: #0ea5e9;
 }
 
 .ns-tooltip-total {

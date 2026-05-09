@@ -15,7 +15,7 @@ import EmptyState from '../components/base/EmptyState.vue'
 import FilterChip from '../components/base/FilterChip.vue'
 import Sparkline from '../components/base/Sparkline.vue'
 import Toggles from '../components/dashboard/Toggles.vue'
-import { getPerkara, getSippStatus, getPerkaraTrendMonthly } from '../lib/api'
+import { getPerkara, getSippStatus, getPerkaraTrendMonthly, getPerkaraTrendYearly } from '../lib/api'
 
 const rows = ref([])
 const trendData = ref([])
@@ -26,7 +26,7 @@ const density = ref('default')
 const compareMode = ref(false)
 
 // Quick filter states
-const quickFilter = ref('all') // all, today, week, month
+const quickFilter = ref('all') // all, thisYear
 
 // Toast state
 const toast = ref({
@@ -42,6 +42,10 @@ const filterStatus = ref('Semua')
 const selectedTrendYear = ref(2026)
 
 const selectedRow = ref(null)
+
+// Pagination state
+const currentPage = ref(1)
+const itemsPerPage = 100
 
 const filtered = computed(() => {
     let result = rows.value.filter(r => {
@@ -59,66 +63,68 @@ const filtered = computed(() => {
     })
 
     // Apply quick filter
-    if (quickFilter.value !== 'all') {
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-
-        result = result.filter(r => {
-            const regDate = parseTanggal(r.sipp_tanggal_register)
-            if (!regDate) return false
-
-            if (quickFilter.value === 'today') {
-                return regDate >= today
-            } else if (quickFilter.value === 'week') {
-                const weekAgo = new Date(today)
-                weekAgo.setDate(weekAgo.getDate() - 7)
-                return regDate >= weekAgo
-            } else if (quickFilter.value === 'month') {
-                const monthAgo = new Date(today)
-                monthAgo.setMonth(monthAgo.getMonth() - 1)
-                return regDate >= monthAgo
-            }
-            return true
-        })
+    if (quickFilter.value === 'thisYear') {
+        const currentYear = new Date().getFullYear()
+        result = result.filter(r => r.tahun_masuk === currentYear)
     }
 
     return result
 })
 
-// Quick filter counts
-const quickFilterCounts = computed(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const weekAgo = new Date(today)
-    weekAgo.setDate(weekAgo.getDate() - 7)
-    const monthAgo = new Date(today)
-    monthAgo.setMonth(monthAgo.getMonth() - 1)
+// Pagination
+const totalPages = computed(() => Math.ceil(filtered.value.length / itemsPerPage))
+const paginatedRows = computed(() => {
+    const start = (currentPage.value - 1) * itemsPerPage
+    const end = start + itemsPerPage
+    return filtered.value.slice(start, end)
+})
 
-    const counts = { today: 0, week: 0, month: 0 }
+const pageNumbers = computed(() => {
+    const pages = []
+    const maxVisible = 5
+    let startPage = Math.max(1, currentPage.value - Math.floor(maxVisible / 2))
+    let endPage = Math.min(totalPages.value, startPage + maxVisible - 1)
 
-    for (const r of rows.value) {
-        const regDate = parseTanggal(r.sipp_tanggal_register)
-        if (!regDate) continue
-
-        if (regDate >= monthAgo) {
-            counts.month++
-            if (regDate >= weekAgo) {
-                counts.week++
-                if (regDate >= today) {
-                    counts.today++
-                }
-            }
-        }
+    if (endPage - startPage < maxVisible - 1) {
+        startPage = Math.max(1, endPage - maxVisible + 1)
     }
 
-    return counts
+    for (let i = startPage; i <= endPage; i++) {
+        pages.push(i)
+    }
+    return pages
+})
+
+function goToPage(page) {
+    if (page >= 1 && page <= totalPages.value) {
+        currentPage.value = page
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+}
+
+// Quick filter counts
+const quickFilterCounts = computed(() => {
+    const currentYear = new Date().getFullYear()
+    const thisYearCount = rows.value.filter(r => r.tahun_masuk === currentYear).length
+
+    return {
+        all: rows.value.length,
+        thisYear: thisYearCount
+    }
 })
 
 const stats = computed(() => ({
     total: rows.value.length,
     pidana: rows.value.filter(r => r.jenis_perkara === 'Pidana').length,
     perdata: rows.value.filter(r => r.jenis_perkara === 'Perdata').length,
-    aktif: rows.value.filter(r => r.sipp_status !== 'Minutasi').length
+    perikanan: rows.value.filter(r => r.jenis_perkara === 'Perikanan').length,
+    aktif: rows.value.filter(r => {
+        // Tahun < 2016 = tidak aktif
+        if (r.tahun_masuk < 2016) return false
+        // Status Minutasi/Putusan = tidak aktif
+        if (r.sipp_status === 'Minutasi' || r.sipp_status === 'Putusan') return false
+        return true
+    }).length
 }))
 
 const monthMap = { jan:0, feb:1, mar:2, apr:3, mei:4, jun:5, jul:6, agu:7, sep:8, okt:9, nov:10, des:11, may:4, aug:7, oct:9, dec:11 }
@@ -135,12 +141,14 @@ function parseTanggal(s) {
 }
 
 const avgDaysByType = computed(() => {
-    // Filter by sipp_status === 'Minutasi' (completed cases)
-    const completed = rows.value.filter(r => r.sipp_status === 'Minutasi')
-    if (!completed.length) return { pidana: '—', perdata: '—' }
+    // Filter by sipp_status === 'Minutasi' dan 3 tahun terakhir
+    const currentYear = new Date().getFullYear()
+    const completed = rows.value.filter(r => r.sipp_status === 'Minutasi' && r.tahun_masuk >= currentYear - 2)
+    if (!completed.length) return { pidana: '—', perdata: '—', perikanan: '—' }
 
     let pidanaTotal = 0, pidanaCount = 0
     let perdataTotal = 0, perdataCount = 0
+    let perikananTotal = 0, perikananCount = 0
 
     for (const r of completed) {
         // Parse sipp_lama_proses (e.g., "15 Hari", "1 Hari")
@@ -154,13 +162,17 @@ const avgDaysByType = computed(() => {
             } else if (r.jenis_perkara === 'Perdata') {
                 perdataTotal += days
                 perdataCount++
+            } else if (r.jenis_perkara === 'Perikanan') {
+                perikananTotal += days
+                perikananCount++
             }
         }
     }
 
     return {
         pidana: pidanaCount > 0 ? `${Math.round(pidanaTotal / pidanaCount)} Hari` : '—',
-        perdata: perdataCount > 0 ? `${Math.round(perdataTotal / perdataCount)} Hari` : '—'
+        perdata: perdataCount > 0 ? `${Math.round(perdataTotal / perdataCount)} Hari` : '—',
+        perikanan: perikananCount > 0 ? `${Math.round(perikananTotal / perikananCount)} Hari` : '—'
     }
 })
 
@@ -184,23 +196,37 @@ const availableTrendYears = computed(() => {
 
 async function loadTrendData() {
     try {
-        trendData.value = await getPerkaraTrendMonthly(selectedTrendYear.value)
+        if (quickFilter.value === 'thisYear') {
+            trendData.value = await getPerkaraTrendMonthly(selectedTrendYear.value)
+        } else {
+            trendData.value = await getPerkaraTrendYearly()
+        }
     } catch (err) {
         console.error('Failed to load trend:', err.message)
     }
 }
 
+// Watch quickFilter changes to reload trend data
+watch(quickFilter, () => {
+    loadTrendData()
+})
+
+// Reset page when filters change
+watch([search, filterJenis, filterTahun, filterStatus], () => {
+    currentPage.value = 1
+})
+
 async function loadAll() {
     loading.value = true
     try {
-        const [perkaraRes, statusRes, trendRes] = await Promise.all([
-            getPerkara({ limit: 1000 }),
-            getSippStatus(),
-            getPerkaraTrendMonthly(selectedTrendYear.value)
+        const [perkaraRes, statusRes] = await Promise.all([
+            getPerkara({ limit: 5000 }),
+            getSippStatus()
         ])
         rows.value = Array.isArray(perkaraRes) ? perkaraRes : (perkaraRes.data || [])
         syncStatus.value = statusRes
-        trendData.value = trendRes
+        // Load trend data based on current quickFilter
+        await loadTrendData()
     } catch (err) {
         console.error('Load failed:', err.message)
     } finally {
@@ -229,6 +255,8 @@ function showToast(type, message) {
 function handleRefresh() {
     loadAll()
     showToast('success', 'Data diperbarui')
+    // Trigger notification check
+    window.dispatchEvent(new CustomEvent('sipp-synced'))
 }
 
 onMounted(() => {
@@ -257,33 +285,22 @@ onMounted(() => {
         <div class="ns-quick-filters">
             <FilterChip
                 label="Semua"
-                :count="rows.length"
+                :count="quickFilterCounts.all"
                 :active="quickFilter === 'all'"
                 @click="quickFilter = 'all'"
             />
             <FilterChip
-                label="Hari Ini"
-                :count="quickFilterCounts.today"
-                :active="quickFilter === 'today'"
-                @click="quickFilter = 'today'"
-            />
-            <FilterChip
-                label="7 Hari"
-                :count="quickFilterCounts.week"
-                :active="quickFilter === 'week'"
-                @click="quickFilter = 'week'"
-            />
-            <FilterChip
-                label="30 Hari"
-                :count="quickFilterCounts.month"
-                :active="quickFilter === 'month'"
-                @click="quickFilter = 'month'"
+                label="Tahun Ini"
+                :count="quickFilterCounts.thisYear"
+                :active="quickFilter === 'thisYear'"
+                @click="quickFilter = 'thisYear'"
             />
         </div>
 
         <div class="ns-c-cards-row">
             <div class="ns-c-trend-wrapper">
                 <select
+                    v-show="quickFilter === 'thisYear'"
                     v-model="selectedTrendYear"
                     @change="loadTrendData"
                     class="ns-year-select"
@@ -294,13 +311,14 @@ onMounted(() => {
                 </select>
                 <TrendCard
                     :data="trendData"
+                    :mode="quickFilter === 'thisYear' ? 'monthly' : 'yearly'"
                     :year="selectedTrendYear"
                     @period-click="onMonthClick"
                 />
             </div>
             <div class="ns-c-side-cards">
                 <div class="ns-c-avg-card" :class="{ 'is-dark': isDark }">
-                    <div class="ns-stat-label">Rata-rata penyelesaian</div>
+                    <div class="ns-stat-label">Rata-rata penyelesaian 3 tahun terakhir</div>
                     <div class="ns-c-avg-boxes">
                         <div class="ns-c-avg-box ns-c-avg-pidana">
                             <span class="ns-c-avg-value">{{ avgDaysByType.pidana }}</span>
@@ -309,6 +327,10 @@ onMounted(() => {
                         <div class="ns-c-avg-box ns-c-avg-perdata">
                             <span class="ns-c-avg-value">{{ avgDaysByType.perdata }}</span>
                             <span class="ns-c-avg-type">Perdata</span>
+                        </div>
+                        <div class="ns-c-avg-box ns-c-avg-perikanan">
+                            <span class="ns-c-avg-value">{{ avgDaysByType.perikanan }}</span>
+                            <span class="ns-c-avg-type">Perikanan</span>
                         </div>
                     </div>
                     <div class="ns-c-avg-sub">Status: Minutasi</div>
@@ -348,7 +370,66 @@ onMounted(() => {
             title="Tidak ada perkara"
             :description="search || filterJenis !== 'Semua' ? 'Coba sesuaikan filter pencarian Anda' : 'Belum ada data perkara yang tersedia'"
         />
-        <PerkaraTable v-else :rows="filtered" @row-click="selectedRow = $event" />
+        <template v-else>
+            <PerkaraTable
+                :rows="paginatedRows"
+                :start-index="(currentPage - 1) * itemsPerPage"
+                @row-click="selectedRow = $event"
+            />
+
+            <!-- Pagination -->
+            <div v-if="totalPages > 1" class="ns-pagination">
+                <span class="ns-pagination-info">
+                    Menampilkan {{ ((currentPage - 1) * itemsPerPage) + 1 }}-{{ Math.min(currentPage * itemsPerPage, filtered.length) }} dari {{ filtered.length }} perkara
+                </span>
+
+                <div class="ns-pagination-controls">
+                    <button
+                        class="ns-pagination-btn"
+                        :disabled="currentPage === 1"
+                        @click="goToPage(currentPage - 1)"
+                    >
+                        &laquo; Prev
+                    </button>
+
+                    <button
+                        v-if="pageNumbers[0] > 1"
+                        class="ns-pagination-btn"
+                        @click="goToPage(1)"
+                    >
+                        1
+                    </button>
+                    <span v-if="pageNumbers[0] > 2" class="ns-pagination-ellipsis">...</span>
+
+                    <button
+                        v-for="page in pageNumbers"
+                        :key="page"
+                        class="ns-pagination-btn"
+                        :class="{ 'is-active': page === currentPage }"
+                        @click="goToPage(page)"
+                    >
+                        {{ page }}
+                    </button>
+
+                    <span v-if="pageNumbers[pageNumbers.length - 1] < totalPages - 1" class="ns-pagination-ellipsis">...</span>
+                    <button
+                        v-if="pageNumbers[pageNumbers.length - 1] < totalPages"
+                        class="ns-pagination-btn"
+                        @click="goToPage(totalPages)"
+                    >
+                        {{ totalPages }}
+                    </button>
+
+                    <button
+                        class="ns-pagination-btn"
+                        :disabled="currentPage === totalPages"
+                        @click="goToPage(currentPage + 1)"
+                    >
+                        Next &raquo;
+                    </button>
+                </div>
+            </div>
+        </template>
 
         <DetailPanel
             :row="selectedRow"
@@ -396,18 +477,16 @@ onMounted(() => {
 
 .ns-c-avg-card {
     flex-shrink: 0;
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: var(--bg, #fff);
     border-radius: 16px;
     padding: 12px 16px 16px;
-    border: 1px solid rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--border);
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
 }
 
 .ns-c-avg-card.is-dark {
-    background: rgba(45, 55, 60, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bg-dark, #1a1d23);
+    border: 1px solid var(--border);
 }
 
 .ns-c-avg-boxes {
@@ -452,6 +531,22 @@ onMounted(() => {
 }
 
 .ns-c-avg-perdata .ns-c-avg-type {
+    font-size: 10px;
+    color: var(--text2);
+    margin-top: 2px;
+}
+
+.ns-c-avg-perikanan {
+    background: rgba(14, 165, 233, 0.12);
+}
+
+.ns-c-avg-perikanan .ns-c-avg-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0ea5e9;
+}
+
+.ns-c-avg-perikanan .ns-c-avg-type {
     font-size: 10px;
     color: var(--text2);
     margin-top: 2px;
@@ -514,5 +609,65 @@ onMounted(() => {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* Pagination */
+.ns-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-top: 16px;
+}
+
+.ns-pagination-info {
+    font-size: 13px;
+    color: var(--text2);
+}
+
+.ns-pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.ns-pagination-btn {
+    min-width: 36px;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms;
+}
+
+.ns-pagination-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--accentSoft);
+    color: var(--accent);
+}
+
+.ns-pagination-btn.is-active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+
+.ns-pagination-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.ns-pagination-ellipsis {
+    padding: 0 4px;
+    color: var(--text3);
+    font-size: 13px;
 }
 </style>

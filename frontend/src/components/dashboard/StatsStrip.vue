@@ -25,6 +25,11 @@ defineProps({
         </div>
         <span class="ns-c-strip-divider" />
         <div class="ns-c-strip-item">
+            <span class="ns-c-strip-label">Perikanan</span>
+            <span class="ns-c-strip-value">{{ stats.perikanan }}</span>
+        </div>
+        <span class="ns-c-strip-divider" />
+        <div class="ns-c-strip-item">
             <span class="ns-c-strip-label">Aktif</span>
             <span class="ns-c-strip-value">{{ stats.aktif }}</span>
         </div>

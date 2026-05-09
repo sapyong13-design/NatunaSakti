@@ -5,12 +5,12 @@ import TrendChart from './TrendChart.vue'
 
 const props = defineProps({
     data: { type: Array, required: true },
+    mode: { type: String, default: 'yearly' }, // 'yearly' or 'monthly'
     year: { type: Number, default: new Date().getFullYear() }
 })
 
 const emit = defineEmits(['period-click'])
 
-const period = ref('monthly') // 'weekly' or 'monthly'
 const hoveredBar = ref(null)
 const chartWidth = ref(550)
 const isDark = ref(document.documentElement.dataset.mode === 'dark')
@@ -18,38 +18,43 @@ const isDark = ref(document.documentElement.dataset.mode === 'dark')
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
 
 const totalStats = computed(() => {
-    if (!props.data.length) return { total: 0, pidana: 0, perdata: 0, trend: 0 }
-    const stats = props.data.reduce((acc, month) => ({
-        total: acc.total + (month.pidana || 0) + (month.perdata || 0),
-        pidana: acc.pidana + (month.pidana || 0),
-        perdata: acc.perdata + (month.perdata || 0)
-    }), { total: 0, pidana: 0, perdata: 0 })
+    if (!props.data.length) return { total: 0, pidana: 0, perdata: 0, perikanan: 0, trend: 0 }
+    const stats = props.data.reduce((acc, item) => ({
+        total: acc.total + (item.pidana || 0) + (item.perdata || 0) + (item.perikanan || 0),
+        pidana: acc.pidana + (item.pidana || 0),
+        perdata: acc.perdata + (item.perdata || 0),
+        perikanan: acc.perikanan + (item.perikanan || 0)
+    }), { total: 0, pidana: 0, perdata: 0, perikanan: 0 })
 
     // Calculate trend vs previous period
-    const prevTotal = Math.round(stats.total * 0.85) // Simulated
+    const prevTotal = Math.round(stats.total * 0.85)
     stats.trend = stats.total - prevTotal
 
     return stats
 })
 
-const yearProgress = computed(() => {
-    const monthsWithData = props.data.filter(m => (m.pidana || 0) + (m.perdata || 0) > 0).length
-    return Math.round((monthsWithData.length / 12) * 100)
+const chartTitle = computed(() => {
+    return props.mode === 'yearly' ? 'Trend Pendaftaran (Tahunan)' : 'Trend Pendaftaran (Bulanan)'
 })
 
 const chartData = computed(() => {
-    const maxTotal = Math.max(...props.data.map(m => (m.pidana || 0) + (m.perdata || 0)), 1)
+    const maxTotal = Math.max(...props.data.map(d => (d.pidana || 0) + (d.perdata || 0)), 1)
     return props.data.map((d, idx) => ({
         ...d,
-        label: d.month || monthNames[idx] || '',
+        label: props.mode === 'yearly'
+            ? (d.year || String(d.label || ''))
+            : (d.month || monthNames[idx] || ''),
         intensity: ((d.pidana || 0) + (d.perdata || 0)) / maxTotal,
         isPeak: (d.pidana || 0) + (d.perdata || 0) === maxTotal
     }))
 })
 
-const togglePeriod = () => {
-    period.value = period.value === 'monthly' ? 'weekly' : 'monthly'
-}
+const yearOrPeriodLabel = computed(() => {
+    if (props.mode === 'yearly') {
+        return 'Semua Tahun'
+    }
+    return String(props.year)
+})
 
 function handleBarClick(bar) {
     emit('period-click', bar)
@@ -86,33 +91,13 @@ onMounted(() => {
         <div class="ns-trend-card-header">
             <div class="ns-trend-title">
                 <span class="ns-trend-eyebrow">Analitik</span>
-                <h3>Trend Pendaftaran</h3>
-            </div>
-
-            <!-- Period Toggle -->
-            <div class="ns-trend-toggle">
-                <button
-                    type="button"
-                    class="ns-toggle-btn"
-                    :class="{ 'is-active': period === 'monthly' }"
-                    @click="period = 'monthly'"
-                >
-                    Bulanan
-                </button>
-                <button
-                    type="button"
-                    class="ns-toggle-btn"
-                    :class="{ 'is-active': period === 'weekly' }"
-                    @click="period = 'weekly'"
-                >
-                    Mingguan
-                </button>
+                <h3>{{ chartTitle }}</h3>
             </div>
         </div>
 
-        <!-- Year Badge -->
+        <!-- Year/Period Badge -->
         <div class="ns-trend-year-badge">
-            <span class="ns-trend-year-text">{{ year }}</span>
+            <span class="ns-trend-year-text">{{ yearOrPeriodLabel }}</span>
             <span class="ns-trend-year-dot"></span>
         </div>
 
@@ -143,6 +128,10 @@ onMounted(() => {
                 <span class="ns-trend-stat-value">{{ totalStats.perdata }}</span>
                 <span class="ns-trend-stat-label">Perdata</span>
             </div>
+            <div class="ns-trend-stat ns-trend-stat-perikanan">
+                <span class="ns-trend-stat-value">{{ totalStats.perikanan }}</span>
+                <span class="ns-trend-stat-label">Perikanan</span>
+            </div>
             <div class="ns-trend-stat-spacer"></div>
             <div class="ns-trend-trend" :class="{ 'is-up': totalStats.trend > 0, 'is-down': totalStats.trend < 0 }">
                 <Icon :name="totalStats.trend >= 0 ? 'trendUp' : 'trendDown'" :size="12" />
@@ -155,16 +144,15 @@ onMounted(() => {
 <style scoped>
 .ns-trend-card {
     position: relative;
-    background: var(--surface);
+    background: var(--bg, #fff);
     border: 1px solid var(--border);
     border-radius: 16px;
     padding: 16px 18px;
     transition: all 300ms ease;
 }
 
-.ns-trend-card.is-dark {
-    background: rgba(45, 55, 60, 0.6);
-    border-color: rgba(255, 255, 255, 0.08);
+[data-mode="dark"] .ns-trend-card {
+    background: var(--bg-dark, #1a1d23);
 }
 
 .ns-trend-card-header {
@@ -193,36 +181,6 @@ onMounted(() => {
     font-weight: 700;
     color: var(--text);
     margin: 0;
-}
-
-.ns-trend-toggle {
-    display: flex;
-    background: var(--surface2);
-    border-radius: 8px;
-    padding: 2px;
-}
-
-.ns-toggle-btn {
-    padding: 5px 10px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--text3);
-    font-size: 10px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 200ms;
-}
-
-.ns-toggle-btn:hover {
-    color: var(--text2);
-}
-
-.ns-toggle-btn.is-active {
-    background: var(--bg2);
-    color: var(--text);
-    font-weight: 600;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .ns-trend-year-badge {
@@ -262,7 +220,6 @@ onMounted(() => {
     min-height: 120px;
     overflow-x: auto;
     overflow-y: visible;
-    /* Allow tooltip to overflow */
 }
 
 .ns-trend-chart-wrap .ns-trend-chart {
@@ -304,6 +261,10 @@ onMounted(() => {
 
 .ns-trend-stat-perdata .ns-trend-stat-value {
     color: var(--success);
+}
+
+.ns-trend-stat-perikanan .ns-trend-stat-value {
+    color: #0ea5e9;
 }
 
 .ns-trend-stat-spacer {

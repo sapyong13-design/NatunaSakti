@@ -31,12 +31,10 @@ defineProps({
 
 <style scoped>
 .ns-c-mini-card {
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: var(--bg, #fff);
     border-radius: 16px;
     padding: 14px 18px;
-    border: 1px solid rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--border);
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
     display: flex;
     flex-direction: column;
@@ -46,8 +44,8 @@ defineProps({
 }
 
 .ns-app[data-mode="dark"] .ns-c-mini-card {
-    background: rgba(45, 55, 60, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bg-dark, #1a1d23);
+    border: 1px solid var(--border);
 }
 
 .ns-stat-label {

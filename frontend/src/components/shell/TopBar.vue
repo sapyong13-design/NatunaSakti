@@ -1,17 +1,73 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useTheme } from '../../composables/useTheme'
 import LiveIndicator from './LiveIndicator.vue'
+import NotificationDropdown from './NotificationDropdown.vue'
 import Icon from '../Icon.vue'
+import { getPerkara } from '../../lib/api'
+
+let checkInterval = null
 
 const theme = useTheme()
 const lastSync = ref('--')
+const newPerkara = ref([])
+const lastKnownCount = ref(0)
 
 defineProps({
     mobileMenuOpen: { type: Boolean, default: false }
 })
 
 defineEmits(['toggle-menu'])
+defineExpose({ checkNewPerkara })
+
+async function checkNewPerkara() {
+    try {
+        // Get total count first
+        const API_BASE = 'http://localhost:3000/api'
+        const countRes = await fetch(`${API_BASE}/perkara/sipp/status`)
+        const countData = await countRes.json()
+        const currentTotal = countData.total || 0
+
+        // Get stored count from localStorage
+        const storedCount = localStorage.getItem('sipp_last_perkara_count')
+        const storedNum = storedCount ? parseInt(storedCount) : 0
+
+        if (storedNum > 0 && currentTotal > storedNum) {
+            // Get the new perkara
+            const data = await getPerkara({ limit: currentTotal - storedNum })
+            const perkara = Array.isArray(data) ? data : (data.data || [])
+            newPerkara.value = perkara
+        }
+
+        // Update stored count
+        if (!storedCount) {
+            localStorage.setItem('sipp_last_perkara_count', String(currentTotal))
+        }
+
+        lastKnownCount.value = currentTotal
+    } catch (err) {
+        console.error('Check new perkara failed:', err.message)
+    }
+}
+
+function clearNotifications() {
+    newPerkara.value = []
+    // Update stored count to current total
+    localStorage.setItem('sipp_last_perkara_count', String(lastKnownCount.value))
+}
+
+onMounted(() => {
+    checkNewPerkara()
+    // Check every 5 minutes
+    checkInterval = setInterval(checkNewPerkara, 300000)
+    // Listen for sync complete event
+    window.addEventListener('sipp-synced', checkNewPerkara)
+})
+
+onUnmounted(() => {
+    if (checkInterval) clearInterval(checkInterval)
+    window.removeEventListener('sipp-synced', checkNewPerkara)
+})
 </script>
 
 <template>
@@ -35,10 +91,7 @@ defineEmits(['toggle-menu'])
         </div>
         <div class="ns-topbar-actions">
             <LiveIndicator :syncing="false" :last-sync="lastSync" />
-            <button class="ns-icon-btn ns-bell" type="button" aria-label="Notifications">
-                <Icon name="bell" :size="16" />
-                <span class="ns-bell-dot" />
-            </button>
+            <NotificationDropdown :items="newPerkara" @clear="clearNotifications" />
             <button
                 class="ns-icon-btn"
                 type="button"
@@ -104,5 +157,49 @@ defineEmits(['toggle-menu'])
     .ns-c-org-sub {
         display: none;
     }
+}
+
+.ns-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ns-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 150ms;
+}
+
+.ns-icon-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.ns-c-org {
+    flex: 1;
+    text-align: center;
+}
+
+.ns-c-org-line {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.05em;
+}
+
+.ns-c-org-sub {
+    font-size: 10px;
+    color: var(--text3);
+    margin-top: 2px;
 }
 </style>

@@ -1,9 +1,11 @@
 <script setup>
 import { pihakUtama } from '../../lib/pihak'
+import { formatDateIndo } from '../../lib/date'
 import StatusBadge from './StatusBadge.vue'
 
-defineProps({
-    rows: { type: Array, required: true }
+const props = defineProps({
+    rows: { type: Array, required: true },
+    startIndex: { type: Number, default: 0 }
 })
 
 const emit = defineEmits(['rowClick'])
@@ -11,24 +13,19 @@ const emit = defineEmits(['rowClick'])
 function jenisColor(jenis) {
     if (jenis === 'Pidana') return '#C75B4A'
     if (jenis === 'Perdata') return '#4A7C59'
-    if (jenis === 'Perikanan') return '#3b82f6'
+    if (jenis === 'Perikanan') return '#0ea5e9'
     return '#9ca3af'
 }
 
 function jenisBg(jenis) {
     if (jenis === 'Pidana') return 'rgba(199, 91, 74, 0.12)'
     if (jenis === 'Perdata') return 'rgba(74, 124, 89, 0.12)'
-    if (jenis === 'Perikanan') return 'rgba(59, 130, 246, 0.12)'
+    if (jenis === 'Perikanan') return 'rgba(14, 165, 233, 0.12)'
     return 'rgba(156, 163, 175, 0.12)'
 }
 
 function formatDate(s) {
-    if (!s) return '-'
-    const d = new Date(s)
-    if (isNaN(d.getTime())) return s
-    const dd = String(d.getDate()).padStart(2, '0')
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    return `${dd}-${mm}-${d.getFullYear()}`
+    return formatDateIndo(s)
 }
 </script>
 
@@ -64,7 +61,7 @@ function formatDate(s) {
                         class="ns-data-row"
                         @click="emit('rowClick', row)"
                     >
-                        <td class="ns-sticky ns-col-no">{{ idx + 1 }}</td>
+                        <td class="ns-sticky ns-col-no">{{ idx + 1 + props.startIndex }}</td>
                         <td class="ns-sticky ns-col-jenis">
                             <span
                                 class="ns-jenis-badge"

@@ -1,5 +1,6 @@
 <script setup>
 import { pihakUtama } from '../../lib/pihak'
+import { formatDateIndo } from '../../lib/date'
 
 defineProps({
     rows: { type: Array, required: true },
@@ -7,12 +8,7 @@ defineProps({
 })
 
 function formatDate(s) {
-    if (!s) return '-'
-    const d = new Date(s)
-    if (isNaN(d.getTime())) return s
-    const dd = String(d.getDate()).padStart(2, '0')
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    return `${dd}-${mm}-${d.getFullYear()}`
+    return formatDateIndo(s)
 }
 
 function getJenisColor(jenis) {
