@@ -6,23 +6,25 @@ const props = defineProps({
     search: { type: String, default: '' },
     jenis: { type: String, default: 'Semua' },
     tahun: { type: String, default: '' },
+    status: { type: String, default: 'Semua' },
     jenisOptions: { type: Array, default: () => ['Semua', 'Pidana', 'Perdata', 'Perikanan'] },
     tahunOptions: { type: Array, default: () => [] }
 })
 
-const emit = defineEmits(['update:search', 'update:jenis', 'update:tahun'])
+const emit = defineEmits(['update:search', 'update:jenis', 'update:tahun', 'update:status'])
 
 const openMenu = ref(null)
 const menuPos = reactive({ top: 0, left: 0 })
 const jenisBtn = ref(null)
 const tahunBtn = ref(null)
+const statusBtn = ref(null)
 
 function toggleMenu(name) {
     if (openMenu.value === name) {
         openMenu.value = null
         return
     }
-    const el = name === 'jenis' ? jenisBtn.value : tahunBtn.value
+    const el = name === 'jenis' ? jenisBtn.value : name === 'tahun' ? tahunBtn.value : statusBtn.value
     if (el) {
         const rect = el.getBoundingClientRect()
         menuPos.top = rect.bottom + 6
@@ -34,6 +36,7 @@ function toggleMenu(name) {
 function selectOption(name, value) {
     if (name === 'jenis') emit('update:jenis', value)
     else if (name === 'tahun') emit('update:tahun', value)
+    else if (name === 'status') emit('update:status', value)
     openMenu.value = null
 }
 
@@ -87,6 +90,19 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
                 <Icon name="chevronDown" :size="12" />
             </button>
         </div>
+
+        <div class="ns-filter-chip" ref="statusBtn">
+            <button
+                type="button"
+                class="ns-chip-btn"
+                :class="{ 'is-open': openMenu === 'status' }"
+                @click.stop="toggleMenu('status')"
+            >
+                <span class="ns-chip-label">Status:</span>
+                <span class="ns-chip-value">{{ status === 'Semua' ? 'Semua' : status === 'Bersidang' ? 'Sedang Bersidang' : status }}</span>
+                <Icon name="chevronDown" :size="12" />
+            </button>
+        </div>
     </div>
 
     <Teleport to="body">
@@ -126,6 +142,34 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
                 @click="selectOption('tahun', String(opt))"
             >
                 {{ opt }}
+            </div>
+        </div>
+
+        <div
+            v-if="openMenu === 'status'"
+            class="ns-chip-menu ns-chip-teleport"
+            :style="{ position: 'fixed', top: menuPos.top + 'px', left: menuPos.left + 'px' }"
+        >
+            <div
+                class="ns-chip-option"
+                :class="{ 'is-selected': status === 'Semua' }"
+                @click="selectOption('status', 'Semua')"
+            >
+                Semua
+            </div>
+            <div
+                class="ns-chip-option"
+                :class="{ 'is-selected': status === 'Bersidang' }"
+                @click="selectOption('status', 'Bersidang')"
+            >
+                Sedang Bersidang
+            </div>
+            <div
+                class="ns-chip-option"
+                :class="{ 'is-selected': status === 'Minutasi' }"
+                @click="selectOption('status', 'Minutasi')"
+            >
+                Minutasi
             </div>
         </div>
     </Teleport>

@@ -1,5 +1,6 @@
 <script setup>
 import { pihakUtama } from '../../lib/pihak'
+import StatusBadge from './StatusBadge.vue'
 
 defineProps({
     rows: { type: Array, required: true }
@@ -8,45 +9,318 @@ defineProps({
 const emit = defineEmits(['rowClick'])
 
 function jenisColor(jenis) {
-    if (jenis === 'Pidana') return '#ef4444'
-    if (jenis === 'Perdata') return '#10b981'
+    if (jenis === 'Pidana') return '#C75B4A'
+    if (jenis === 'Perdata') return '#4A7C59'
     if (jenis === 'Perikanan') return '#3b82f6'
     return '#9ca3af'
+}
+
+function jenisBg(jenis) {
+    if (jenis === 'Pidana') return 'rgba(199, 91, 74, 0.12)'
+    if (jenis === 'Perdata') return 'rgba(74, 124, 89, 0.12)'
+    if (jenis === 'Perikanan') return 'rgba(59, 130, 246, 0.12)'
+    return 'rgba(156, 163, 175, 0.12)'
+}
+
+function formatDate(s) {
+    if (!s) return '-'
+    const d = new Date(s)
+    if (isNaN(d.getTime())) return s
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    return `${dd}-${mm}-${d.getFullYear()}`
 }
 </script>
 
 <template>
-    <div class="ns-table-card">
-        <div class="ns-table-head">
-            <div style="width: 50px;">No</div>
-            <div style="width: 90px;">Jenis</div>
-            <div style="flex: 1; min-width: 180px;">Nomor Perkara</div>
-            <div style="flex: 1; min-width: 150px;">Para Pihak</div>
-            <div style="width: 110px;">Register</div>
-            <div style="width: 130px;">Status</div>
-            <div style="width: 90px;">Lama</div>
+    <div class="ns-perkara-table-wrap">
+        <div class="ns-table-scroll">
+            <table class="ns-data-table">
+                <thead>
+                    <tr>
+                        <th class="ns-sticky ns-col-no">No</th>
+                        <th class="ns-sticky ns-col-jenis">Jenis</th>
+                        <th class="ns-sticky ns-col-nomor">Nomor Perkara</th>
+                        <th class="ns-col-nama">Nama</th>
+                        <th class="ns-col-register">Tgl Register</th>
+                        <th class="ns-col-status">Status</th>
+                        <th class="ns-col-lama">Lama</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-if="!rows.length">
+                        <td colspan="7" class="ns-empty-cell">
+                            <div class="ns-empty-state">
+                                <div class="ns-empty-icon">📋</div>
+                                <div class="ns-empty-text">Tidak ada perkara</div>
+                                <div class="ns-empty-hint">Coba sesuaikan filter atau sync data dari SIPP</div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr
+                        v-else
+                        v-for="(row, idx) in rows"
+                        :key="row.id || row.nomor_perkara"
+                        class="ns-data-row"
+                        @click="emit('rowClick', row)"
+                    >
+                        <td class="ns-sticky ns-col-no">{{ idx + 1 }}</td>
+                        <td class="ns-sticky ns-col-jenis">
+                            <span
+                                class="ns-jenis-badge"
+                                :style="{
+                                    '--jenis-color': jenisColor(row.jenis_perkara),
+                                    '--jenis-bg': jenisBg(row.jenis_perkara)
+                                }"
+                            >
+                                {{ row.jenis_perkara }}
+                            </span>
+                        </td>
+                        <td class="ns-sticky ns-col-nomor">
+                            <span class="ns-nomor-text">{{ row.nomor_perkara }}</span>
+                        </td>
+                        <td class="ns-col-nama">
+                            <span class="ns-nama-text">{{ pihakUtama(row.para_pihak) }}</span>
+                        </td>
+                        <td class="ns-col-register">{{ formatDate(row.sipp_tanggal_register) }}</td>
+                        <td class="ns-col-status">
+                            <StatusBadge v-if="row.sipp_status" :status="row.sipp_status" size="sm" />
+                            <span v-else class="ns-status-text">—</span>
+                        </td>
+                        <td class="ns-col-lama">{{ row.sipp_lama_proses || '—' }}</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
-        <div class="ns-table-body" style="max-height: 480px; overflow-y: auto;">
-            <div
-                v-for="(row, idx) in rows"
-                :key="row.id || row.nomor_perkara"
-                class="ns-tr"
-                style="cursor: pointer;"
-                @click="emit('rowClick', row)"
-            >
-                <div style="width: 50px; color: var(--text-3); font-size: 12px;">{{ idx + 1 }}</div>
-                <div style="width: 90px;">
-                    <span :style="{ display: 'inline-block', padding: '2px 8px', borderRadius: '4px', background: jenisColor(row.jenis_perkara) + '22', color: jenisColor(row.jenis_perkara), fontSize: '11px', fontWeight: 600 }">
-                        {{ row.jenis_perkara }}
-                    </span>
-                </div>
-                <div style="flex: 1; min-width: 180px;" class="ns-mono">{{ row.nomor_perkara }}</div>
-                <div style="flex: 1; min-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="row.para_pihak">{{ pihakUtama(row.para_pihak) }}</div>
-                <div style="width: 110px; font-size: 12px; color: var(--text-2);">{{ row.sipp_tanggal_register || '—' }}</div>
-                <div style="width: 130px; font-size: 12px;">{{ row.sipp_status || '—' }}</div>
-                <div style="width: 90px; font-size: 12px; color: var(--text-2);">{{ row.sipp_lama_proses || '—' }}</div>
-            </div>
-            <div v-if="!rows.length" class="ns-empty">Tidak ada perkara</div>
+        <div class="ns-table-footer">
+            <span class="ns-row-count">{{ rows.length }} perkara</span>
+            <span class="ns-scroll-hint">← Scroll untuk lihat semua kolom →</span>
         </div>
     </div>
 </template>
+
+<style scoped>
+.ns-perkara-table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.ns-table-scroll {
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+.ns-table-scroll::-webkit-scrollbar {
+    height: 8px;
+}
+
+.ns-table-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.ns-table-scroll::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+}
+
+.ns-table-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--text-3);
+}
+
+.ns-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    min-width: 900px;
+}
+
+.ns-data-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.ns-data-table th {
+    text-align: left;
+    padding: 14px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-3);
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--border);
+}
+
+.ns-data-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+}
+
+.ns-data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.ns-data-row {
+    cursor: pointer;
+    transition: background 120ms ease;
+}
+
+.ns-data-row:hover {
+    background: var(--surface-2);
+}
+
+.ns-data-row:hover .ns-sticky {
+    background: var(--surface-2);
+}
+
+/* Sticky columns */
+.ns-sticky {
+    position: sticky;
+    left: 0;
+    background: var(--surface);
+    z-index: 1;
+    transition: background 120ms ease;
+}
+
+.ns-data-table thead .ns-sticky {
+    z-index: 11;
+    background: var(--bg-2);
+}
+
+.ns-col-no {
+    left: 0;
+    width: 50px;
+    text-align: center;
+}
+
+.ns-col-jenis {
+    left: 50px;
+    width: 100px;
+}
+
+.ns-col-nomor {
+    left: 150px;
+    width: 180px;
+}
+
+.ns-col-nama {
+    min-width: 160px;
+    max-width: 220px;
+}
+
+.ns-col-register {
+    width: 110px;
+    white-space: nowrap;
+}
+
+.ns-col-status {
+    width: 140px;
+}
+
+.ns-col-lama {
+    width: 90px;
+}
+
+/* Cell content */
+.ns-col-no {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+}
+
+.ns-jenis-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--jenis-bg);
+    color: var(--jenis-color);
+}
+
+.ns-nomor-text {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}
+
+.ns-nama-text {
+    display: block;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.ns-col-register,
+.ns-col-status,
+.ns-col-lama {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    color: var(--text-2);
+}
+
+.ns-status-text {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--surface-2);
+    font-size: 11px;
+}
+
+/* Empty state */
+.ns-empty-cell {
+    padding: 0 !important;
+}
+
+.ns-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px;
+    text-align: center;
+}
+
+.ns-empty-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+.ns-empty-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 4px;
+}
+
+.ns-empty-hint {
+    font-size: 12px;
+    color: var(--text-3);
+}
+
+/* Footer */
+.ns-table-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--surface-2);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+}
+
+.ns-row-count {
+    font-weight: 500;
+    color: var(--text);
+}
+
+.ns-scroll-hint {
+    color: var(--text-3);
+}
+</style>

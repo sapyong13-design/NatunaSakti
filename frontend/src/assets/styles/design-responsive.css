@@ -1,6 +1,53 @@
 /* ============================================
-   Responsive breakpoints (Fase 5)
+   Responsive breakpoints, Print styles, Accessibility & Theme
    ============================================ */
+
+/* Theme transition */
+.ns-theme-transitioning,
+.ns-theme-transitioning * {
+    transition: background-color 300ms ease,
+               border-color 300ms ease,
+               color 300ms ease !important;
+}
+
+/* Skip to main content link */
+
+/* Screen reader only content */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Focus visible styles for keyboard navigation */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+/* Skip to main content link */
+.sr-only-focusable:focus {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: 99999;
+    width: auto;
+    height: auto;
+    padding: 8px 16px;
+    clip: auto;
+    background: var(--accent);
+    color: white;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+}
 
 @media (max-width: 768px) {
 
@@ -38,4 +85,96 @@
 
     /* PageHeader stacks */
     .ns-c-page-header { grid-template-columns: 1fr; gap: 12px; }
+}
+
+/* ============================================
+   Print Styles
+   ============================================ */
+
+@media print {
+    /* Hide non-printable elements */
+    .ns-sidebar,
+    .ns-topbar,
+    .ns-toolbar,
+    .ns-table-footer,
+    .ns-scroll-hint,
+    button,
+    .ns-icon-btn,
+    .ns-btn,
+    .ns-collapse-btn {
+        display: none !important;
+    }
+
+    /* Reset app layout for print */
+    .ns-app {
+        display: block;
+        background: white !important;
+        color: black !important;
+    }
+
+    .ns-main {
+        display: block;
+    }
+
+    .ns-page {
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+
+    /* Tables for print */
+    .ns-table-card,
+    .ns-perkara-table-wrap,
+    .ns-report-table-wrap {
+        border: 1px solid #ccc !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        break-inside: avoid;
+    }
+
+    .ns-data-table,
+    .ns-report-table {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    .ns-data-table th,
+    .ns-data-table td,
+    .ns-report-table th,
+    .ns-report-table td {
+        border: 1px solid #ccc !important;
+        padding: 8px !important;
+        color: black !important;
+        background: white !important;
+    }
+
+    .ns-data-table thead th,
+    .ns-report-table thead th {
+        background: #f0f0f0 !important;
+        color: black !important;
+    }
+
+    /* Remove sticky positioning */
+    .ns-sticky,
+    .ns-sticky-col {
+        position: static !important;
+    }
+
+    /* Ensure text is visible */
+    * {
+        text-shadow: none !important;
+        box-shadow: none !important;
+    }
+
+    /* Page breaks */
+    .ns-c-big-card,
+    .ns-stat-card {
+        break-inside: avoid;
+    }
+
+    /* Print URLs after links */
+    a[href]:after {
+        content: " (" attr(href) ")";
+        font-size: 10px;
+        color: #666;
+    }
 }

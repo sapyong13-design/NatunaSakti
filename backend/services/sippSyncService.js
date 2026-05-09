@@ -14,10 +14,23 @@ class SIPPSyncService {
   }
 
   /**
+   * Cek apakah ini sync pertama kali (database kosong)
+   */
+  isFirstSync() {
+    const count = this.db.prepare('SELECT COUNT(*) as c FROM perkara').get().c;
+    return count === 0;
+  }
+
+  /**
    * Fetch HTML dari website SIPP menggunakan Puppeteer (untuk pagination JavaScript)
+   * - First sync: sync SEMUA perkara (~4557 total)
+   * - Subsequent sync: hanya 200 perkara terbaru (10 halaman)
    */
   async fetchSIPPData(progressCallback = null) {
-    console.log('[SIPP] Fetching data from', this.sippUrl, 'using Puppeteer...');
+    const firstSync = this.isFirstSync();
+    const maxPages = firstSync ? 150 : 10; // First sync: 150 pages (avoid context destroy), subsequent: 10 pages
+
+    console.log(`[SIPP] Fetching data from ${this.sippUrl} (${firstSync ? 'FIRST SYNC - ALL DATA' : 'incremental - 200 newest'})...`);
 
     const browser = await puppeteer.launch({
       headless: 'new',
@@ -40,16 +53,43 @@ class SIPPSyncService {
       await page.waitForSelector('table', { timeout: 10000 });
 
       const perkaraList = [];
+      const seenNomor = new Set(); // Track unique perkara to avoid duplicates
       let currentPage = 1;
-      const maxPages = 10; // Up to 200 perkara (20 per page)
+      let consecutiveEmptyPages = 0;
+      const maxEmptyPages = 3; // Stop after 3 consecutive empty pages
 
-      while (currentPage <= maxPages) {
+      while (currentPage <= maxPages && consecutiveEmptyPages < maxEmptyPages) {
         console.log(`[SIPP] Scraping page ${currentPage}...`);
 
-        // Navigate directly to the page hash for more reliable pagination
+        // Navigate to specific page by clicking the page number link
         if (currentPage > 1) {
-          await page.goto(`${this.sippUrl}#page-${currentPage}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
-          await new Promise(r => setTimeout(r, 1000)); // Wait for AJAX
+          try {
+            const navigated = await page.evaluate((pageNum) => {
+              const pagesDiv = document.getElementById('pages');
+              if (!pagesDiv) return false;
+
+              // Find the link with the page number
+              const pageLink = Array.from(pagesDiv.querySelectorAll('a')).find(a =>
+                a.textContent.trim() === pageNum.toString()
+              );
+
+              if (!pageLink) return false;
+
+              pageLink.click();
+              return true;
+            }, currentPage);
+
+            if (!navigated) {
+              console.log(`[SIPP] Page ${currentPage} link not found, stopping`);
+              break;
+            }
+
+            // Wait for table to reload
+            await new Promise(r => setTimeout(r, 2000));
+          } catch (e) {
+            console.log(`[SIPP] Navigation error: ${e.message}, stopping`);
+            break;
+          }
         }
 
         // Get data from current page
@@ -81,12 +121,23 @@ class SIPPSyncService {
         });
 
         if (pageData.length === 0) {
-          console.log(`[SIPP] No more data on page ${currentPage}`);
-          break;
+          consecutiveEmptyPages++;
+          console.log(`[SIPP] No data on page ${currentPage} (${consecutiveEmptyPages}/${maxEmptyPages} empty)`);
+          currentPage++;
+          continue;
         }
 
-        // Process each perkara
+        consecutiveEmptyPages = 0; // Reset empty page counter
+
+        // Process each perkara and track unique ones
+        let newInPage = 0;
         for (const item of pageData) {
+          if (seenNomor.has(item.nomor_perkara)) {
+            continue; // Skip duplicates
+          }
+          seenNomor.add(item.nomor_perkara);
+          newInPage++;
+
           const jenis = this.detectJenisPerkara(item.nomor_perkara);
           perkaraList.push({
             ...item,
@@ -98,21 +149,48 @@ class SIPPSyncService {
           });
         }
 
-        console.log(`[SIPP] Page ${currentPage}: ${pageData.length} perkara (total: ${perkaraList.length})`);
+        console.log(`[SIPP] Page ${currentPage}: ${pageData.length} rows, ${newInPage} new, ${perkaraList.length} unique total`);
 
         // Report progress
         if (progressCallback) {
           progressCallback({
             current: perkaraList.length,
-            page: currentPage
+            page: currentPage,
+            total: seenNomor.size
           });
+        }
+
+        // Save batch every 50 pages to prevent data loss on error
+        if (currentPage % 50 === 0) {
+          console.log(`[SIPP] Saving batch at page ${currentPage} (${perkaraList.length} perkara)...`);
+          // Create a temporary callback to save current batch
+          if (progressCallback) {
+            progressCallback({
+              current: perkaraList.length,
+              page: currentPage,
+              total: seenNomor.size,
+              saveBatch: true  // Signal to save current batch
+            });
+          }
+        }
+
+        // For first sync, stop if we've collected ~4500+ (SIPP has ~4557 total)
+        if (firstSync && perkaraList.length >= 4600) {
+          console.log(`[SIPP] First sync collected ${perkaraList.length} perkara (expected ~4557), stopping`);
+          break;
+        }
+
+        // Stop if we're getting all duplicates
+        if (newInPage === 0 && consecutiveEmptyPages === 0) {
+          console.log(`[SIPP] All duplicates on page ${currentPage}, stopping`);
+          break;
         }
 
         currentPage++;
       }
 
       await page.close();
-      console.log(`[SIPP] Total fetched: ${perkaraList.length} perkara`);
+      console.log(`[SIPP] Total fetched: ${perkaraList.length} unique perkara`);
       return perkaraList;
 
     } finally {
@@ -207,6 +285,69 @@ class SIPPSyncService {
     } finally {
       await browser.close();
     }
+  }
+
+  /**
+   * Fetch tanggal minutasi dari detail page perkara
+   */
+  async _fetchTanggalMinutasi(page, nomorPerkara) {
+    await page.goto(this.sippUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForSelector('#search-box', { timeout: 10000 });
+    await page.click('#search-box');
+    await page.$eval('#search-box', (el) => { el.value = ''; });
+    await page.type('#search-box', nomorPerkara, { delay: 25 });
+
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }),
+      page.evaluate(() => {
+        const form = document.querySelector('form[action*="search"]');
+        if (form) form.submit();
+      })
+    ]);
+
+    const detilUrl = await page.evaluate((nomor) => {
+      const rows = document.querySelectorAll('table tr');
+      for (const row of rows) {
+        const cols = row.querySelectorAll('td');
+        if (cols.length >= 2 && cols[1].textContent.trim() === nomor) {
+          const a = row.querySelector('a[href*="show_detil"]');
+          return a ? a.href : null;
+        }
+      }
+      return null;
+    }, nomorPerkara);
+
+    if (!detilUrl) return null;
+
+    await page.goto(detilUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+    // Scrap tanggal minutasi dari tab atau detail
+    const minutasi = await page.evaluate(() => {
+      // Cari di tabs - biasanya di "Putusan" atau tab lain
+      const tabs = document.querySelectorAll('[id^="tabs"]');
+      for (const tab of tabs) {
+        const text = tab.textContent;
+        // Cari pola tanggal minutasi/putusan
+        const match = text.match(/minutasi|putus(?:an)?|tanggal.*:\s*(\d{1,2}\/\d{1,2}\/\d{4}|\d{1,2}\s+\w+\s+\d{4})/i);
+        if (match) {
+          // Coba extract tanggal yang valid
+          const dateMatch = text.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
+          if (dateMatch) return dateMatch[1];
+        }
+      }
+
+      // Cari di seluruh halaman
+      const pageText = document.body.textContent;
+      const minutasiMatch = pageText.match(/tanggal\s+minutasi\s*[:=]\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+      if (minutasiMatch) return minutasiMatch[1];
+
+      const putusanMatch = pageText.match(/tanggal\s+putus\s*[:=]\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+      if (putusanMatch) return putusanMatch[1];
+
+      return null;
+    });
+
+    return minutasi;
   }
 
   /**
@@ -342,7 +483,7 @@ class SIPPSyncService {
   }
 
   /**
-   * Cache jadwal sidang untuk semua perkara tahun berjalan.
+   * Cache jadwal sidang untuk 100 perkara terbaru.
    * 1 browser instance dipakai ulang untuk seluruh batch.
    *
    * Concurrency-guarded: kalau call kedua masuk saat batch sebelumnya masih
@@ -359,12 +500,14 @@ class SIPPSyncService {
     this.cachePopulateInProgress = true;
 
     try {
-      const year = new Date().getFullYear();
-      const perkara = this.db.prepare(
-        'SELECT nomor_perkara FROM perkara WHERE tahun_masuk = ?'
-      ).all(year);
+      // Ambil 100 perkara terbaru (berdasarkan created_at DESC)
+      const perkara = this.db.prepare(`
+        SELECT nomor_perkara FROM perkara
+        ORDER BY created_at DESC
+        LIMIT 100
+      `).all();
 
-      console.log(`[CACHE] Caching jadwal for ${perkara.length} perkara tahun ${year}`);
+      console.log(`[CACHE] Caching jadwal for ${perkara.length} newest perkara`);
 
       if (perkara.length === 0) {
         return { ok: 0, failed: 0, total: 0 };

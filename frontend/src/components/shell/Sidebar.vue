@@ -7,10 +7,11 @@ import LambangPN from '../LambangPN.vue'
 const props = defineProps({
     items: { type: Array, required: true },
     collapsed: { type: Boolean, default: false },
-    expandedGroups: { type: Object, required: true }
+    expandedGroups: { type: Object, required: true },
+    mobileOpen: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['update:collapsed', 'toggleGroup'])
+const emit = defineEmits(['update:collapsed', 'toggleGroup', 'close-mobile'])
 
 const route = useRoute()
 
@@ -28,7 +29,16 @@ function isGroupExpanded(group) {
 </script>
 
 <template>
-    <aside class="ns-sidebar" :class="{ 'is-collapsed': collapsed }">
+    <!-- Mobile backdrop -->
+    <Teleport to="body">
+        <div
+            v-if="mobileOpen"
+            class="ns-sidebar-backdrop"
+            @click="emit('close-mobile')"
+        />
+    </Teleport>
+
+    <aside class="ns-sidebar" :class="{ 'is-collapsed': collapsed, 'is-mobile-open': mobileOpen }">
         <div class="ns-brand">
             <LambangPN :size="32" primary="#047857" />
             <div v-if="!collapsed" class="ns-brand-text">
@@ -97,3 +107,42 @@ function isGroupExpanded(group) {
         </div>
     </aside>
 </template>
+
+<style scoped>
+/* Mobile backdrop (outside template) */
+:deep(.ns-sidebar-backdrop) {
+    position: fixed;
+    inset: 0;
+    z-index: 998;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+}
+
+@media (min-width: 769px) {
+    :deep(.ns-sidebar-backdrop) {
+        display: none;
+    }
+}
+
+/* Mobile sidebar styles */
+@media (max-width: 768px) {
+    .ns-sidebar {
+        position: fixed !important;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        z-index: 999;
+        width: 280px !important;
+        transform: translateX(-100%);
+        transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+
+    .ns-sidebar.is-mobile-open {
+        transform: translateX(0);
+    }
+
+    .ns-sidebar.is-collapsed {
+        width: 280px !important;
+    }
+}
+</style>

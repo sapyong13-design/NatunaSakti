@@ -1,0 +1,20 @@
+# Live database (will be regenerated from seed on new setups)
+data/akurasi.db
+
+# Keep seed database in git
+!data/akurasi-seed.db
+
+# Node modules
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+*.temp

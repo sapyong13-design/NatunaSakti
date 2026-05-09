@@ -34,6 +34,14 @@ if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
 }
 const dbPath = path.join(dataDir, 'akurasi.db');
+const seedDbPath = path.join(dataDir, 'akurasi-seed.db');
+
+// If database doesn't exist but seed exists, copy from seed
+if (!fs.existsSync(dbPath) && fs.existsSync(seedDbPath)) {
+    console.log('[Database] No database found, copying from seed...');
+    fs.copyFileSync(seedDbPath, dbPath);
+    console.log('[Database] Seed database copied. Ready for incremental sync (200 newest).');
+}
 const db = new Database(dbPath);
 
 // Setup Database Schema
@@ -295,21 +303,35 @@ app.get('/api/perkara/sipp/progress', (req, res) => {
 // Manual sync endpoint
 app.post('/api/perkara/sipp/sync', async (req, res) => {
     console.log('[SIPP-SYNC] Called!');
+
+    // Prevent multiple syncs running simultaneously
+    if (syncProgress.inProgress) {
+        console.log('[SIPP-SYNC] Sync already in progress, rejecting request');
+        return res.status(429).json({
+            success: false,
+            error: 'Sync already in progress',
+            current: syncProgress.current,
+            message: syncProgress.message
+        });
+    }
+
     try {
+        // Check if first sync
+        const oldCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get().c;
+        const isFirstSync = oldCount === 0;
+
         syncProgress = {
             inProgress: true,
             current: 0,
-            total: 200, // Target (10 pages × 20)
+            total: isFirstSync ? 9999 : 200, // First sync: unlimited, incremental: 200
             page: 0,
-            message: 'Memulai sync...',
-            error: null
+            message: isFirstSync ? 'First sync: mengambil SEMUA data...' : 'Sync incremental: 200 perkara terbaru...',
+            error: null,
+            isFirstSync
         };
 
-        // Get old count
-        const oldCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get().c;
-
-        console.log('[SIPP-SYNC] Starting fetch...');
-        syncProgress.message = 'Mengambil data dari SIPP...';
+        console.log(`[SIPP-SYNC] ${isFirstSync ? 'FIRST SYNC' : 'INCREMENTAL SYNC'} - Starting fetch...`);
+        syncProgress.message = isFirstSync ? 'Mengambil semua data dari SIPP...' : 'Mengambil 200 perkara terbaru...';
 
         const data = await sippService.fetchSIPPData((progress) => {
             // Progress callback during fetch
@@ -339,8 +361,11 @@ app.post('/api/perkara/sipp/sync', async (req, res) => {
             fetched: count,
             total_in_db: dbCount.c,
             new_items: dbCount.c - oldCount,
+            mode: isFirstSync ? 'full' : 'incremental',
             timestamp: new Date().toISOString(),
-            message: `Synced ${count} perkara from SIPP (${dbCount.c} total in DB)`
+            message: isFirstSync
+                ? `First sync complete: ${dbCount.c} total perkara di database`
+                : `Synced ${count} perkara from SIPP (${dbCount.c} total in DB)`
         });
     } catch (error) {
         console.error('[SIPP] Sync error:', error.message);
@@ -494,6 +519,58 @@ app.get('/api/perkara/trend', (req, res) => {
         res.json(result);
     } catch (error) {
         console.error('[TREND] error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Trend pendaftaran per bulan (monthly trend for a specific year)
+app.get('/api/perkara/trend/monthly', (req, res) => {
+    try {
+        const year = parseInt(req.query.year) || new Date().getFullYear();
+        const rows = db.prepare(`
+            SELECT jenis_perkara, sipp_tanggal_register
+            FROM perkara
+            WHERE sipp_tanggal_register IS NOT NULL AND sipp_tanggal_register != ''
+        `).all();
+
+        const monthMap = {
+            jan: 0, feb: 1, mar: 2, apr: 3, mei: 4, jun: 5,
+            jul: 6, agu: 7, sep: 8, okt: 9, nov: 10, des: 11
+        };
+
+        function parseTanggal(s) {
+            const parts = s.trim().split(/\s+/);
+            if (parts.length < 3) return null;
+            const day = parseInt(parts[0]);
+            const monKey = parts[1].toLowerCase().slice(0, 3);
+            const enMap = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
+            const mon = monthMap[monKey] ?? enMap[monKey];
+            const yr = parseInt(parts[2]);
+            if (mon === undefined || isNaN(day) || isNaN(yr)) return null;
+            return new Date(yr, mon, day);
+        }
+
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        const buckets = Array.from({ length: 12 }, () => ({ pidana: 0, perdata: 0 }));
+
+        for (const r of rows) {
+            const d = parseTanggal(r.sipp_tanggal_register);
+            if (!d) continue;
+            if (d.getFullYear() !== year) continue;
+            const monthIdx = d.getMonth();
+            if (monthIdx < 0 || monthIdx > 11) continue;
+            if (r.jenis_perkara === 'Pidana') buckets[monthIdx].pidana++;
+            else if (r.jenis_perkara === 'Perdata') buckets[monthIdx].perdata++;
+        }
+
+        const result = buckets.map((b, i) => ({
+            month: monthNames[i],
+            pidana: b.pidana,
+            perdata: b.perdata
+        }));
+        res.json(result);
+    } catch (error) {
+        console.error('[TREND-MONTHLY] error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });
@@ -672,13 +749,18 @@ console.log('[CRON] Setting up SIPP sync schedule (every hour)');
 
 const syncTask = cron.schedule('0 * * * *', async () => {
     try {
-        console.log('[CRON] Starting scheduled SIPP sync...');
+        const oldCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get().c;
+        const isFirstSync = oldCount === 0;
+        console.log(`[CRON] Starting ${isFirstSync ? 'FIRST' : 'INCREMENTAL'} SIPP sync...`);
+
         const data = await sippService.fetchSIPPData();
         const count = await sippService.saveToDatabase(data);
-        console.log(`[CRON] Sync completed: ${count} perkara updated`);
+        const newCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get().c;
 
-        // Refresh jadwal cache untuk perkara tahun berjalan
-        console.log('[CRON] Refreshing jadwal cache...');
+        console.log(`[CRON] Sync completed: ${count} perkara fetched, ${newCount - oldCount} new, ${newCount} total`);
+
+        // Refresh jadwal cache untuk 100 perkara terbaru
+        console.log('[CRON] Refreshing jadwal cache (100 newest perkara)...');
         const cacheResult = await sippService.cacheJadwalCurrentYear();
         console.log('[CRON] Jadwal cache refreshed:', cacheResult);
     } catch (error) {
@@ -697,10 +779,10 @@ app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Database: ${dbPath}`);
 
-    // Initial populate jadwal cache kalau kosong (fire-and-forget, jangan blok startup)
+    // Initial populate jadwal cache untuk 100 perkara terbaru (fire-and-forget, jangan blok startup)
     const cachedCount = db.prepare('SELECT COUNT(*) AS n FROM jadwal_sidang').get().n;
     if (cachedCount === 0) {
-        console.log('[CACHE] empty on startup, populating jadwal cache for current year...');
+        console.log('[CACHE] empty on startup, populating jadwal cache for 100 newest perkara...');
         sippService.cacheJadwalCurrentYear()
             .then(r => console.log('[CACHE] startup populate done:', r))
             .catch(e => console.error('[CACHE] startup populate error:', e.message));

@@ -1,6 +1,9 @@
 /* ============================================================
-   Natuna Sakti — Shared styles (Apple-esque glassmorphism)
+   Natuna Sakti — Institutional Government Dashboard
+   Font: Plus Jakarta Sans (Google Fonts)
    ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 * { box-sizing: border-box; }
 
@@ -11,13 +14,13 @@
   width: 100%;
   height: 100%;
   min-height: 760px;
-  font-family: "Bookman Old Style", "Bookman", "URW Bookman L", Georgia, serif;
-  font-feature-settings: "ss01", "cv11";
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   color: var(--text);
   background: var(--gradient-bg);
   overflow: hidden;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv11";
 }
 
 .ns-app[data-mode="light"] { color-scheme: light; }
@@ -81,7 +84,7 @@
   width: 100%; padding: 9px 12px;
   background: transparent; border: 0; cursor: pointer;
   border-radius: 10px;
-  font: inherit; color: var(--text-2); font-size: 13.5px; font-weight: 500;
+  font: inherit; color: var(--text); font-size: 13.5px; font-weight: 500;
   text-align: left;
   transition: background 150ms, color 150ms;
 }
@@ -93,23 +96,28 @@
 .ns-nav-item.is-active .ns-nav-icon { color: var(--accent); }
 .ns-nav-item.is-child-active { color: var(--text); }
 .ns-nav-item.is-child { padding-left: 38px; font-size: 12.5px; font-weight: 450; }
-.ns-nav-item.is-child .ns-nav-icon { opacity: 0.7; }
+.ns-nav-item.is-child .ns-nav-icon { opacity: 1; }
 
-.ns-nav-icon { display: grid; place-items: center; flex-shrink: 0; color: var(--text-2); transition: color 150ms; }
+.ns-nav-icon { display: grid; place-items: center; flex-shrink: 0; color: var(--text); transition: color 150ms; }
 .ns-nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ns-nav-badge {
   font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
   padding: 2px 6px; border-radius: 4px;
   background: var(--accent-soft); color: var(--accent);
 }
-.ns-nav-chevron { display: grid; place-items: center; transition: transform 200ms; opacity: 0.5; }
+.ns-nav-chevron { display: grid; place-items: center; transition: transform 200ms; opacity: 1; }
 .ns-nav-chevron.is-open { transform: rotate(180deg); }
 .ns-nav-active-rail {
   position: absolute; left: 4px; top: 8px; bottom: 8px; width: 3px;
   background: var(--accent); border-radius: 2px;
   box-shadow: 0 0 8px var(--accent-glow);
 }
-.ns-nav-children { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 4px; }
+.ns-nav-children {
+  display: flex; flex-direction: column; gap: 1px; margin: 2px 0 4px;
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 4px;
+}
 
 .is-collapsed .ns-nav-item { justify-content: center; padding: 10px; }
 .is-collapsed .ns-nav-item.is-child { padding-left: 10px; }
@@ -603,4 +611,443 @@
   --info-soft: rgba(37,99,235,0.1);
   --warn-soft: rgba(217,119,6,0.12);
   --danger-soft: rgba(220,38,38,0.1);
+}
+
+/* ============ Animation Utilities ============ */
+
+/* Easing functions */
+:root {
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-cubic: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Duration */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+  --duration-slower: 600ms;
+}
+
+/* Button press effect */
+.ns-btn {
+  position: relative;
+  transition: transform var(--duration-fast) var(--ease-out-cubic),
+              box-shadow var(--duration-fast) var(--ease-out-cubic);
+}
+
+.ns-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+/* Card hover effect */
+.ns-hover-lift {
+  transition: transform var(--duration-normal) var(--ease-out-cubic),
+              box-shadow var(--duration-normal) var(--ease-out-cubic);
+}
+
+.ns-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.15);
+}
+
+/* Fade animations */
+.ns-fade-enter-active,
+.ns-fade-leave-active {
+  transition: opacity var(--duration-normal) var(--ease-out-cubic);
+}
+
+.ns-fade-enter-from,
+.ns-fade-leave-to {
+  opacity: 0;
+}
+
+/* Slide animations */
+.ns-slide-up-enter-active,
+.ns-slide-up-leave-active {
+  transition: all var(--duration-normal) var(--ease-out-cubic);
+}
+
+.ns-slide-up-enter-from,
+.ns-slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.ns-slide-down-enter-active,
+.ns-slide-down-leave-active {
+  transition: all var(--duration-normal) var(--ease-out-cubic);
+}
+
+.ns-slide-down-enter-from,
+.ns-slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-16px);
+}
+
+.ns-slide-left-enter-active,
+.ns-slide-left-leave-active {
+  transition: all var(--duration-normal) var(--ease-out-cubic);
+}
+
+.ns-slide-left-enter-from,
+.ns-slide-left-leave-to {
+  opacity: 0;
+  transform: translateX(16px);
+}
+
+.ns-slide-right-enter-active,
+.ns-slide-right-leave-active {
+  transition: all var(--duration-normal) var(--ease-out-cubic);
+}
+
+.ns-slide-right-enter-from,
+.ns-slide-right-leave-to {
+  opacity: 0;
+  transform: translateX(-16px);
+}
+
+/* Scale animations */
+.ns-scale-enter-active,
+.ns-scale-leave-active {
+  transition: all var(--duration-normal) var(--ease-spring);
+}
+
+.ns-scale-enter-from,
+.ns-scale-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+/* Stagger children animation */
+.ns-stagger > * {
+  --stagger-delay: 50ms;
+  animation-delay: var(--stagger-delay);
+}
+
+.ns-stagger > *:nth-child(1) { animation-delay: calc(var(--stagger-delay) * 0); }
+.ns-stagger > *:nth-child(2) { animation-delay: calc(var(--stagger-delay) * 1); }
+.ns-stagger > *:nth-child(3) { animation-delay: calc(var(--stagger-delay) * 2); }
+.ns-stagger > *:nth-child(4) { animation-delay: calc(var(--stagger-delay) * 3); }
+.ns-stagger > *:nth-child(5) { animation-delay: calc(var(--stagger-delay) * 4); }
+.ns-stagger > *:nth-child(6) { animation-delay: calc(var(--stagger-delay) * 5); }
+
+/* Shimmer effect for loading */
+.ns-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 0%,
+    var(--border) 50%,
+    var(--surface-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: ns-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes ns-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Pulse animation */
+.ns-pulse {
+  animation: ns-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ns-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Bounce animation */
+.ns-bounce {
+  animation: ns-bounce 0.5s var(--ease-spring);
+}
+
+@keyframes ns-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+/* Spin animation */
+.ns-spin {
+  animation: ns-spin 0.8s linear infinite;
+}
+
+@keyframes ns-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Ripple effect */
+.ns-ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.ns-ripple::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: width 0.6s ease, height 0.6s ease, opacity 0.6s ease;
+}
+
+.ns-ripple:active::after {
+  width: 200px;
+  height: 200px;
+  opacity: 1;
+  transition: 0s;
+}
+
+/* ============================================================
+   UI Enhancements - Dashboard Improvements
+   ============================================================ */
+
+/* Staggered animations for cards */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ns-stagger-in {
+  animation: slideUp 0.4s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.ns-stagger-1 { animation-delay: 0ms; }
+.ns-stagger-2 { animation-delay: 40ms; }
+.ns-stagger-3 { animation-delay: 80ms; }
+.ns-stagger-4 { animation-delay: 120ms; }
+.ns-stagger-5 { animation-delay: 160ms; }
+
+/* Expand animation for drill-down */
+@keyframes expandSlide {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 300px;
+  }
+}
+
+.ns-expand-slide {
+  animation: expandSlide 0.3s ease-out;
+}
+
+/* Grain texture overlay */
+.ns-grain-overlay {
+  position: relative;
+}
+
+.ns-grain-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.025;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  border-radius: inherit;
+}
+
+/* Elevated card hover */
+.ns-card-hover {
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+.ns-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+.ns-app[data-mode="dark"] .ns-card-hover:hover {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* Gradient border */
+.ns-border-gradient {
+  position: relative;
+  border: 1px solid transparent;
+  background: linear-gradient(var(--bg2), var(--bg2)) padding-box,
+              linear-gradient(135deg, var(--accent), var(--accent2)) border-box;
+  border-radius: inherit;
+}
+
+/* Status row indicators */
+.ns-row-minutasi {
+  border-left: 3px solid var(--success);
+}
+
+.ns-row-sidang {
+  border-left: 3px solid var(--warn);
+}
+
+.ns-row-proses {
+  border-left: 3px solid var(--accent);
+}
+
+/* Compact mode */
+.ns-app[data-density="compact"] .ns-tr {
+  height: 44px;
+}
+
+.ns-app[data-density="compact"] .ns-td {
+  font-size: 12px;
+}
+
+.ns-app[data-density="spacious"] .ns-tr {
+  height: 64px;
+}
+
+.ns-app[data-density="spacious"] .ns-td {
+  font-size: 13px;
+}
+
+/* Quick filter chips */
+.ns-filter-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ns-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms;
+}
+
+.ns-filter-chip:hover {
+  border-color: var(--accent);
+  background: var(--accentSoft);
+  color: var(--accent);
+}
+
+.ns-filter-chip.is-active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.ns-filter-chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.ns-app[data-mode="dark"] .ns-filter-chip-count {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Keyboard shortcut hints */
+.ns-kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface2);
+  font-size: 10px;
+  font-weight: 500;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--text3);
+}
+
+.ns-kbd kbd {
+  font-family: inherit;
+}
+
+/* Sparkline */
+.ns-sparkline {
+  display: block;
+  width: 100%;
+  height: 32px;
+}
+
+.ns-sparkline.is-up {
+  color: var(--success);
+}
+
+.ns-sparkline.is-down {
+  color: var(--danger);
+}
+
+/* Skeleton loading */
+.ns-skeleton {
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.ns-skeleton-text {
+  height: 1em;
+  width: 100%;
+}
+
+.ns-skeleton-text-sm {
+  height: 0.85em;
+  width: 60%;
+}
+
+.ns-skeleton-circle {
+  border-radius: 50%;
+}
+
+.ns-skeleton-avatar {
+  width: 32px;
+  height: 32px;
+}
+
+.ns-skeleton-card {
+  height: 80px;
+  border-radius: 12px;
+}
+
+/* Number transition */
+.ns-number-transition {
+  transition: all 300ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.ns-number-up {
+  color: var(--success);
+}
+
+.ns-number-down {
+  color: var(--danger);
 }
