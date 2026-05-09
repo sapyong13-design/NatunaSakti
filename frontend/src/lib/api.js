@@ -135,6 +135,17 @@ export const downloadLaporanBulanan = async (jenis, bulan, tahun, format = 'docx
     return response.blob();
 };
 
+// Download Laporan Mingguan as .docx or .pdf
+export const downloadLaporanMingguan = async (jenis, start, end, format = 'docx') => {
+    const params = new URLSearchParams({ start, end, format })
+    const response = await fetch(`${API_BASE}/laporan/mingguan/${jenis}?${params}`)
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Gagal membuat laporan' }))
+        throw new Error(err.error || 'Gagal membuat laporan')
+    }
+    return response.blob()
+}
+
 // Force refresh jadwal sidang (bypass cache, re-scrape SIPP)
 export const refreshJadwal = async (nomorPerkara) => {
     const encoded = encodeURIComponent(nomorPerkara);

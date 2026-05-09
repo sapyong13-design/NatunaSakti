@@ -17,6 +17,8 @@ const HARI_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabt
 // English 3-letter month abbreviations as stored by SIPP scraper
 const MONTH_ABBREV_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
+const MINGGU_ROMAN = ['I', 'II', 'III', 'IV', 'V']
+
 // Parse "08 May 2026" → { day: 8, month: 5, year: 2026, sort: 20260508 }
 function parseRegisterDate(dateStr) {
     if (!dateStr) return null
@@ -27,6 +29,19 @@ function parseRegisterDate(dateStr) {
     const year = parseInt(parts[2])
     if (isNaN(day) || monIdx === -1 || isNaN(year)) return null
     return { day, month: monIdx + 1, year, sort: year * 10000 + (monIdx + 1) * 100 + day }
+}
+
+// Parse "Selasa, 27 Jan. 2026" → Date object
+function parseJadwalDateFull(dateStr) {
+    if (!dateStr) return null
+    const cleaned = dateStr.replace(/^[^,]+,\s*/, '').replace(/\./g, '').trim()
+    const parts = cleaned.split(/\s+/)
+    if (parts.length < 3) return null
+    const day = parseInt(parts[0])
+    const monIdx = MONTH_ABBREV_EN.indexOf(parts[1])
+    const year = parseInt(parts[2])
+    if (isNaN(day) || monIdx === -1 || isNaN(year)) return null
+    return new Date(year, monIdx, day)
 }
 
 // Parse "Selasa, 27 Jan. 2026" → { month: 1, year: 2026 }
@@ -144,25 +159,18 @@ function buildCenteredParagraph(text) {
 function replacePerkaraCell(cellXml, nomorList) {
     const firstPEnd = cellXml.indexOf('</w:p>') + 6
     if (firstPEnd < 6) return cellXml
-
-    if (nomorList.length > 0) {
-        return cellXml.substring(0, firstPEnd) +
-               nomorList.map(buildNomorParagraph).join('') +
-               '</w:tc>'
-    }
-
-    // Kosong: tampilkan "-" center di bawah label
-    return cellXml.substring(0, firstPEnd) + buildCenteredParagraph('-') + '</w:tc>'
+    return cellXml.substring(0, firstPEnd) +
+           nomorList.map(buildNomorParagraph).join('') +
+           '</w:tc>'
 }
 
-// Replace TINDAK LANJUT cell: set "Sudah di Proses" or "-" based on data presence
-function replaceTindakLanjutCell(cellXml, hasPerkara) {
-    const newText = hasPerkara ? 'Sudah di Proses' : '-'
+// Replace a cell's content with given text (centered)
+function replaceCellContent(cellXml, text) {
     const tcprEnd = cellXml.indexOf('</w:tcPr>')
     if (tcprEnd === -1) {
-        return '<w:tc>' + buildCenteredParagraph(newText) + '</w:tc>'
+        return '<w:tc>' + buildCenteredParagraph(text) + '</w:tc>'
     }
-    return cellXml.substring(0, tcprEnd + 9) + buildCenteredParagraph(newText) + '</w:tc>'
+    return cellXml.substring(0, tcprEnd + 9) + buildCenteredParagraph(text) + '</w:tc>'
 }
 
 // Replace simple text values (month, year, day, date)
@@ -308,12 +316,6 @@ function generateLaporanBulanan(db, jenis, bulan, tahun) {
     // Replace simple values (month, year, day, date)
     xml = replaceSimpleValues(xml, { bulanNama, tahun, hari, tanggal })
 
-    // Replace signature section
-    xml = xml.replaceAll('<w:t>Ketua Pengadilan Negeri Natuna</w:t>',
-                         '<w:t>Wakil Ketua Pengadilan Negeri Natuna</w:t>')
-    xml = xml.replaceAll('<w:t>Lodewyk Ivandrie Simanjuntak</w:t>',
-                         '<w:t>Joko Ciptanto</w:t>')
-
     // Update table data rows: NO=1 → perkara register bulan ini, NO=2 → punya sidang bulan ini
     const rows = getTableRows(xml)
     const modifications = []
@@ -326,7 +328,10 @@ function generateLaporanBulanan(db, jenis, bulan, tahun) {
         if (noText !== '1' && noText !== '2') continue
 
         const nomorList = noText === '1' ? nomorList1 : nomorList2
-        const hasPerkara = nomorList.length > 0
+
+        // If no perkara, leave row as-is — template already has correct "-" format
+        if (nomorList.length === 0) continue
+
         let newRowXml = row.xml
 
         // Replace NOMOR PERKARA cell (index 1)
@@ -334,12 +339,16 @@ function generateLaporanBulanan(db, jenis, bulan, tahun) {
         const newCell1 = replacePerkaraCell(origCell1, nomorList)
         newRowXml = replaceFirst(newRowXml, origCell1, newCell1)
 
-        // Replace TINDAK LANJUT cell (index 4 for 6-column table, index 3 for 5-column)
+        // Replace SESUAI cell (index 2) with ✓
+        const sesuaiIdx = cells.length >= 6 ? 2 : 1
+        if (cells[sesuaiIdx]) {
+            newRowXml = replaceFirst(newRowXml, cells[sesuaiIdx].xml, replaceCellContent(cells[sesuaiIdx].xml, '✓'))
+        }
+
+        // Replace TINDAK LANJUT cell (index 4) with "Sudah di Proses"
         const tlIdx = cells.length >= 6 ? 4 : 3
         if (cells[tlIdx]) {
-            const origTl = cells[tlIdx].xml
-            const newTl = replaceTindakLanjutCell(origTl, hasPerkara)
-            newRowXml = replaceFirst(newRowXml, origTl, newTl)
+            newRowXml = replaceFirst(newRowXml, cells[tlIdx].xml, replaceCellContent(cells[tlIdx].xml, 'Sudah di Proses'))
         }
 
         modifications.push({ start: row.start, end: row.end, newXml: newRowXml })
@@ -379,4 +388,214 @@ function convertDocxToPdf(docxBuffer) {
     }
 }
 
-module.exports = { generateLaporanBulanan, convertDocxToPdf }
+// ============================================================
+// LAPORAN MINGGUAN
+// ============================================================
+
+const TEMPLATE_MAP_MINGGUAN = {
+    'Perikanan': 'mingguan-perikanan.docx',
+    'Pidana':    'mingguan-perdata.docx',
+    'Perdata':   'mingguan-perdata.docx',
+    'Hukum':     'mingguan-perdata.docx',
+}
+
+function replaceJenisReferencesMingguanPerikanan(xml, toJenis) {
+    if (toJenis === 'Perikanan') return xml
+
+    // Handle split text runs: "KEPANITERAAN MUDA P" + "ERIKANAN"
+    xml = xml.replace('<w:t>KEPANITERAAN MUDA P</w:t>', `<w:t>KEPANITERAAN MUDA ${toJenis.toUpperCase()}</w:t>`)
+    xml = xml.replace('<w:t>ERIKANAN</w:t>', '<w:t></w:t>')
+
+    // "Pada Kepaniteraan Muda P" + "erikanan"
+    xml = xml.replace('<w:t>Pada Kepaniteraan Muda P</w:t>', `<w:t>Pada Kepaniteraan Muda ${toJenis}</w:t>`)
+
+    // "Panitera Muda P" + "erikanan" — replace "erikanan" suffix with correct suffix
+    // "P" run stays, replace "erikanan" with remainder of new jenis name lowercased
+    const suffix = toJenis.slice(1).toLowerCase()  // e.g. "idana", "erdata", "ukum"
+    xml = xml.replace('<w:t>erikanan</w:t>', `<w:t>${suffix}</w:t>`)
+
+    // Kepaniteraan Muda Perikanan in body (single run if present)
+    xml = xml.replaceAll(`<w:t>Kepaniteraan Muda Perikanan</w:t>`, `<w:t>Kepaniteraan Muda ${toJenis}</w:t>`)
+    xml = xml.replaceAll(`<w:t>Panitera Muda Perikanan</w:t>`, `<w:t>Panitera Muda ${toJenis}</w:t>`)
+
+    return xml
+}
+
+function replaceJenisReferencesMingguanPerdata(xml, toJenis) {
+    if (toJenis === 'Perdata') return xml
+    const upper = toJenis.toUpperCase()
+
+    // Title line: " PADA KEPANITERAAN MUDA PERDATA"
+    xml = xml.replace(
+        '<w:t xml:space="preserve"> PADA KEPANITERAAN MUDA PERDATA</w:t>',
+        `<w:t xml:space="preserve"> PADA KEPANITERAAN MUDA ${upper}</w:t>`
+    )
+    // Signature table: "KEPANITERAAN MUDA PERDATA"
+    xml = xml.replaceAll('<w:t>KEPANITERAAN MUDA PERDATA</w:t>', `<w:t>KEPANITERAAN MUDA ${upper}</w:t>`)
+    // Body sentence: "Kepaniteraan Muda Perdata"
+    xml = xml.replaceAll('Kepaniteraan Muda Perdata', `Kepaniteraan Muda ${toJenis}`)
+    // Row label (split run) + signature: <w:t>Perdata</w:t>
+    xml = xml.replaceAll('<w:t>Perdata</w:t>', `<w:t>${toJenis}</w:t>`)
+
+    return xml
+}
+
+function generateLaporanMingguan(db, jenis, startDateStr, endDateStr) {
+    const start = new Date(startDateStr)
+    const end   = new Date(endDateStr)
+
+    const bulan     = start.getMonth() + 1
+    const tahun     = start.getFullYear()
+    const bulanNama = BULAN_NAMES[bulan - 1]
+    const mingguKe  = Math.min(5, Math.ceil(start.getDate() / 7))
+    const mingguRoman = MINGGU_ROMAN[mingguKe - 1]
+
+    const hari    = HARI_NAMES[end.getDay()]
+    const tanggal = String(end.getDate()).padStart(2, '0')
+
+    // Row 1: perkara registered within the week
+    const allPerkara = db.prepare(
+        'SELECT nomor_perkara, sipp_tanggal_register FROM perkara WHERE jenis_perkara = ?'
+    ).all(jenis)
+
+    const nomorList1 = allPerkara
+        .filter(p => {
+            const d = parseRegisterDate(p.sipp_tanggal_register)
+            if (!d) return false
+            const dt = new Date(d.year, d.month - 1, d.day)
+            return dt >= start && dt <= end
+        })
+        .sort((a, b) => {
+            const da = parseRegisterDate(a.sipp_tanggal_register)
+            const db_ = parseRegisterDate(b.sipp_tanggal_register)
+            return (da?.sort ?? 0) - (db_?.sort ?? 0)
+        })
+        .map(p => p.nomor_perkara)
+
+    // Row 2: perkara with sidang within the week
+    const perkaraMap = new Map(allPerkara.map(p => [p.nomor_perkara, p]))
+    const allJadwal  = db.prepare(
+        'SELECT nomor_perkara, tanggal FROM jadwal_sidang WHERE nomor IS NOT NULL AND tanggal IS NOT NULL'
+    ).all()
+
+    const seen2 = new Set()
+    const nomorList2 = []
+    for (const j of allJadwal) {
+        if (seen2.has(j.nomor_perkara)) continue
+        if (!perkaraMap.has(j.nomor_perkara)) continue
+        const dt = parseJadwalDateFull(j.tanggal)
+        if (dt && dt >= start && dt <= end) {
+            seen2.add(j.nomor_perkara)
+            nomorList2.push(j.nomor_perkara)
+        }
+    }
+    nomorList2.sort((a, b) => {
+        const da = parseRegisterDate(perkaraMap.get(a)?.sipp_tanggal_register)
+        const db_ = parseRegisterDate(perkaraMap.get(b)?.sipp_tanggal_register)
+        return (da?.sort ?? 0) - (db_?.sort ?? 0)
+    })
+
+    // Load template
+    const templateFile = TEMPLATE_MAP_MINGGUAN[jenis] || 'mingguan-perikanan.docx'
+    const templatePath = path.join(TEMPLATE_DIR, templateFile)
+    if (!fs.existsSync(templatePath)) throw new Error(`Template tidak ditemukan: ${templateFile}`)
+
+    const zip = new PizZip(fs.readFileSync(templatePath))
+    let xml = zip.files['word/document.xml'].asText()
+
+    const isPerdata = templateFile.includes('perdata')
+
+    // Replace jenis references (template-specific)
+    if (isPerdata) {
+        xml = replaceJenisReferencesMingguanPerdata(xml, jenis)
+    } else {
+        xml = replaceJenisReferencesMingguanPerikanan(xml, jenis)
+    }
+
+    // Replace month name
+    for (const b of BULAN_NAMES) {
+        xml = xml.replaceAll(`<w:t>${b.toUpperCase()}</w:t>`, `<w:t>${bulanNama.toUpperCase()}</w:t>`)
+        xml = xml.replaceAll(`<w:t>${b}</w:t>`, `<w:t>${bulanNama}</w:t>`)
+    }
+
+    // Replace MINGGU KE (template-specific split pattern)
+    if (isPerdata) {
+        // Perdata template: " MINGGU KE I" (run 1) + "II" (run 2) = "III"
+        // Strategy: put full roman in run 1, clear run 2
+        xml = xml.replace(
+            '<w:t xml:space="preserve"> MINGGU KE I</w:t>',
+            `<w:t xml:space="preserve"> MINGGU KE ${mingguRoman}</w:t>`
+        )
+        xml = xml.replace('<w:t>II</w:t>', '<w:t></w:t>')
+    } else {
+        // Perikanan template: "MINGGU KE III" as single run (various roman numerals)
+        for (const r of MINGGU_ROMAN) {
+            xml = xml.replaceAll(`<w:t>MINGGU KE ${r}</w:t>`, `<w:t>MINGGU KE ${mingguRoman}</w:t>`)
+        }
+    }
+
+    // Replace year (handles both single-run "2026" and split "202"+"6" patterns)
+    const yearStr    = String(tahun)
+    const yearPrefix = yearStr.slice(0, 3)
+    const yearSuffix = yearStr.slice(3)
+    xml = xml.replaceAll(`<w:t>2026</w:t>`, `<w:t>${tahun}</w:t>`)
+    xml = xml.replaceAll(`<w:t>202</w:t>`, `<w:t>${yearPrefix}</w:t>`)
+    xml = xml.replaceAll(`<w:t>TAHUN 202</w:t>`, `<w:t>TAHUN ${yearPrefix}</w:t>`)
+    xml = xml.replaceAll(`<w:t>6</w:t>`, `<w:t>${yearSuffix}</w:t>`)
+
+    // Replace day of week
+    for (const h of HARI_NAMES) {
+        xml = xml.replace(`<w:t>${h}</w:t>`, `<w:t>${hari}</w:t>`)
+    }
+
+    // Replace date number after "tanggal ": search without '>' prefix to handle both
+    // Perikanan: <w:t>tanggal </w:t>  and  Perdata: <w:t xml:space="preserve">, tanggal </w:t>
+    const tanggalPos = xml.indexOf('tanggal </w:t>')
+    if (tanggalPos !== -1) {
+        const after   = tanggalPos + 'tanggal </w:t>'.length
+        const wtOpen  = xml.indexOf('<w:t>', after)
+        const wtClose = xml.indexOf('>', wtOpen) + 1
+        const wtEnd   = xml.indexOf('</w:t>', wtOpen)
+        if (wtOpen !== -1 && wtEnd !== -1 && /^\d{1,2}$/.test(xml.substring(wtClose, wtEnd).trim())) {
+            xml = xml.substring(0, wtClose) + tanggal + xml.substring(wtEnd)
+        }
+    }
+
+    // Update data rows (same logic as bulanan)
+    const rows = getTableRows(xml)
+    const modifications = []
+
+    for (const row of rows) {
+        const cells = getRowCells(row.xml)
+        if (cells.length < 2) continue
+
+        const noText    = getCellText(cells[0].xml)
+        if (noText !== '1' && noText !== '2') continue
+
+        const nomorList = noText === '1' ? nomorList1 : nomorList2
+        if (nomorList.length === 0) continue
+
+        let newRowXml = row.xml
+
+        // NOMOR PERKARA cell (index 1)
+        newRowXml = replaceFirst(newRowXml, cells[1].xml, replacePerkaraCell(cells[1].xml, nomorList))
+
+        // SESUAI cell (index 2)
+        if (cells[2]) newRowXml = replaceFirst(newRowXml, cells[2].xml, replaceCellContent(cells[2].xml, '✓'))
+
+        // TINDAK LANJUT cell (index 4)
+        if (cells[4]) newRowXml = replaceFirst(newRowXml, cells[4].xml, replaceCellContent(cells[4].xml, 'Sudah di Proses'))
+
+        modifications.push({ start: row.start, end: row.end, newXml: newRowXml })
+    }
+
+    modifications.sort((a, b) => b.start - a.start)
+    for (const mod of modifications) {
+        xml = xml.substring(0, mod.start) + mod.newXml + xml.substring(mod.end)
+    }
+
+    zip.file('word/document.xml', xml)
+    return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' })
+}
+
+module.exports = { generateLaporanBulanan, generateLaporanMingguan, convertDocxToPdf }

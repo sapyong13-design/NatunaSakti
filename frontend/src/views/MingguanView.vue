@@ -4,8 +4,7 @@ import { useRoute } from 'vue-router'
 import PageHeader from '../components/shell/PageHeader.vue'
 import MingguanFilterBar from '../components/report/MingguanFilterBar.vue'
 import ReportTable from '../components/report/ReportTable.vue'
-import { getPerkaraByDateRange } from '../lib/api'
-import { generateMingguanPDF, downloadPDF, generateMingguanDOCX, downloadDOCX } from '../lib/export'
+import { getPerkaraByDateRange, downloadLaporanMingguan } from '../lib/api'
 
 const route = useRoute()
 
@@ -16,7 +15,7 @@ const jenisCanonical = computed(() => {
 
 const start = ref('')
 const end = ref('')
-const format = ref('pdf')
+const format = ref('docx')
 const rows = ref([])
 const loading = ref(false)
 const exporting = ref(false)
@@ -50,27 +49,23 @@ async function fetchData() {
 watch(() => route.params.jenis, () => { rows.value = [] })
 
 async function handleExport() {
-    if (!rows.value.length) {
-        alert('Tidak ada data untuk diekspor')
+    if (!start.value || !end.value) {
+        alert('Pilih rentang tanggal terlebih dahulu')
         return
     }
     exporting.value = true
     try {
         const startStr = formatDateForFilename(start.value)
-        const endStr = formatDateForFilename(end.value)
-        const filenameBase = `Akurasi_${jenisCanonical.value}_${startStr}_s_d_${endStr}`
-        if (format.value === 'pdf') {
-            const doc = generateMingguanPDF(rows.value, {
-                startDate: start.value, endDate: end.value, jenisPerkara: jenisCanonical.value
-            })
-            downloadPDF(doc, `${filenameBase}.pdf`)
-        } else {
-            const doc = await generateMingguanDOCX(rows.value, {
-                startDate: start.value, endDate: end.value, jenisPerkara: jenisCanonical.value
-            })
-            await downloadDOCX(doc, `${filenameBase}.docx`)
-        }
-        console.log(`File ${format.value.toUpperCase()} berhasil dibuat`)
+        const endStr   = formatDateForFilename(end.value)
+        const ext      = format.value === 'pdf' ? 'pdf' : 'docx'
+        const filename = `Akurasi_${jenisCanonical.value}_${startStr}_sd_${endStr}.${ext}`
+        const blob     = await downloadLaporanMingguan(jenisCanonical.value, start.value, end.value, format.value)
+        const url      = URL.createObjectURL(blob)
+        const a        = document.createElement('a')
+        a.href         = url
+        a.download     = filename
+        a.click()
+        URL.revokeObjectURL(url)
     } catch (err) {
         console.error('Export failed:', err.message)
         alert('Gagal membuat file: ' + err.message)
@@ -101,7 +96,7 @@ async function handleExport() {
             v-model:format="format"
             :loading="loading"
             :exporting="exporting"
-            :can-export="rows.length > 0"
+            :can-export="!!(start && end)"
             @fetch="fetchData"
             @export="handleExport"
         />

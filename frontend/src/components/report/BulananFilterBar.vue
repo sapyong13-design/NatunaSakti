@@ -5,7 +5,7 @@ import Icon from '../Icon.vue'
 defineProps({
     bulan: { type: Number, required: true },
     tahun: { type: Number, required: true },
-    format: { type: String, default: 'pdf' },
+    format: { type: String, default: 'docx' },
     loading: { type: Boolean, default: false },
     exporting: { type: Boolean, default: false },
     canExport: { type: Boolean, default: false }

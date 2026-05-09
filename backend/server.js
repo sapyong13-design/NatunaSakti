@@ -13,7 +13,7 @@ const path = require('path');
 const fs = require('fs');
 const SIPPSyncService = require('./services/sippSyncService');
 const sippRoutes = require('./routes/sipp');
-const { generateLaporanBulanan, convertDocxToPdf } = require('./services/laporanService');
+const { generateLaporanBulanan, generateLaporanMingguan, convertDocxToPdf } = require('./services/laporanService');
 
 const app = express();
 const PORT = 3000;
@@ -616,6 +616,41 @@ app.get('/api/laporan/bulanan/:jenis', (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+app.get('/api/laporan/mingguan/:jenis', (req, res) => {
+    try {
+        const { jenis }  = req.params
+        const { start, end, format = 'docx' } = req.query
+
+        if (!start || !end) return res.status(400).json({ error: 'start dan end wajib diisi' })
+
+        const BULAN_NAMES = ['Januari','Februari','Maret','April','Mei','Juni',
+                             'Juli','Agustus','September','Oktober','November','Desember']
+        const jenisCapital = jenis.charAt(0).toUpperCase() + jenis.slice(1).toLowerCase()
+        const startDate    = new Date(start)
+        const bulanNama    = BULAN_NAMES[startDate.getMonth()]
+        const tahun        = startDate.getFullYear()
+        const mingguKe     = Math.min(5, Math.ceil(startDate.getDate() / 7))
+        const MINGGU_ROMAN = ['I','II','III','IV','V']
+
+        const docxBuf  = generateLaporanMingguan(db, jenisCapital, start, end)
+        const filename = `Akurasi_${jenisCapital}_${bulanNama}_MingguKe${MINGGU_ROMAN[mingguKe-1]}_${tahun}`
+
+        if (format === 'pdf') {
+            const pdfBuf = convertDocxToPdf(docxBuf)
+            res.setHeader('Content-Type', 'application/pdf')
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}.pdf"`)
+            return res.send(pdfBuf)
+        }
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}.docx"`)
+        res.send(docxBuf)
+    } catch (err) {
+        console.error('[LAPORAN-MINGGUAN] Error:', err.message)
+        res.status(500).json({ error: err.message })
+    }
+})
 
 // Error handler (should be last)
 app.use((err, req, res, next) => {

@@ -18,7 +18,7 @@ const jenisCanonical = computed(() => {
 
 const bulan = ref(new Date().getMonth() + 1)
 const tahun = ref(new Date().getFullYear())
-const format = ref('pdf')
+const format = ref('docx')
 const rows = ref([])
 const loading = ref(false)
 const exporting = ref(false)
