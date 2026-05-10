@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { parseDateIndo, formatDateIndo, formatTimeIndo } from '../../lib/date'
+import { parseDateIndo } from '../../lib/date'
 import Icon from '../Icon.vue'
 
 const props = defineProps({
