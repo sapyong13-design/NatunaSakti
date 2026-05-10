@@ -1,7 +1,11 @@
 <script setup>
+import { ref, onUnmounted } from 'vue'
 import { pihakUtama } from '../../lib/pihak'
 import { formatDateIndo } from '../../lib/date'
 import StatusBadge from './StatusBadge.vue'
+import ContextualActionMenu from './ContextualActionMenu.vue'
+import JadwalQuickPreview from './JadwalQuickPreview.vue'
+import EnhancedTooltip from './EnhancedTooltip.vue'
 
 const props = defineProps({
     rows: { type: Array, required: true },
@@ -9,7 +13,105 @@ const props = defineProps({
     upcomingPerkaraNumbers: { type: Array, default: () => [] }
 })
 
-const emit = defineEmits(['rowClick'])
+const emit = defineEmits(['rowClick', 'menuAction'])
+
+// Context menu state
+const contextMenu = ref({
+    show: false,
+    x: 0,
+    y: 0,
+    row: null
+})
+
+// Jadwal preview state
+const jadwalPreview = ref({
+    show: false,
+    x: 0,
+    y: 0,
+    row: null
+})
+
+// Enhanced tooltip state
+const enhancedTooltip = ref({
+    show: false,
+    x: 0,
+    y: 0,
+    row: null
+})
+
+let previewTimeout = null
+let tooltipTimeout = null
+
+function handleContextMenu(e, row) {
+    e.preventDefault()
+    contextMenu.value = {
+        show: true,
+        x: e.clientX,
+        y: e.clientY,
+        row
+    }
+}
+
+function handleMenuAction({ key, row }) {
+    emit('menuAction', { key, row })
+}
+
+function handleMouseEnter(e, row) {
+    // Clear existing timeout
+    if (previewTimeout) {
+        clearTimeout(previewTimeout)
+    }
+
+    // Show preview after 300ms delay
+    previewTimeout = setTimeout(() => {
+        const rect = e.target.getBoundingClientRect()
+        jadwalPreview.value = {
+            show: true,
+            x: rect.left,
+            y: rect.bottom + 4,
+            row
+        }
+    }, 300)
+}
+
+function handleMouseLeave() {
+    if (previewTimeout) {
+        clearTimeout(previewTimeout)
+    }
+    jadwalPreview.value.show = false
+}
+
+function handleTooltipMouseEnter(e, row) {
+    if (tooltipTimeout) {
+        clearTimeout(tooltipTimeout)
+    }
+
+    tooltipTimeout = setTimeout(() => {
+        const rect = e.target.getBoundingClientRect()
+        enhancedTooltip.value = {
+            show: true,
+            x: rect.left,
+            y: rect.bottom + 4,
+            row
+        }
+    }, 200)
+}
+
+function handleTooltipMouseLeave() {
+    if (tooltipTimeout) {
+        clearTimeout(tooltipTimeout)
+    }
+    enhancedTooltip.value.show = false
+}
+
+onUnmounted(() => {
+    if (previewTimeout) {
+        clearTimeout(previewTimeout)
+    }
+    if (tooltipTimeout) {
+        clearTimeout(tooltipTimeout)
+    }
+})
 
 function isUpcoming(row) {
     return props.upcomingPerkaraNumbers?.includes(row.nomor_perkara)
@@ -31,6 +133,26 @@ function jenisBg(jenis) {
 
 function formatDate(s) {
     return formatDateIndo(s)
+}
+
+// Parse lama_proses (e.g., "15 Hari", "1 Hari") to get days
+function parseLamaProses(lama) {
+    if (!lama) return 0
+    const match = lama.match(/(\d+)\s*(Hari|hari)/)
+    return match ? parseInt(match[1]) : 0
+}
+
+// Get progress color based on days
+function getLamaColor(days) {
+    if (days <= 30) return '#10b981'  // Green - fresh
+    if (days <= 90) return '#f59e0b'  // Yellow - moderate
+    if (days <= 180) return '#f97316' // Orange - long
+    return '#ef4444'                   // Red - very long
+}
+
+// Get progress width (max 365 days = 100%)
+function getLamaProgress(days) {
+    return Math.min((days / 365) * 100, 100)
 }
 </script>
 
@@ -66,6 +188,7 @@ function formatDate(s) {
                         class="ns-data-row"
                         :class="{ 'is-upcoming-row': isUpcoming(row) }"
                         @click="emit('rowClick', row)"
+                        @contextmenu="handleContextMenu($event, row)"
                     >
                         <td class="ns-sticky ns-col-no">{{ idx + 1 + props.startIndex }}</td>
                         <td class="ns-sticky ns-col-jenis">
@@ -80,17 +203,37 @@ function formatDate(s) {
                             </span>
                         </td>
                         <td class="ns-sticky ns-col-nomor">
-                            <span class="ns-nomor-text">{{ row.nomor_perkara }}</span>
+                            <span
+                                class="ns-nomor-text"
+                                @mouseenter="handleMouseEnter($event, row)"
+                                @mouseleave="handleMouseLeave"
+                            >{{ row.nomor_perkara }}</span>
                         </td>
                         <td class="ns-col-nama">
-                            <span class="ns-nama-text">{{ pihakUtama(row.para_pihak) }}</span>
+                            <span
+                                class="ns-nama-text"
+                                @mouseenter="handleTooltipMouseEnter($event, row)"
+                                @mouseleave="handleTooltipMouseLeave"
+                            >{{ pihakUtama(row.para_pihak) }}</span>
                         </td>
                         <td class="ns-col-register">{{ formatDate(row.sipp_tanggal_register) }}</td>
                         <td class="ns-col-status">
                             <StatusBadge v-if="row.sipp_status" :status="row.sipp_status" size="sm" />
                             <span v-else class="ns-status-text">—</span>
                         </td>
-                        <td class="ns-col-lama">{{ row.sipp_lama_proses || '—' }}</td>
+                        <td class="ns-col-lama">
+                            <div class="ns-lama-cell">
+                                <span class="ns-lama-text">{{ row.sipp_lama_proses || '—' }}</span>
+                                <div
+                                    v-if="row.sipp_lama_proses"
+                                    class="ns-lama-bar"
+                                    :style="{
+                                        width: getLamaProgress(parseLamaProses(row.sipp_lama_proses)) + '%',
+                                        background: getLamaColor(parseLamaProses(row.sipp_lama_proses))
+                                    }"
+                                ></div>
+                            </div>
+                        </td>
                     </tr>
                 </tbody>
             </table>
@@ -99,6 +242,31 @@ function formatDate(s) {
             <span class="ns-row-count">{{ rows.length }} perkara</span>
             <span class="ns-scroll-hint">← Scroll untuk lihat semua kolom →</span>
         </div>
+
+        <ContextualActionMenu
+            :show="contextMenu.show"
+            :x="contextMenu.x"
+            :y="contextMenu.y"
+            :row="contextMenu.row"
+            @close="contextMenu.show = false"
+            @action="handleMenuAction"
+        />
+
+        <JadwalQuickPreview
+            :show="jadwalPreview.show"
+            :x="jadwalPreview.x"
+            :y="jadwalPreview.y"
+            :row="jadwalPreview.row"
+            @close="jadwalPreview.show = false"
+        />
+
+        <EnhancedTooltip
+            :show="enhancedTooltip.show"
+            :x="enhancedTooltip.x"
+            :y="enhancedTooltip.y"
+            :row="enhancedTooltip.row"
+            @close="enhancedTooltip.show = false"
+        />
     </div>
 </template>
 
@@ -256,7 +424,23 @@ function formatDate(s) {
 }
 
 .ns-col-lama {
-    width: 90px;
+    width: 120px;
+}
+
+.ns-lama-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ns-lama-text {
+    font-size: 12px;
+}
+
+.ns-lama-bar {
+    height: 3px;
+    border-radius: 2px;
+    transition: width 300ms ease;
 }
 
 /* Cell content */

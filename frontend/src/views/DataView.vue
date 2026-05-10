@@ -309,6 +309,27 @@ function handleRowClick(row) {
     selectedRow.value = row
 }
 
+// Handle context menu actions
+function handleMenuAction({ key, row }) {
+    switch (key) {
+        case 'detail':
+            handleRowClick(row)
+            break
+        case 'refresh':
+            showToast('success', `Refresh jadwal ${row.nomor_perkara}`)
+            // TODO: Implement jadwal refresh
+            break
+        case 'copy':
+            navigator.clipboard.writeText(row.nomor_perkara)
+            showToast('success', 'Nomor perkara disalin')
+            break
+        case 'sipp':
+            const sippUrl = `https://sipp.badilum.net/natuna/perkara/${row.nomor_perkara.replace(/\//g, '-')}`
+            window.open(sippUrl, '_blank')
+            break
+    }
+}
+
 // Watch for detail panel close to restore scroll position
 watch(selectedRow, (newVal, oldVal) => {
     if (oldVal && !newVal) {
@@ -463,6 +484,7 @@ onMounted(() => {
                 :start-index="(currentPage - 1) * itemsPerPage"
                 :upcoming-perkara-numbers="upcomingPerkaraNumbers"
                 @row-click="handleRowClick"
+                @menu-action="handleMenuAction"
             />
 
             <!-- Kanban View -->
