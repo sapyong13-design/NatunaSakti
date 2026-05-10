@@ -7,14 +7,17 @@ const props = defineProps({
 })
 
 const statusConfig = {
-    'Minutasi': { variant: 'success', label: 'Minutasi' },
-    'minutasi': { variant: 'success', label: 'Minutasi' },
-    'Sedang Sidang': { variant: 'warning', label: 'Sedang Sidang' },
-    'sidang': { variant: 'warning', label: 'Sidang' },
-    'Proses': { variant: 'info', label: 'Proses' },
-    'proses': { variant: 'info', label: 'Proses' },
-    'Test': { variant: 'danger', label: 'Test' },
-    'test': { variant: 'danger', label: 'Test' },
+    'Minutasi': { variant: 'success', label: 'Minutasi', pulse: false },
+    'minutasi': { variant: 'success', label: 'Minutasi', pulse: false },
+    'MINUTASI': { variant: 'success', label: 'Minutasi', pulse: false },
+    'Persidangan': { variant: 'warning', label: 'Bersidang', pulse: true },
+    'PERSIDANGAN': { variant: 'warning', label: 'Bersidang', pulse: true },
+    'Sedang Sidang': { variant: 'warning', label: 'Sedang Sidang', pulse: true },
+    'sidang': { variant: 'warning', label: 'Sidang', pulse: false },
+    'Proses': { variant: 'info', label: 'Proses', pulse: false },
+    'proses': { variant: 'info', label: 'Proses', pulse: false },
+    'Test': { variant: 'danger', label: 'Test', pulse: false },
+    'test': { variant: 'danger', label: 'Test', pulse: false },
 }
 
 const config = computed(() => {
@@ -23,7 +26,8 @@ const config = computed(() => {
 </script>
 
 <template>
-    <span class="ns-status-badge" :class="[`ns-status-${config.variant}`, `ns-status-${size}`]">
+    <span class="ns-status-badge" :class="[`ns-status-${config.variant}`, `ns-status-${size}`, { 'has-pulse': config.pulse }]">
+        <span v-if="config.pulse" class="ns-status-pulse"></span>
         <span class="ns-status-dot"></span>
         {{ config.label }}
     </span>
@@ -41,6 +45,42 @@ const config = computed(() => {
     text-transform: uppercase;
     letter-spacing: 0.05em;
     white-space: nowrap;
+    position: relative;
+}
+
+/* Pulse animation for active status */
+.ns-status-badge.has-pulse {
+    position: relative;
+}
+
+.ns-status-pulse {
+    position: absolute;
+    left: 6px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--warn, #f59e0b);
+    animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+@keyframes pulse-ring {
+    0% {
+        transform: scale(0.8);
+        opacity: 0.8;
+    }
+    50% {
+        transform: scale(2);
+        opacity: 0.3;
+    }
+    100% {
+        transform: scale(0.8);
+        opacity: 0.8;
+    }
+}
+
+.ns-status-badge.has-pulse .ns-status-dot {
+    position: relative;
+    z-index: 1;
 }
 
 .ns-status-badge.ns-status-sm {

@@ -5,10 +5,15 @@ import StatusBadge from './StatusBadge.vue'
 
 const props = defineProps({
     rows: { type: Array, required: true },
-    startIndex: { type: Number, default: 0 }
+    startIndex: { type: Number, default: 0 },
+    upcomingPerkaraNumbers: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits(['rowClick'])
+
+function isUpcoming(row) {
+    return props.upcomingPerkaraNumbers?.includes(row.nomor_perkara)
+}
 
 function jenisColor(jenis) {
     if (jenis === 'Pidana') return '#C75B4A'
@@ -59,6 +64,7 @@ function formatDate(s) {
                         v-for="(row, idx) in rows"
                         :key="row.id || row.nomor_perkara"
                         class="ns-data-row"
+                        :class="{ 'is-upcoming-row': isUpcoming(row) }"
                         @click="emit('rowClick', row)"
                     >
                         <td class="ns-sticky ns-col-no">{{ idx + 1 + props.startIndex }}</td>
@@ -163,7 +169,7 @@ function formatDate(s) {
 
 .ns-data-row {
     cursor: pointer;
-    transition: background 120ms ease;
+    transition: background 120ms ease, box-shadow 120ms ease;
 }
 
 .ns-data-row:hover {
@@ -172,6 +178,37 @@ function formatDate(s) {
 
 .ns-data-row:hover .ns-sticky {
     background: var(--surface-2);
+}
+
+/* Priority highlighting for upcoming sidang */
+.ns-data-row.is-upcoming-row {
+    position: relative;
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.02));
+    box-shadow: inset 3px 0 0 0 #f59e0b;
+}
+
+.ns-data-row.is-upcoming-row::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, #f59e0b, #d97706);
+}
+
+.ns-data-row.is-upcoming-row:hover {
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04));
+    box-shadow: inset 3px 0 0 0 #f59e0b, 0 2px 8px rgba(245, 158, 11, 0.15);
+}
+
+[data-mode="dark"] .ns-data-row.is-upcoming-row {
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.03));
+}
+
+[data-mode="dark"] .ns-data-row.is-upcoming-row:hover {
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.05));
+    box-shadow: inset 3px 0 0 0 #f59e0b, 0 2px 12px rgba(245, 158, 11, 0.25);
 }
 
 /* Sticky columns */

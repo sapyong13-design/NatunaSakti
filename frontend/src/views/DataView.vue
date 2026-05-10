@@ -1,13 +1,15 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import PageHeader from '../components/shell/PageHeader.vue'
 import StatsStrip from '../components/dashboard/StatsStrip.vue'
+import QuickStatsCards from '../components/dashboard/QuickStatsCards.vue'
 import TrendCard from '../components/dashboard/TrendCard.vue'
 import MiniStatCard from '../components/dashboard/MiniStatCard.vue'
 import ToolbarFilters from '../components/dashboard/ToolbarFilters.vue'
 import SyncCluster from '../components/dashboard/SyncCluster.vue'
 import QuickActions from '../components/dashboard/QuickActions.vue'
 import PerkaraTable from '../components/dashboard/PerkaraTable.vue'
+import KanbanBoard from '../components/dashboard/KanbanBoard.vue'
 import DetailPanel from '../components/dashboard/DetailPanel.vue'
 import Toast from '../components/dashboard/Toast.vue'
 import Skeleton from '../components/base/Skeleton.vue'
@@ -15,6 +17,7 @@ import EmptyState from '../components/base/EmptyState.vue'
 import FilterChip from '../components/base/FilterChip.vue'
 import Sparkline from '../components/base/Sparkline.vue'
 import Toggles from '../components/dashboard/Toggles.vue'
+import Icon from '../components/Icon.vue'
 import { getPerkara, getSippStatus, getPerkaraTrendMonthly, getPerkaraTrendYearly } from '../lib/api'
 
 const rows = ref([])
@@ -24,6 +27,7 @@ const isDark = ref(document.documentElement.dataset.mode === 'dark')
 const loading = ref(true)
 const density = ref('default')
 const compareMode = ref(false)
+const viewMode = ref('table') // table, kanban
 
 // Quick filter states
 const quickFilter = ref('all') // all, thisYear
@@ -42,6 +46,7 @@ const filterStatus = ref('Semua')
 const selectedTrendYear = ref(2026)
 
 const selectedRow = ref(null)
+const scrollPosition = ref(0)
 
 // Pagination state
 const currentPage = ref(1)
@@ -136,6 +141,35 @@ const stats = computed(() => ({
         return true
     }).length
 }))
+
+// Quick stats for cards
+const quickStats = computed(() => ({
+    total: rows.value.length,
+    bersidang: rows.value.filter(r => r.sipp_status === 'Persidangan' || r.sipp_status === 'PERSIDANGAN').length,
+    minutasi: rows.value.filter(r => r.sipp_status === 'Minutasi' || r.sipp_status === 'MINUTASI').length
+}))
+
+// Perkara with upcoming sidang (today/tomorrow) or actively in court
+const upcomingPerkaraNumbers = computed(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    return rows.value
+        .filter(r => {
+            // Highlight if actively in court
+            if (r.sipp_status === 'Persidangan' || r.sipp_status === 'PERSIDANGAN') return true
+
+            // Or if registered within last 7 days
+            const regDate = parseTanggal(r.sipp_tanggal_register)
+            if (regDate) {
+                const daysSinceReg = Math.floor((today - regDate) / (1000 * 60 * 60 * 24))
+                if (daysSinceReg <= 7 && daysSinceReg >= 0) return true
+            }
+
+            return false
+        })
+        .map(r => r.nomor_perkara)
+})
 
 const monthMap = { jan:0, feb:1, mar:2, apr:3, mei:4, jun:5, jul:6, agu:7, sep:8, okt:9, nov:10, des:11, may:4, aug:7, oct:9, dec:11 }
 
@@ -269,6 +303,25 @@ function handleRefresh() {
     window.dispatchEvent(new CustomEvent('sipp-synced'))
 }
 
+// Save scroll position before opening detail panel
+function handleRowClick(row) {
+    scrollPosition.value = window.pageYOffset || document.documentElement.scrollTop
+    selectedRow.value = row
+}
+
+// Watch for detail panel close to restore scroll position
+watch(selectedRow, (newVal, oldVal) => {
+    if (oldVal && !newVal) {
+        // Detail panel was just closed
+        nextTick(() => {
+            window.scrollTo({
+                top: scrollPosition.value,
+                behavior: 'instant'
+            })
+        })
+    }
+})
+
 onMounted(() => {
     loadAll()
     const observer = new MutationObserver(() => {
@@ -290,6 +343,9 @@ onMounted(() => {
         >
             <StatsStrip :stats="stats" />
         </PageHeader>
+
+        <!-- Quick Stats Cards -->
+        <QuickStatsCards :stats="quickStats" />
 
         <!-- Quick Filter Chips -->
         <div class="ns-quick-filters">
@@ -366,6 +422,25 @@ onMounted(() => {
                 :tahun-options="tahunOptions"
             />
             <div class="ns-toolbar-right">
+                <!-- View Mode Toggle -->
+                <div class="ns-view-toggle">
+                    <button
+                        class="ns-view-btn"
+                        :class="{ active: viewMode === 'table' }"
+                        @click="viewMode = 'table'"
+                        title="Tabel View"
+                    >
+                        <Icon name="menu" :size="14" />
+                    </button>
+                    <button
+                        class="ns-view-btn"
+                        :class="{ active: viewMode === 'kanban' }"
+                        @click="viewMode = 'kanban'"
+                        title="Kanban View"
+                    >
+                        <Icon name="filter" :size="14" />
+                    </button>
+                </div>
                 <Toggles type="density" v-model="density" />
                 <SyncCluster :count="filtered.length" :total="rows.length" @synced="loadAll" />
                 <QuickActions :rows="filtered" @refresh="handleRefresh" />
@@ -381,14 +456,24 @@ onMounted(() => {
             :description="search || filterJenis !== 'Semua' ? 'Coba sesuaikan filter pencarian Anda' : 'Belum ada data perkara yang tersedia'"
         />
         <template v-else>
+            <!-- Table View -->
             <PerkaraTable
+                v-if="viewMode === 'table'"
                 :rows="paginatedRows"
                 :start-index="(currentPage - 1) * itemsPerPage"
-                @row-click="selectedRow = $event"
+                :upcoming-perkara-numbers="upcomingPerkaraNumbers"
+                @row-click="handleRowClick"
             />
 
-            <!-- Pagination -->
-            <div v-if="totalPages > 1" class="ns-pagination">
+            <!-- Kanban View -->
+            <KanbanBoard
+                v-else
+                :rows="filtered"
+                @row-click="handleRowClick"
+            />
+
+            <!-- Pagination (only for table view) -->
+            <div v-if="viewMode === 'table' && totalPages > 1" class="ns-pagination">
                 <span class="ns-pagination-info">
                     Menampilkan {{ ((currentPage - 1) * itemsPerPage) + 1 }}-{{ Math.min(currentPage * itemsPerPage, filtered.length) }} dari {{ filtered.length }} perkara
                 </span>
@@ -574,6 +659,49 @@ onMounted(() => {
     display: flex;
     align-items: center;
     gap: 12px;
+}
+
+/* View Mode Toggle */
+.ns-view-toggle {
+    display: flex;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 2px;
+}
+
+.ns-view-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+
+.ns-view-btn:hover {
+    color: var(--text);
+    background: var(--surface-2);
+}
+
+.ns-view-btn.active {
+    color: var(--accent);
+    background: var(--accent-soft);
+}
+
+[data-mode="light"] .ns-view-toggle {
+    background: #f3f4f6;
+    border-color: #e5e7eb;
+}
+
+[data-mode="dark"] .ns-view-toggle {
+    background: #1e2129;
+    border-color: #2d3748;
 }
 
 /* Grain texture overlay */
