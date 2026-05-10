@@ -565,10 +565,28 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* Cards Row Layout */
+.ns-c-cards-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: start;
+    margin-bottom: 20px;
+}
+
 .ns-c-trend-wrapper {
     position: relative;
     overflow-x: auto;
     overflow-y: visible;
+    min-width: 0;
+}
+
+.ns-c-side-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 220px;
+    flex-shrink: 0;
 }
 
 .ns-year-select {
@@ -829,5 +847,23 @@ onMounted(() => {
     padding: 0 4px;
     color: var(--text3);
     font-size: 13px;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .ns-c-cards-row {
+        grid-template-columns: 1fr;
+    }
+
+    .ns-c-side-cards {
+        width: 100%;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .ns-c-avg-card {
+        flex: 1;
+        min-width: 200px;
+    }
 }
 </style>
