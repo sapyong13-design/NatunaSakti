@@ -10,8 +10,6 @@ import SyncCluster from '../components/dashboard/SyncCluster.vue'
 import QuickActions from '../components/dashboard/QuickActions.vue'
 import PerkaraTable from '../components/dashboard/PerkaraTable.vue'
 import KanbanBoard from '../components/dashboard/KanbanBoard.vue'
-import TimelineVisualizer from '../components/dashboard/TimelineVisualizer.vue'
-import HeatmapCalendar from '../components/dashboard/HeatmapCalendar.vue'
 import DetailPanel from '../components/dashboard/DetailPanel.vue'
 import Toast from '../components/dashboard/Toast.vue'
 import Skeleton from '../components/base/Skeleton.vue'
@@ -413,19 +411,6 @@ onMounted(() => {
                 />
             </div>
         </div>
-
-        <!-- Timeline Visualizer -->
-        <TimelineVisualizer
-            v-if="!loading && rows.length > 0"
-            :rows="rows"
-            @perkara-click="handleRowClick"
-        />
-
-        <!-- Heatmap Calendar -->
-        <HeatmapCalendar
-            v-if="!loading && rows.length > 0"
-            :rows="rows"
-        />
 
         <div class="ns-toolbar">
             <ToolbarFilters
