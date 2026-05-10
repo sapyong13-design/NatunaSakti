@@ -166,6 +166,7 @@ function getLamaProgress(days) {
                         <th class="ns-sticky ns-col-jenis">Jenis</th>
                         <th class="ns-sticky ns-col-nomor">Nomor Perkara</th>
                         <th class="ns-col-nama">Nama</th>
+                        <th class="ns-col-klasifikasi">Jenis Perkara</th>
                         <th class="ns-col-register">Tgl Register</th>
                         <th class="ns-col-status">Status</th>
                         <th class="ns-col-lama">Lama</th>
@@ -173,7 +174,7 @@ function getLamaProgress(days) {
                 </thead>
                 <tbody>
                     <tr v-if="!rows.length">
-                        <td colspan="7" class="ns-empty-cell">
+                        <td colspan="8" class="ns-empty-cell">
                             <div class="ns-empty-state">
                                 <div class="ns-empty-icon">📋</div>
                                 <div class="ns-empty-text">Tidak ada perkara</div>
@@ -215,6 +216,9 @@ function getLamaProgress(days) {
                                 @mouseenter="handleTooltipMouseEnter($event, row)"
                                 @mouseleave="handleTooltipMouseLeave"
                             >{{ pihakUtama(row.para_pihak) }}</span>
+                        </td>
+                        <td class="ns-col-klasifikasi">
+                            <span class="ns-klasifikasi-text">{{ row.sipp_klasifikasi || row.nama_perkara || '—' }}</span>
                         </td>
                         <td class="ns-col-register">{{ formatDate(row.sipp_tanggal_register) }}</td>
                         <td class="ns-col-status">
@@ -412,6 +416,18 @@ function getLamaProgress(days) {
 .ns-col-nama {
     min-width: 160px;
     max-width: 220px;
+}
+
+.ns-col-klasifikasi {
+    min-width: 140px;
+    max-width: 200px;
+}
+
+.ns-klasifikasi-text {
+    display: block;
+    font-size: 12px;
+    color: var(--text-2);
+    line-height: 1.4;
 }
 
 .ns-col-register {

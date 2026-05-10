@@ -149,24 +149,13 @@ const quickStats = computed(() => ({
     minutasi: rows.value.filter(r => r.sipp_status === 'Minutasi' || r.sipp_status === 'MINUTASI').length
 }))
 
-// Perkara with upcoming sidang (today/tomorrow) or actively in court
+// Perkara yang sedang bersidang (highlight kuning)
 const upcomingPerkaraNumbers = computed(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
     return rows.value
         .filter(r => {
-            // Highlight if actively in court
-            if (r.sipp_status === 'Persidangan' || r.sipp_status === 'PERSIDANGAN') return true
-
-            // Or if registered within last 7 days
-            const regDate = parseTanggal(r.sipp_tanggal_register)
-            if (regDate) {
-                const daysSinceReg = Math.floor((today - regDate) / (1000 * 60 * 60 * 24))
-                if (daysSinceReg <= 7 && daysSinceReg >= 0) return true
-            }
-
-            return false
+            // Highlight if actively in court (status contains "sidang")
+            const status = (r.sipp_status || '').toLowerCase()
+            return status.includes('sidang')
         })
         .map(r => r.nomor_perkara)
 })
