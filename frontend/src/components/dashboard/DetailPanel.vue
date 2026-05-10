@@ -51,6 +51,27 @@ const jadwalTanpaTanggal = computed(() => {
     return jadwal.value.filter((j, i) => !getMonthFromIndoDate(j.tanggal))
 })
 
+// Get the last jadwal index (for Minutasi "Selesai" badge)
+const lastJadwalIndex = computed(() => {
+    return jadwal.value.length > 0 ? jadwal.value.length - 1 : -1
+})
+
+// Check if this is the last jadwal
+function isLastJadwal(originalIndex) {
+    return originalIndex === lastJadwalIndex.value
+}
+
+// Check if a jadwal object is the last one (for jadwal tanpa tanggal)
+function isLastJadwalItem(jadwalItem) {
+    if (lastJadwalIndex.value < 0) return false
+    const lastJadwal = jadwal.value[lastJadwalIndex.value]
+    // Compare by reference or by unique properties
+    return lastJadwal === jadwalItem ||
+           (lastJadwal.tanggal === jadwalItem.tanggal &&
+            lastJadwal.agenda === jadwalItem.agenda &&
+            lastJadwal.ruangan === jadwalItem.ruangan)
+}
+
 // Get jenis sidang color
 function getJenisColor(jenis) {
     const colors = {
@@ -64,6 +85,20 @@ function getJenisColor(jenis) {
         'Replik': '#84cc16'
     }
     return colors[jenis] || '#9ca3af'
+}
+
+// Get jenis perkara gradient for header
+function getJenisPerkaraGradient(jenis) {
+    const gradients = {
+        'Pidana': 'linear-gradient(135deg, #C75B4A 0%, #a84838 100%)',
+        'Perdata': 'linear-gradient(135deg, #4A7C59 0%, #3a6349 100%)',
+        'Perikanan': 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)'
+    }
+    return gradients[jenis] || 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)'
+}
+
+function getJenisPerkaraTextColor(jenis) {
+    return '#ffffff'
 }
 
 // Calculate progress
@@ -130,9 +165,6 @@ async function handleDelete() {
 // Check if jadwal is upcoming, past, or completed
 function getJadwalStatus(jadwalItem, isMinutasi) {
     if (!jadwalItem.tanggal) return 'unknown'
-    // If perkara is Minutasi, mark the jadwal as completed
-    if (isMinutasi) return 'completed'
-
     // Parse Indonesian date format using utility
     const jadwalDate = parseDateIndo(jadwalItem.tanggal)
     if (!jadwalDate) return 'unknown'
@@ -154,13 +186,13 @@ watch(() => props.row, (newRow) => {
         </Transition>
         <Transition name="ns-panel">
             <aside v-if="open && row" class="ns-detail-panel">
-                <header class="ns-detail-head">
+                <header class="ns-detail-head" :style="{ background: getJenisPerkaraGradient(row.jenis_perkara) }">
                     <div>
                         <div class="ns-detail-eyebrow">{{ row.jenis_perkara }}</div>
                         <h2 class="ns-detail-title ns-mono">{{ row.nomor_perkara }}</h2>
                         <div class="ns-detail-pihak">{{ pihakUtama(row.para_pihak) }}</div>
                     </div>
-                    <button class="ns-icon-btn" type="button" @click="emit('close')" aria-label="Close">
+                    <button class="ns-icon-btn ns-icon-btn-light" type="button" @click="emit('close')" aria-label="Close">
                         <Icon name="close" :size="18" class="close-icon" />
                     </button>
                 </header>
@@ -196,7 +228,7 @@ watch(() => props.row, (newRow) => {
                         </div>
                     </div>
 
-                    <div class="ns-detail-section">
+                    <div class="ns-detail-section ns-jadwal-section">
                         <div class="ns-detail-section-title">Jadwal Sidang</div>
 
                         <!-- Progress Bar -->
@@ -240,9 +272,9 @@ watch(() => props.row, (newRow) => {
                                     :key="j.originalIndex"
                                     class="ns-jadwal-card"
                                     :class="{
-                                        'is-upcoming': getJadwalStatus(j, row.sipp_status === 'Minutasi') === 'upcoming',
-                                        'is-past': getJadwalStatus(j, row.sipp_status === 'Minutasi') === 'past',
-                                        'is-completed': getJadwalStatus(j, row.sipp_status === 'Minutasi') === 'completed' && (!j.alasanDitunda || j.alasanDitunda === '0'),
+                                        'is-upcoming': getJadwalStatus(j, false) === 'upcoming' && row.sipp_status !== 'Minutasi',
+                                        'is-past': getJadwalStatus(j, false) === 'past' && row.sipp_status !== 'Minutasi',
+                                        'is-completed': row.sipp_status === 'Minutasi' && isLastJadwal(j.originalIndex) && (!j.alasanDitunda || j.alasanDitunda === '0'),
                                         'is-postponed': j.alasanDitunda && j.alasanDitunda !== '0'
                                     }"
                                     :style="{
@@ -251,27 +283,27 @@ watch(() => props.row, (newRow) => {
                                 >
                                     <!-- Badges -->
                                     <div class="ns-jadwal-badges">
-                                        <!-- Scheduled Badge untuk Upcoming -->
-                                        <div v-if="getJadwalStatus(j, row.sipp_status === 'Minutasi') === 'upcoming'" class="ns-jadwal-scheduled-badge">
+                                        <!-- Selesai Badge HANYA untuk jadwal terakhir saat Minutasi -->
+                                        <div v-if="row.sipp_status === 'Minutasi' && isLastJadwal(j.originalIndex) && (!j.alasanDitunda || j.alasanDitunda === '0')" class="ns-jadwal-completed-badge">
+                                            <Icon name="check" :size="9" />
+                                            Selesai
+                                        </div>
+
+                                        <!-- Postponed Badge (tetap tampil meskipun Minutasi) -->
+                                        <div v-if="j.alasanDitunda && j.alasanDitunda !== '0'" class="ns-jadwal-postponed-badge">
+                                            <Icon name="gavel" :size="11" />
+                                            Ditunda
+                                        </div>
+
+                                        <!-- Scheduled Badge untuk Upcoming (bukan Minutasi) -->
+                                        <div v-else-if="getJadwalStatus(j, false) === 'upcoming' && row.sipp_status !== 'Minutasi'" class="ns-jadwal-scheduled-badge">
                                             <Icon name="clock" :size="11" />
                                             Dijadwalkan
                                         </div>
 
                                         <!-- Past Badge untuk jadwal yang sudah lewat (bukan Minutasi) -->
-                                        <div v-else-if="getJadwalStatus(j, row.sipp_status === 'Minutasi') === 'past' && row.sipp_status !== 'Minutasi'" class="ns-jadwal-past-badge">
+                                        <div v-else-if="getJadwalStatus(j, false) === 'past' && row.sipp_status !== 'Minutasi'" class="ns-jadwal-past-badge">
                                             Lewat
-                                        </div>
-
-                                        <!-- Completed Badge (hanya jika TIDAK ditunda) -->
-                                        <div v-if="row.sipp_status === 'Minutasi' && (!j.alasanDitunda || j.alasanDitunda === '0')" class="ns-jadwal-completed-badge">
-                                            <Icon name="check" :size="9" />
-                                            Selesai
-                                        </div>
-
-                                        <!-- Postponed Badge (palu kuning) -->
-                                        <div v-if="j.alasanDitunda && j.alasanDitunda !== '0'" class="ns-jadwal-postponed-badge">
-                                            <Icon name="gavel" :size="11" />
-                                            Ditunda
                                         </div>
                                     </div>
 
@@ -316,9 +348,15 @@ watch(() => props.row, (newRow) => {
                                 >
                                     <!-- Badges -->
                                     <div class="ns-jadwal-badges">
+                                        <!-- Postponed Badge (prioritas) -->
                                         <div v-if="j.alasanDitunda && j.alasanDitunda !== '0'" class="ns-jadwal-postponed-badge">
                                             <Icon name="gavel" :size="11" />
                                             Ditunda
+                                        </div>
+                                        <!-- Selesai Badge hanya untuk item terakhir saat Minutasi -->
+                                        <div v-else-if="row.sipp_status === 'Minutasi' && isLastJadwalItem(j) && (!j.alasanDitunda || j.alasanDitunda === '0')" class="ns-jadwal-completed-badge">
+                                            <Icon name="check" :size="9" />
+                                            Selesai
                                         </div>
                                     </div>
 
@@ -458,34 +496,23 @@ watch(() => props.row, (newRow) => {
     100% { transform: translateX(100%); }
 }
 
-/* Jadwal Sidang Timeline dengan Vertical Line */
+/* Jadwal Sidang Timeline dengan Vertical Line - Optimized */
 .ns-jadwal-timeline {
     position: relative;
     display: flex;
     flex-direction: column;
     gap: 12px;
+    /* CSS containment for better performance */
+    contain: layout style;
 }
 
-/* Vertical Timeline Line */
+/* Vertical Timeline Line - REMOVED */
 .ns-jadwal-timeline::before {
-    content: '';
-    position: absolute;
-    left: 23px;
-    top: 8px;
-    bottom: 8px;
-    width: 2px;
-    background: linear-gradient(180deg,
-        #0891b2 0%,
-        #d1d5db 50%,
-        #d1d5db 100%);
-    border-radius: 2px;
+    display: none;
 }
 
 [data-mode="dark"] .ns-jadwal-timeline::before {
-    background: linear-gradient(180deg,
-        #0891b2 0%,
-        #4a5568 50%,
-        #4a5568 100%);
+    display: none;
 }
 
 /* Month Header Styles */
@@ -527,7 +554,7 @@ watch(() => props.row, (newRow) => {
     box-shadow: 0 0 0 4px #1a1d23;
 }
 
-/* Jadwal Card */
+/* Jadwal Card - Optimized for performance */
 .ns-jadwal-card {
     position: relative;
     display: flex;
@@ -538,8 +565,10 @@ watch(() => props.row, (newRow) => {
     border: 1px solid var(--border);
     border-radius: 12px;
     border-left: 3px solid var(--border);
-    transition: all 200ms cubic-bezier(0.32, 0.72, 0, 1);
-    animation: fadeInSlide 0.3s ease-out backwards;
+    /* CSS containment - isolates repaints */
+    contain: layout style paint;
+    /* Simplified animation */
+    animation: fadeInSlide 0.15s ease-out backwards;
 }
 
 [data-mode="light"] .ns-jadwal-card {
@@ -552,7 +581,7 @@ watch(() => props.row, (newRow) => {
     border-color: #2d3748;
 }
 
-/* Timeline Dot */
+/* Timeline Dot - Optimized */
 .ns-jadwal-card::after {
     content: '';
     position: absolute;
@@ -563,7 +592,10 @@ watch(() => props.row, (newRow) => {
     background: var(--surface);
     border: 2px solid var(--border);
     border-radius: 50%;
-    transition: all 200ms ease;
+    /* GPU acceleration */
+    transform: translateZ(0);
+    will-change: transform, background-color, border-color;
+    transition: transform 150ms ease, background-color 150ms ease, border-color 150ms ease;
     z-index: 1;
 }
 
@@ -577,30 +609,34 @@ watch(() => props.row, (newRow) => {
     border-color: #4a5568;
 }
 
+/* Simplified hover effect - no shadow for performance */
 .ns-jadwal-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-}
-
-[data-mode="dark"] .ns-jadwal-card:hover {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    border-left-width: 4px;
 }
 
 .ns-jadwal-card:hover::after {
     background: var(--accent);
     border-color: var(--accent);
-    transform: scale(1.3);
+    transform: scale(1.1);
 }
 
 .ns-jadwal-card.is-upcoming::after {
     background: var(--accent);
     border-color: var(--accent);
-    box-shadow: 0 0 0 4px rgba(8, 145, 178, 0.15);
+    box-shadow: 0 0 0 2px rgba(8, 145, 178, 0.1);
 }
 
 .ns-jadwal-card.is-completed::after {
-    background: var(--success);
-    border-color: var(--success);
+    background: #10b981;
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+    transform: scale(1.1) translateZ(0);
+}
+
+[data-mode="dark"] .ns-jadwal-card.is-completed::after {
+    background: #10b981;
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
 }
 
 .ns-jadwal-card.is-postponed::after {
@@ -608,22 +644,12 @@ watch(() => props.row, (newRow) => {
     border-color: var(--warn);
 }
 
-/* Staggered Animation Delays */
-.ns-jadwal-timeline > *:nth-child(1) { animation-delay: 0ms; }
-.ns-jadwal-timeline > *:nth-child(2) { animation-delay: 50ms; }
-.ns-jadwal-timeline > *:nth-child(3) { animation-delay: 100ms; }
-.ns-jadwal-timeline > *:nth-child(4) { animation-delay: 150ms; }
-.ns-jadwal-timeline > *:nth-child(5) { animation-delay: 200ms; }
-.ns-jadwal-timeline > *:nth-child(6) { animation-delay: 250ms; }
-
 @keyframes fadeInSlide {
     from {
         opacity: 0;
-        transform: translateY(12px);
     }
     to {
         opacity: 1;
-        transform: translateY(0);
     }
 }
 
@@ -643,19 +669,17 @@ watch(() => props.row, (newRow) => {
         transparent 100%);
 }
 
+/* Ensure completed card styling is applied with high priority */
 .ns-jadwal-card.is-completed {
-    border-left-color: var(--success);
-    background: linear-gradient(135deg,
-        rgba(16, 185, 129, 0.06) 0%,
-        rgba(16, 185, 129, 0.02) 50%,
-        transparent 100%);
+    border-left: 5px solid #10b981 !important;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.12) 50%, rgba(16, 185, 129, 0.05) 100%) !important;
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.4), 0 4px 16px rgba(16, 185, 129, 0.2) !important;
 }
 
 [data-mode="dark"] .ns-jadwal-card.is-completed {
-    background: linear-gradient(135deg,
-        rgba(16, 185, 129, 0.12) 0%,
-        rgba(16, 185, 129, 0.04) 50%,
-        transparent 100%);
+    border-left: 5px solid #10b981 !important;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.35) 0%, rgba(16, 185, 129, 0.18) 50%, rgba(16, 185, 129, 0.08) 100%) !important;
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.5), 0 4px 20px rgba(16, 185, 129, 0.3) !important;
 }
 
 .ns-jadwal-card.is-past {
@@ -704,7 +728,15 @@ watch(() => props.row, (newRow) => {
 .ns-jadwal-completed-badge {
     background: linear-gradient(135deg, #10b981, #059669);
     color: #ffffff;
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+    border: 1px solid #059669;
+}
+
+/* Ensure completed badge overrides other styles */
+.ns-jadwal-badges .ns-jadwal-completed-badge {
+    background: linear-gradient(135deg, #10b981, #059669) !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.5) !important;
 }
 
 .ns-jadwal-postponed-badge {
@@ -1031,6 +1063,10 @@ watch(() => props.row, (newRow) => {
     transform: scale(0.92);
 }
 
+.ns-icon-btn-light:active {
+    transform: scale(0.92);
+}
+
 .ns-icon-btn:hover :deep(.refresh-icon) {
     transform: rotate(180deg);
 }
@@ -1039,8 +1075,13 @@ watch(() => props.row, (newRow) => {
     transform: rotate(90deg);
 }
 
+.ns-icon-btn-light:hover :deep(.close-icon) {
+    transform: rotate(90deg);
+}
+
 .ns-icon-btn :deep(.refresh-icon),
-.ns-icon-btn :deep(.close-icon) {
+.ns-icon-btn :deep(.close-icon),
+.ns-icon-btn-light :deep(.close-icon) {
     transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -1057,6 +1098,10 @@ watch(() => props.row, (newRow) => {
 .ns-detail-panel {
     background: var(--surface);
     color: var(--text);
+    /* GPU acceleration for smooth animations */
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-font-smoothing: antialiased;
 }
 
 [data-mode="light"] .ns-detail-panel {
@@ -1072,8 +1117,9 @@ watch(() => props.row, (newRow) => {
     justify-content: space-between;
     align-items: flex-start;
     gap: 16px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--border);
+    padding: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid transparent;
 }
 
 .ns-detail-head > div {
@@ -1081,50 +1127,93 @@ watch(() => props.row, (newRow) => {
     min-width: 0;
 }
 
-[data-mode="light"] .ns-detail-head {
-    border-bottom-color: #e5e7eb;
-}
-
-[data-mode="dark"] .ns-detail-head {
-    border-bottom-color: #2d3748;
-}
-
 .ns-detail-eyebrow {
     font-size: 11px;
-    font-weight: 600;
-    color: #6b7280;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 4px;
-}
-
-[data-mode="dark"] .ns-detail-eyebrow {
-    color: #9ca3af;
+    letter-spacing: 0.1em;
+    margin-bottom: 6px;
 }
 
 .ns-detail-title {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 700;
-    color: #1f2937;
-    margin: 0 0 6px;
-}
-
-[data-mode="dark"] .ns-detail-title {
-    color: #f3f4f6;
+    color: #ffffff;
+    margin: 0 0 8px;
 }
 
 .ns-detail-pihak {
     font-size: 14px;
-    color: #4b5563;
+    color: rgba(255, 255, 255, 0.95);
     line-height: 1.5;
 }
 
-[data-mode="dark"] .ns-detail-pihak {
-    color: #d1d5db;
+/* Light icon button for colored header */
+.ns-icon-btn-light {
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+}
+
+.ns-icon-btn-light:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.25);
 }
 
 .ns-detail-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
     padding: 16px 22px;
+    position: relative;
+    /* Smooth scroll optimizations */
+    -webkit-overflow-scrolling: touch;
+    /* Enable GPU acceleration for smoother scrolling */
+    transform: translateZ(0);
+}
+
+/* Custom scrollbar for webkit browsers */
+.ns-detail-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.ns-detail-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.ns-detail-body::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+
+.ns-detail-body::-webkit-scrollbar-thumb:hover {
+    background: var(--text-3);
+}
+
+/* Sticky Jadwal Sidang Section */
+.ns-jadwal-section {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 10 !important;
+    background: var(--surface);
+    padding: 16px;
+    margin: -16px -22px 16px -22px;
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+}
+
+[data-mode="light"] .ns-jadwal-section {
+    background: rgba(255, 255, 255, 0.98);
+    border-bottom-color: #e5e7eb;
+}
+
+[data-mode="dark"] .ns-jadwal-section {
+    background: rgba(26, 29, 35, 0.98);
+    border-bottom-color: #2d3748;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
 .ns-detail-status-card {
@@ -1226,18 +1315,15 @@ watch(() => props.row, (newRow) => {
 }
 
 .ns-detail-actions {
+    position: sticky;
+    bottom: 0;
     display: flex;
     gap: 10px;
-    padding-top: 16px;
+    padding: 16px 0;
+    margin: 16px 0 0 0;
     border-top: 1px solid var(--border);
-}
-
-[data-mode="light"] .ns-detail-actions {
-    border-top-color: #e5e7eb;
-}
-
-[data-mode="dark"] .ns-detail-actions {
-    border-top-color: #2d3748;
+    background: transparent;
+    z-index: 5;
 }
 
 .ns-icon-btn {

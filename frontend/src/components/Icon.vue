@@ -37,7 +37,9 @@ const ICONS = {
     crown:        { vb: '0 0 24 24', sw: 1.8, body: '<path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/><path d="M6 12v4"/><path d="M10 12v4"/><path d="M14 12v4"/><path d="M18 12v4"/>' },
     moreHorizontal:{ vb: '0 0 24 24', sw: 2,   body: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>' },
     filter:       { vb: '0 0 24 24', sw: 1.8, body: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>' },
-    download:     { vb: '0 0 24 24', sw: 1.8, body: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>' }
+    download:     { vb: '0 0 24 24', sw: 1.8, body: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>' },
+    location:     { vb: '0 0 24 24', sw: 1.8, body: '<path d="M20 10c0 5.52-4.48 10-10 10S0 15.52 0 10 4.48 0 10 0s10 4.48 10 10z"/><circle cx="10" cy="10" r="3"/>' },
+    alert:        { vb: '0 0 24 24', sw: 1.8, body: '<path d="M12 2v4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="m8 8 2 2 4-4"/>' }
 }
 </script>
 

@@ -551,7 +551,7 @@ app.get('/api/perkara/trend/monthly', (req, res) => {
         }
 
         const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-        const buckets = Array.from({ length: 12 }, () => ({ pidana: 0, perdata: 0 }));
+        const buckets = Array.from({ length: 12 }, () => ({ pidana: 0, perdata: 0, perikanan: 0 }));
 
         for (const r of rows) {
             const d = parseTanggal(r.sipp_tanggal_register);
@@ -561,16 +561,62 @@ app.get('/api/perkara/trend/monthly', (req, res) => {
             if (monthIdx < 0 || monthIdx > 11) continue;
             if (r.jenis_perkara === 'Pidana') buckets[monthIdx].pidana++;
             else if (r.jenis_perkara === 'Perdata') buckets[monthIdx].perdata++;
+            else if (r.jenis_perkara === 'Perikanan') buckets[monthIdx].perikanan++;
         }
 
         const result = buckets.map((b, i) => ({
             month: monthNames[i],
             pidana: b.pidana,
-            perdata: b.perdata
+            perdata: b.perdata,
+            perikanan: b.perikanan
         }));
         res.json(result);
     } catch (error) {
         console.error('[TREND-MONTHLY] error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Trend pendaftaran per tahun (yearly trend for all years)
+app.get('/api/perkara/trend/yearly', (req, res) => {
+    try {
+        const rows = db.prepare(`
+            SELECT jenis_perkara, tahun_masuk
+            FROM perkara
+            WHERE tahun_masuk IS NOT NULL
+        `).all();
+
+        // Get all unique years, sorted
+        const yearSet = new Set();
+        for (const r of rows) {
+            if (r.tahun_masuk) yearSet.add(r.tahun_masuk);
+        }
+        const years = Array.from(yearSet).sort((a, b) => a - b);
+
+        // Initialize buckets for each year
+        const buckets = {};
+        for (const yr of years) {
+            buckets[yr] = { pidana: 0, perdata: 0, perikanan: 0 };
+        }
+
+        // Fill buckets
+        for (const r of rows) {
+            const yr = r.tahun_masuk;
+            if (!buckets[yr]) continue;
+            if (r.jenis_perkara === 'Pidana') buckets[yr].pidana++;
+            else if (r.jenis_perkara === 'Perdata') buckets[yr].perdata++;
+            else if (r.jenis_perkara === 'Perikanan') buckets[yr].perikanan++;
+        }
+
+        const result = years.map(yr => ({
+            year: String(yr),
+            pidana: buckets[yr].pidana,
+            perdata: buckets[yr].perdata,
+            perikanan: buckets[yr].perikanan
+        }));
+        res.json(result);
+    } catch (error) {
+        console.error('[TREND-YEARLY] error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });

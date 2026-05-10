@@ -68,6 +68,16 @@ const filtered = computed(() => {
         result = result.filter(r => r.tahun_masuk === currentYear)
     }
 
+    // Sort by tanggal register (newest first)
+    result.sort((a, b) => {
+        const dateA = parseTanggal(a.sipp_tanggal_register)
+        const dateB = parseTanggal(b.sipp_tanggal_register)
+        if (!dateA && !dateB) return 0
+        if (!dateA) return 1
+        if (!dateB) return -1
+        return dateB - dateA // newest first
+    })
+
     return result
 })
 
