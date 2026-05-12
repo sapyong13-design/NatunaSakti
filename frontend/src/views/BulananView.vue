@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import PageHeader from '../components/shell/PageHeader.vue'
 import BulananFilterBar from '../components/report/BulananFilterBar.vue'
 import ReportTable from '../components/report/ReportTable.vue'
-import { getPerkara, downloadLaporanBulanan } from '../lib/api'
+import { getPerkaraLaporanBulanan, downloadLaporanBulanan } from '../lib/api'
 
 const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
                     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
@@ -26,7 +26,12 @@ const exporting = ref(false)
 async function fetchData() {
     loading.value = true
     try {
-        const data = await getPerkara({ jenis_perkara: jenisCanonical.value, tahun_masuk: tahun.value, limit: 1000 })
+        // Fetch perkara yang daftar ATAU sidang di bulan ini
+        const data = await getPerkaraLaporanBulanan(
+            jenisCanonical.value,
+            bulan.value,
+            tahun.value
+        )
         rows.value = Array.isArray(data) ? data : []
     } catch (err) {
         console.error('Fetch failed:', err.message)
@@ -58,6 +63,7 @@ async function handleExport() {
 
 watch(() => route.params.jenis, () => fetchData())
 watch(tahun, () => fetchData())
+watch(bulan, () => fetchData())
 
 onMounted(fetchData)
 </script>

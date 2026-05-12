@@ -173,6 +173,117 @@ app.get('/api/test', (req, res) => {
     res.json({ ok: true, message: 'Test route works!' });
 });
 
+// Test route for laporan data
+app.get('/api/laporan-test', (req, res) => {
+    console.log('[LAPORAN-TEST] Called!');
+    res.json({ ok: true, message: 'Laporan test route works!' });
+});
+
+// ========================
+// LAPORAN DATA ROUTES (must come before general routes)
+// ========================
+
+// Get perkara data for monthly report (JSON, not file export)
+// Returns perkara that registered OR had sidang in the specified month/year
+app.get('/api/laporan/bulanan/:jenis/data', (req, res) => {
+    console.log('[LAPORAN-DATA] Called!', req.params, req.query);
+    try {
+        const { jenis } = req.params;
+        const bulan = parseInt(req.query.bulan);
+        const tahun = parseInt(req.query.tahun);
+
+        if (!bulan || bulan < 1 || bulan > 12)
+            return res.status(400).json({ error: 'bulan harus 1-12' });
+        if (!tahun || tahun < 2020 || tahun > 2100)
+            return res.status(400).json({ error: 'tahun tidak valid' });
+
+        const jenisCapital = jenis.charAt(0).toUpperCase() + jenis.slice(1).toLowerCase();
+
+        // Month map for parsing Indonesian dates
+        const monthMap = {
+            jan: 0, januari: 0, feb: 1, februari: 1, mar: 2, maret: 2,
+            apr: 3, april: 3, mei: 4, may: 4, jun: 5, juni: 5,
+            jul: 6, juli: 6, agu: 7, agustus: 7, sep: 8, september: 8,
+            okt: 9, oktober: 9, nov: 10, november: 10, des: 11, desember: 11
+        };
+
+        function parseTanggalIndo(s) {
+            if (!s || typeof s !== 'string') return null;
+            const parts = s.trim().split(/\s+/);
+            if (parts.length < 3) return null;
+            const day = parseInt(parts[0]);
+            const monKey = parts[1].toLowerCase();
+            const mon = monthMap[monKey];
+            const year = parseInt(parts[2]);
+            if (isNaN(day) || mon === undefined || isNaN(year)) return null;
+            return { day, mon, year };
+        }
+
+        // 1. Perkara yang terdaftar di bulan ini (via sipp_tanggal_register)
+        const registeredRows = db.prepare(`
+            SELECT * FROM perkara
+            WHERE jenis_perkara = ?
+            AND sipp_tanggal_register IS NOT NULL
+            AND sipp_tanggal_register != ''
+        `).all(jenisCapital);
+
+        const registeredInMonth = new Set();
+        for (const row of registeredRows) {
+            const parsed = parseTanggalIndo(row.sipp_tanggal_register);
+            if (parsed && parsed.mon + 1 === bulan && parsed.year === tahun) {
+                registeredInMonth.add(row.id);
+            }
+        }
+
+        // 2. Perkara yang punya jadwal sidang di bulan ini
+        const sidangRows = db.prepare(`
+            SELECT DISTINCT p.*, j.tanggal as sidang_tanggal
+            FROM perkara p
+            INNER JOIN jadwal_sidang j ON j.nomor_perkara = p.nomor_perkara
+            WHERE p.jenis_perkara = ?
+            AND j.tanggal IS NOT NULL
+            AND j.tanggal != ''
+        `).all(jenisCapital);
+
+        const withSidangInMonth = new Set();
+        for (const row of sidangRows) {
+            // Parse jadwal tanggal (YYYY-MM-DD format)
+            const dateMatch = row.sidang_tanggal.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if (dateMatch) {
+                const [, y, m, d] = dateMatch;
+                if (parseInt(m) === bulan && parseInt(y) === tahun) {
+                    withSidangInMonth.add(row.id);
+                }
+            }
+        }
+
+        // 3. Merge: perkara yang daftar di bulan itu ATAU sidang di bulan itu
+        const allIds = new Set([...registeredInMonth, ...withSidangInMonth]);
+        const result = [];
+        for (const id of allIds) {
+            const row = db.prepare('SELECT * FROM perkara WHERE id = ?').get(id);
+            if (row) result.push(row);
+        }
+
+        // Sort by sipp_tanggal_register
+        result.sort((a, b) => {
+            if (!a.sipp_tanggal_register) return 1;
+            if (!b.sipp_tanggal_register) return -1;
+            return a.sipp_tanggal_register.localeCompare(b.sipp_tanggal_register);
+        });
+
+        console.log('[LAPORAN-DATA] Returning', result.length, 'perkara');
+        res.json({ data: result });
+    } catch (err) {
+        console.error('[LAPORAN-DATA] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ========================
+// END LAPORAN DATA ROUTES
+// ========================
+
 // Get all perkara
 app.get('/api/perkara', (req, res) => {
     try {
@@ -205,7 +316,24 @@ app.get('/api/perkara', (req, res) => {
         params.push(parseInt(limit), offset);
 
         const stmt = db.prepare(query);
-        const data = stmt.all(...params);
+        let data = stmt.all(...params);
+
+        // Add first_sidang_soon flag for perkara with upcoming first sidang
+        data = data.map(perkara => {
+            // Check if this perkara has an upcoming first sidang
+            const jadwalCheck = db.prepare(`
+                SELECT nomor, COUNT(*) as count
+                FROM jadwal_sidang
+                WHERE nomor_perkara = ? AND nomor IS NOT NULL
+            `).get(perkara.nomor_perkara);
+
+            const isFirstSidang = jadwalCheck && jadwalCheck.count > 0 && jadwalCheck.nomor === 1;
+
+            return {
+                ...perkara,
+                first_sidang_soon: isFirstSidang ? true : false
+            };
+        });
 
         const countStmt = db.prepare(countQuery);
         const countResult = countStmt.get(...countParams);
@@ -700,7 +828,7 @@ app.delete('/api/perkara/:id', (req, res) => {
 });
 
 // ========================
-// LAPORAN ROUTES
+// LAPORAN EXPORT ROUTES
 // ========================
 
 app.get('/api/laporan/bulanan/:jenis', (req, res) => {

@@ -3,63 +3,65 @@ import { ref, watch, readonly, onMounted } from 'vue'
 const STORAGE_KEY = 'ns-theme'
 
 const lightTheme = {
-    bg: '#FAFAF9',
-    bg2: '#ffffff',
-    bg3: '#F5F5F4',
+    // Mahogany & Gold - Modern Legal Authority
+    bg: '#FAF8F5',
+    bg2: '#FFFFFF',
+    bg3: '#F5F3F0',
     surface: 'rgba(255,255,255,0.95)',
-    surface2: 'rgba(13,92,92,0.04)',
-    surface3: 'rgba(13,92,92,0.08)',
-    border: 'rgba(13,92,92,0.15)',
-    text: '#1C1917',
-    text2: 'rgba(28,25,23,0.85)',
-    text3: 'rgba(28,25,23,0.55)',
-    // Primary — Deep institutional teal
-    accent: '#0D5C5C',
-    accent2: '#0A4A4A',
-    accentSoft: 'rgba(13,92,92,0.1)',
-    accentGlow: 'rgba(13,92,92,0.2)',
-    // Semantic — muted institutional
-    danger: '#C75B4A',
-    dangerSoft: 'rgba(199,91,74,0.12)',
-    success: '#4A7C59',
-    successSoft: 'rgba(74,124,89,0.12)',
+    surface2: 'rgba(74,28,27,0.04)',
+    surface3: 'rgba(74,28,27,0.08)',
+    border: 'rgba(74,28,27,0.12)',
+    text: '#2D2420',
+    text2: 'rgba(45,36,32,0.8)',
+    text3: 'rgba(45,36,32,0.5)',
+    // Primary — Mahogany Deep
+    accent: '#4A1C1B',
+    accent2: '#6B2827',
+    accentSoft: 'rgba(74,28,27,0.1)',
+    accentGlow: 'rgba(74,28,27,0.25)',
+    // Semantic — institutional
+    danger: '#A83E32',
+    dangerSoft: 'rgba(168,62,50,0.12)',
+    success: '#3D6B4E',
+    successSoft: 'rgba(61,107,78,0.12)',
     warn: '#B8860B',
     warnSoft: 'rgba(184,134,11,0.12)',
-    info: '#0D5C5C',
-    gradientBg: 'linear-gradient(180deg, #FAFAF9 0%, #F0F4F4 100%)',
+    info: '#4A1C1B',
+    gradientBg: 'linear-gradient(180deg, #FAF8F5 0%, #F2EFE9 100%)',
     // Tooltip colors
-    bgTooltip: '#1C1917',
-    textTooltip: '#FAFAF9'
+    bgTooltip: '#2D2420',
+    textTooltip: '#FAF8F5'
 }
 
 const darkTheme = {
-    bg: '#1A1D1F',
-    bg2: '#24282B',
-    bg3: '#2D3236',
+    // Midnight Court - Navy Deep + Warm Cream
+    bg: '#1A1816',
+    bg2: '#242020',
+    bg3: '#2D2826',
     surface: 'rgba(255,255,255,0.04)',
-    surface2: 'rgba(255,255,255,0.02)',
-    surface3: 'rgba(255,255,255,0.06)',
-    border: 'rgba(255,255,255,0.1)',
-    text: '#E8E6E3',
-    text2: 'rgba(232,230,227,0.85)',
-    text3: 'rgba(232,230,227,0.55)',
-    // Primary — muted for dark mode
-    accent: '#4DB6AC',
-    accent2: '#80CBC4',
-    accentSoft: 'rgba(77,182,172,0.14)',
-    accentGlow: 'rgba(77,182,172,0.25)',
-    // Semantic — adjusted for dark
+    surface2: 'rgba(255,255,255,0.03)',
+    surface3: 'rgba(255,255,255,0.07)',
+    border: 'rgba(212,184,150,0.15)',
+    text: '#FAF8F5',
+    text2: 'rgba(250,248,245,0.8)',
+    text3: 'rgba(250,248,245,0.5)',
+    // Primary — Gold Accent for midnight
+    accent: '#C9A962',
+    accent2: '#D4B872',
+    accentSoft: 'rgba(201,169,98,0.14)',
+    accentGlow: 'rgba(201,169,98,0.2)',
+    // Semantic — adjusted for midnight
     danger: '#E57373',
     dangerSoft: 'rgba(229,115,115,0.15)',
     success: '#81C784',
     successSoft: 'rgba(129,199,132,0.15)',
     warn: '#FFD54F',
     warnSoft: 'rgba(255,213,79,0.12)',
-    info: '#4DB6AC',
-    gradientBg: 'linear-gradient(180deg, #1A1D1F 0%, #24282B 100%)',
+    info: '#C9A962',
+    gradientBg: 'linear-gradient(180deg, #1A1816 0%, #242020 100%)',
     // Tooltip colors
-    bgTooltip: '#E8E6E3',
-    textTooltip: '#1A1D1F'
+    bgTooltip: '#FAF8F5',
+    textTooltip: '#1A1816'
 }
 
 function initialMode() {

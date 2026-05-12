@@ -38,14 +38,29 @@ const config = computed(() => {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 10px;
-    border-radius: 6px;
+    padding: 5px 11px;
+    border-radius: 7px;
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     white-space: nowrap;
     position: relative;
+    overflow: hidden;
+    transition: all 180ms ease;
+}
+
+/* Gradient overlay for all badges */
+.ns-status-badge::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    opacity: 0.5;
+    border-radius: inherit;
+    pointer-events: none;
 }
 
 /* Pulse animation for active status */
@@ -84,7 +99,7 @@ const config = computed(() => {
 }
 
 .ns-status-badge.ns-status-sm {
-    padding: 3px 8px;
+    padding: 4px 9px;
     font-size: 10px;
 }
 
@@ -92,47 +107,79 @@ const config = computed(() => {
     width: 5px;
     height: 5px;
     border-radius: 50%;
+    position: relative;
+    z-index: 1;
+}
+
+.ns-status-badge span:not(.ns-status-pulse):not(.ns-status-dot) {
+    position: relative;
+    z-index: 1;
 }
 
 .ns-status-success {
-    background: var(--success-soft, rgba(74,124,89,0.12));
+    background: linear-gradient(135deg, rgba(74,124,89,0.15) 0%, rgba(74,124,89,0.08) 100%);
     color: var(--success, #4A7C59);
+    border: 1px solid rgba(74,124,89,0.2);
+}
+
+.ns-status-success::before {
+    background: linear-gradient(90deg, transparent, rgba(74,124,89,0.2), transparent);
 }
 
 .ns-status-success .ns-status-dot {
     background: var(--success, #4A7C59);
+    box-shadow: 0 0 6px rgba(74,124,89,0.4);
 }
 
 .ns-status-warning {
-    background: var(--warn-soft, rgba(184,134,11,0.12));
+    background: linear-gradient(135deg, rgba(184,134,11,0.15) 0%, rgba(184,134,11,0.08) 100%);
     color: var(--warn, #B8860B);
+    border: 1px solid rgba(184,134,11,0.2);
+}
+
+.ns-status-warning::before {
+    background: linear-gradient(90deg, transparent, rgba(184,134,11,0.2), transparent);
 }
 
 .ns-status-warning .ns-status-dot {
     background: var(--warn, #B8860B);
+    box-shadow: 0 0 6px rgba(184,134,11,0.4);
 }
 
 .ns-status-danger {
-    background: var(--danger-soft, rgba(199,91,74,0.12));
+    background: linear-gradient(135deg, rgba(199,91,74,0.15) 0%, rgba(199,91,74,0.08) 100%);
     color: var(--danger, #C75B4A);
+    border: 1px solid rgba(199,91,74,0.2);
+}
+
+.ns-status-danger::before {
+    background: linear-gradient(90deg, transparent, rgba(199,91,74,0.2), transparent);
 }
 
 .ns-status-danger .ns-status-dot {
     background: var(--danger, #C75B4A);
+    box-shadow: 0 0 6px rgba(199,91,74,0.4);
 }
 
 .ns-status-info {
-    background: var(--accent-soft, rgba(13,92,92,0.1));
-    color: var(--accent, #0D5C5C);
+    background: linear-gradient(135deg, rgba(74,28,27,0.12) 0%, rgba(74,28,27,0.06) 100%);
+    color: var(--accent, #4A1C1B);
+    border: 1px solid rgba(74,28,27,0.15);
+}
+
+.ns-status-info::before {
+    background: linear-gradient(90deg, transparent, rgba(74,28,27,0.15), transparent);
 }
 
 .ns-status-info .ns-status-dot {
-    background: var(--accent, #0D5C5C);
+    background: var(--accent, #4A1C1B);
+    box-shadow: 0 0 6px rgba(74,28,27,0.3);
 }
 
 .ns-status-default {
-    background: var(--surface2);
+    background: linear-gradient(135deg, var(--surface2) 0%, var(--surface3) 100%);
     color: var(--text2);
+    border: 1px solid var(--border);
 }
 
 .ns-status-default .ns-status-dot {

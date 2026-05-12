@@ -1,4 +1,5 @@
 <script setup>
+import { ref } from 'vue'
 import Icon from '../Icon.vue'
 
 const props = defineProps({
@@ -7,12 +8,29 @@ const props = defineProps({
 
 const emit = defineEmits(['refresh'])
 
+const rippleStates = ref({})
+
 const actions = [
     { key: 'refresh', icon: 'refresh', label: 'Refresh' },
     { key: 'export', icon: 'download', label: 'Export CSV' },
 ]
 
-function handleAction(key) {
+function handleAction(key, event) {
+    // Create ripple effect
+    if (event) {
+        const button = event.currentTarget
+        const rect = button.getBoundingClientRect()
+        const x = event.clientX - rect.left
+        const y = event.clientY - rect.top
+
+        const rippleId = `${key}-${Date.now()}`
+        rippleStates.value[rippleId] = { x, y, active: true }
+
+        setTimeout(() => {
+            delete rippleStates.value[rippleId]
+        }, 600)
+    }
+
     if (key === 'export') {
         exportToCSV()
     } else {
@@ -65,10 +83,18 @@ function exportToCSV() {
             :key="action.key"
             type="button"
             class="ns-action-btn"
-            @click="handleAction(action.key)"
+            @click="(e) => handleAction(action.key, e)"
         >
             <Icon :name="action.icon" :size="14" />
             <span>{{ action.label }}</span>
+            <!-- Ripple elements -->
+            <template v-for="(ripple, id) in rippleStates" :key="id">
+                <span
+                    v-if="id.startsWith(action.key)"
+                    class="ns-ripple"
+                    :style="{ left: ripple.x + 'px', top: ripple.y + 'px' }"
+                ></span>
+            </template>
         </button>
     </div>
 </template>
@@ -81,26 +107,59 @@ function exportToCSV() {
 }
 
 .ns-action-btn {
+    position: relative;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    padding: 8px 12px;
+    padding: 8px 14px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 10px;
     background: var(--surface);
     color: var(--text);
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms;
+    transition: all 180ms ease;
+    overflow: hidden;
+    will-change: transform, box-shadow;
 }
 
 .ns-action-btn:hover {
     border-color: var(--accent);
-    background: var(--surface2);
+    background: var(--accentSoft);
+    color: var(--accent);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px var(--accentGlow);
 }
 
 .ns-action-btn:active {
-    transform: translateY(1px);
+    transform: translateY(0);
+}
+
+.ns-action-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Ripple effect */
+.ns-ripple {
+    position: absolute;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.2;
+    transform: translate(-50%, -50%);
+    animation: rippleEffect 0.6s ease-out forwards;
+    pointer-events: none;
+}
+
+@keyframes rippleEffect {
+    to {
+        width: 200px;
+        height: 200px;
+        opacity: 0;
+    }
 }
 </style>

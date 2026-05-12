@@ -1,9 +1,10 @@
 /* ============================================================
-   Natuna Sakti — Institutional Government Dashboard
-   Font: Plus Jakarta Sans (Google Fonts)
+   Natuna Sakti — Modern Legal Authority
+   Typography: Playfair Display (headings) + IBM Plex Sans (body/data)
+   Color: Mahogany & Gold
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap');
 
 * { box-sizing: border-box; }
 
@@ -14,13 +15,26 @@
   width: 100%;
   height: 100%;
   min-height: 760px;
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   color: var(--text);
   background: var(--gradient-bg);
   overflow: hidden;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "ss01", "cv11";
+}
+
+/* Heading font - Playfair Display for authority */
+.ns-app h1,
+.ns-app h2,
+.ns-app h3,
+.ns-app .ns-h1,
+.ns-app .ns-h2,
+.ns-app .ns-h3,
+.ns-app .ns-page-title,
+.ns-app .ns-detail-title,
+.ns-app .ns-brand-title {
+  font-family: 'Playfair Display', 'Bookman Old Style', Georgia, serif;
 }
 
 .ns-app[data-mode="light"] { color-scheme: light; }

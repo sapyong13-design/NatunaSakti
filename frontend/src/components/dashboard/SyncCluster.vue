@@ -175,6 +175,25 @@ onUnmounted(() => {
     background: linear-gradient(135deg, var(--accentSoft), var(--surface));
     border-color: var(--accent);
     box-shadow: 0 0 0 1px var(--accentSoft), 0 4px 20px rgba(13, 92, 92, 0.1);
+    /* Animated gradient border */
+    position: relative;
+}
+
+.ns-sync-status.is-syncing::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 14px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent));
+    background-size: 200% 100%;
+    animation: gradientMove 2s linear infinite;
+    z-index: -1;
+    opacity: 0.6;
+}
+
+@keyframes gradientMove {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
 }
 
 .ns-sync-status.is-complete {

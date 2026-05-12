@@ -63,6 +63,7 @@ export const getPerkara = async (filters = {}) => {
     const params = new URLSearchParams();
     if (filters.jenis_perkara) params.append('jenis_perkara', filters.jenis_perkara);
     if (filters.tahun_masuk) params.append('tahun_masuk', filters.tahun_masuk);
+    if (filters.bulan_masuk) params.append('bulan_masuk', filters.bulan_masuk);
     params.append('page', filters.page || 1);
     params.append('limit', filters.limit || 100);
 
@@ -206,6 +207,18 @@ export const getPerkaraTrendYearly = async () => {
         console.error('Failed to fetch yearly trend:', error);
         return [];
     }
+};
+
+// ========================
+// REPORTS DATA FETCH
+// ========================
+
+// Get perkara for monthly report (registered OR having sidang in the month)
+export const getPerkaraLaporanBulanan = async (jenis, bulan, tahun) => {
+    const params = new URLSearchParams({ bulan, tahun });
+    const response = await fetchWithRetry(`${API_BASE}/laporan/bulanan/${jenis}/data?${params}`);
+    const result = await response.json();
+    return result.data || result;
 };
 
 // ========================

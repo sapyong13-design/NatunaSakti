@@ -400,11 +400,39 @@ watch(() => props.row, (newRow) => {
 }
 .ns-panel-enter-active,
 .ns-panel-leave-active {
-    transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
+    transition: transform 320ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 .ns-panel-enter-from,
 .ns-panel-leave-to {
     transform: translateX(100%);
+}
+
+/* Staggered content animations */
+.ns-detail-panel > * {
+    animation: slideInUp 0.4s ease-out backwards;
+}
+
+.ns-detail-head {
+    animation-delay: 0ms;
+}
+
+.ns-detail-body {
+    animation-delay: 60ms;
+}
+
+.ns-detail-actions {
+    animation-delay: 120ms;
+}
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Progress Bar Styles */

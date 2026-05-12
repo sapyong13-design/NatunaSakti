@@ -99,21 +99,38 @@ const menuStyle = computed(() => {
 <style scoped>
 .ns-context-menu {
     position: fixed;
-    min-width: 200px;
+    min-width: 220px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    border-radius: 12px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.2);
     z-index: 1000;
-    padding: 6px;
+    padding: 8px;
     overflow: hidden;
+    /* Blur backdrop */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    will-change: transform, opacity;
+}
+
+[data-mode="light"] .ns-context-menu {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(74, 28, 27, 0.15);
+    box-shadow: 0 12px 48px rgba(74, 28, 27, 0.15), 0 0 0 1px rgba(74, 28, 27, 0.05);
+}
+
+[data-mode="dark"] .ns-context-menu {
+    background: rgba(30, 33, 41, 0.95);
+    border-color: rgba(212, 184, 150, 0.15);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
 }
 
 .ns-context-menu-header {
-    padding: 8px 10px;
-    background: var(--surface-2);
-    border-radius: 6px;
-    margin-bottom: 4px;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border);
 }
 
 .ns-context-menu-nomor {
@@ -127,64 +144,104 @@ const menuStyle = computed(() => {
 .ns-context-menu-jenis {
     display: block;
     font-size: 10px;
-    color: var(--text-3);
+    color: var(--text3);
     margin-top: 2px;
+    font-weight: 500;
 }
 
 .ns-context-menu-divider {
     height: 1px;
     background: var(--border);
-    margin: 6px 0;
+    margin: 8px 0;
 }
 
 .ns-context-menu-item {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 10px;
     width: 100%;
-    padding: 8px 10px;
+    padding: 10px 12px;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     background: transparent;
     color: var(--text);
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: all 180ms cubic-bezier(0.32, 0.72, 0, 1);
+    overflow: hidden;
+}
+
+/* Ripple effect container */
+.ns-context-menu-item::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%), rgba(74, 28, 27, 0.15), transparent 60%);
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+
+.ns-context-menu-item:hover::before {
+    opacity: 1;
 }
 
 .ns-context-menu-item:hover {
-    background: var(--accent-soft);
+    background: var(--accentSoft);
     color: var(--accent);
+    transform: translateX(4px);
 }
 
 .ns-context-menu-item svg {
     color: var(--item-color);
+    position: relative;
+    z-index: 1;
 }
 
-[data-mode="light"] .ns-context-menu {
-    background: #ffffff;
-    border-color: #e5e7eb;
+.ns-context-menu-item span {
+    position: relative;
+    z-index: 1;
 }
 
-[data-mode="dark"] .ns-context-menu {
-    background: #1e2129;
-    border-color: #2d3748;
+/* Enhanced animations */
+.ns-context-menu-enter-active {
+    transition: all 220ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.ns-context-menu-enter-active,
 .ns-context-menu-leave-active {
-    transition: all 150ms ease;
+    transition: all 180ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.ns-context-menu-enter-from,
+.ns-context-menu-enter-from {
+    opacity: 0;
+    transform: scale(0.92) translateY(-8px);
+}
+
 .ns-context-menu-leave-to {
     opacity: 0;
-    transform: scale(0.95);
+    transform: scale(0.95) translateY(-4px);
 }
 
-.ns-context-menu-enter-active .ns-context-menu-item,
-.ns-context-menu-leave-active .ns-context-menu-item {
-    transition-delay: 50ms;
+/* Staggered item animations */
+.ns-context-menu-item {
+    animation: itemSlideIn 0.2s ease-out backwards;
+}
+
+.ns-context-menu-item:nth-child(4) { animation-delay: 0.03s; }
+.ns-context-menu-item:nth-child(5) { animation-delay: 0.05s; }
+.ns-context-menu-item:nth-child(6) { animation-delay: 0.07s; }
+.ns-context-menu-item:nth-child(7) { animation-delay: 0.09s; }
+
+@keyframes itemSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
 }
 </style>

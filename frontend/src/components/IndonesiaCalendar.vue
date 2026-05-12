@@ -122,6 +122,7 @@ function fmtDisplay(iso) {
             <div v-for="(day, idx) in days" :key="idx"
                  class="ns-cal-cell"
                  :class="[cls(day), { 'ns-cal-cell-empty': !day }]"
+                 :style="{ animationDelay: day ? (idx * 15) + 'ms' : '0ms' }"
                  :title="day?.holiday?.nama || ''"
                  @click="select(day)"
                  @mouseenter="day && (hovered = day.iso)"
@@ -146,13 +147,61 @@ function fmtDisplay(iso) {
 <style scoped>
 .ns-cal {
     width: 296px;
-    background: var(--bg-2);
+    background: #ffffff;
     border: 1px solid var(--border);
     border-radius: 14px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.14);
     padding: 14px;
     user-select: none;
-    font-size: 12.5px;
+    font-size: 13px;
+    position: relative;
+    overflow: hidden;
+    /* Notary Stamp Reveal Animation */
+    animation: notaryStampReveal 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+/* 1. Notary Stamp Reveal Animation */
+@keyframes notaryStampReveal {
+    0% {
+        opacity: 0;
+        transform: scale(0.92) rotate(-1deg);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    60% {
+        transform: scale(1.02) rotate(0.3deg);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+        box-shadow: 0 8px 32px rgba(0,0,0,0.14);
+    }
+}
+
+/* 2. Gold Leaf Corner Accents - smaller, less intrusive */
+.ns-cal::before,
+.ns-cal::after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+.ns-cal::before {
+    top: 0;
+    left: 0;
+    border-top: 1.5px solid var(--accent);
+    border-left: 1.5px solid var(--accent);
+    border-top-left-radius: 12px;
+}
+
+.ns-cal::after {
+    bottom: 0;
+    right: 0;
+    border-bottom: 1.5px solid var(--accent);
+    border-right: 1.5px solid var(--accent);
+    border-bottom-right-radius: 12px;
 }
 
 /* Navigation */
@@ -173,7 +222,12 @@ function fmtDisplay(iso) {
     transition: background 120ms;
 }
 .ns-cal-nav-btn:hover { background: var(--surface-2); color: var(--text); }
-.ns-cal-nav-title { font-weight: 600; font-size: 13px; color: var(--text); }
+.ns-cal-nav-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text);
+    letter-spacing: 0.01em;
+}
 
 /* Hint bar */
 .ns-cal-hint {
@@ -181,12 +235,12 @@ function fmtDisplay(iso) {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    font-size: 11.5px;
-    color: var(--text-3);
+    font-size: 12px;
+    color: var(--text);
     margin-bottom: 10px;
-    min-height: 22px;
+    min-height: 24px;
 }
-.ns-cal-range-label { color: var(--accent); font-weight: 600; font-size: 12px; }
+.ns-cal-range-label { color: var(--accent); font-weight: 700; font-size: 12px; }
 .ns-cal-reset {
     all: unset;
     cursor: pointer;
@@ -206,16 +260,18 @@ function fmtDisplay(iso) {
     gap: 2px;
 }
 
-/* Day-of-week header */
+/* Day-of-week header - readable */
 .ns-cal-dow {
     text-align: center;
-    font-size: 10.5px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 11px;
     font-weight: 600;
-    color: var(--text-3);
-    padding: 4px 0 6px;
-    letter-spacing: 0.02em;
+    color: var(--text);
+    padding: 5px 0 6px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
 }
-.ns-cal-dow-weekend { color: #ef4444; }
+.ns-cal-dow-weekend { color: #dc2626; }
 
 /* Day cell */
 .ns-cal-cell {
@@ -224,18 +280,35 @@ function fmtDisplay(iso) {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 34px;
+    height: 36px;
     border-radius: 8px;
     cursor: pointer;
-    transition: background 100ms;
+    transition: all 150ms ease;
     gap: 2px;
+    /* Staggered reveal animation for days */
+    animation: dayFadeIn 0.3s ease-out backwards;
 }
-.ns-cal-cell:hover:not(.ns-cal-cell-empty) { background: var(--surface-2); }
+.ns-cal-cell:hover:not(.ns-cal-cell-empty) {
+    background: rgba(139, 69, 19, 0.08);
+    transform: scale(1.02);
+}
 .ns-cal-cell-empty { pointer-events: none; }
 
+/* Staggered animation delays - applied via inline style in template */
+@keyframes dayFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .ns-cal-num {
-    font-size: 12.5px;
-    font-weight: 500;
+    font-size: 13px;
+    font-weight: 600;
     color: var(--text);
     line-height: 1;
 }
@@ -243,23 +316,53 @@ function fmtDisplay(iso) {
 /* Weekend → red text */
 .cal-weekend .ns-cal-num { color: #ef4444; }
 
-/* Today → subtle ring */
-.cal-today { box-shadow: inset 0 0 0 1.5px var(--accent); }
-.cal-today .ns-cal-num { color: var(--accent); font-weight: 700; }
+/* Today → prominent ring */
+.cal-today {
+    box-shadow: inset 0 0 0 2px var(--accent);
+    background: rgba(139, 69, 19, 0.05);
+}
+.cal-today .ns-cal-num {
+    color: var(--accent);
+    font-weight: 700;
+}
 
 /* Start/end → filled accent circle */
+/* 3. Wax Seal Effect for selected dates */
 .cal-start,
 .cal-end {
     background: var(--accent) !important;
     border-radius: 8px;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2),
+                inset 0 -1px 2px rgba(255,255,255,0.1),
+                0 0 0 1px rgba(212, 165, 116, 0.3);
+    position: relative;
+}
+.cal-start::after,
+.cal-end::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 10px;
+    border: 1px solid var(--accent);
+    opacity: 0.4;
+    pointer-events: none;
 }
 .cal-start .ns-cal-num,
-.cal-end .ns-cal-num { color: #fff !important; font-weight: 700; }
+.cal-end .ns-cal-num {
+    color: #fff !important;
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
 
-/* In-range → light tint */
+/* In-range → solid background (same as start/end) */
 .cal-in-range {
-    background: var(--accent-soft);
+    background: var(--accent) !important;
     border-radius: 0;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.15);
+}
+.cal-in-range .ns-cal-num {
+    color: #fff !important;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 .cal-start { border-radius: 8px 0 0 8px !important; }
 .cal-end   { border-radius: 0 8px 8px 0 !important; }
@@ -291,13 +394,41 @@ function fmtDisplay(iso) {
     padding-top: 10px;
     margin-top: 8px;
     border-top: 1px solid var(--border);
-    font-size: 10.5px;
-    color: var(--text-3);
+    font-size: 11px;
+    color: var(--text);
 }
 .ns-cal-leg {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 5px;
 }
-.ns-cal-leg-weekend { color: #ef4444; font-weight: 600; }
+.ns-cal-leg-weekend { color: #dc2626; font-weight: 600; }
+
+/* Dark mode - clean, readable */
+[data-mode="dark"] .ns-cal {
+    background: #1e2129;
+    border-color: #374151;
+}
+[data-mode="dark"] .ns-cal-nav-title {
+    color: #f3f4f6;
+}
+[data-mode="dark"] .ns-cal-dow {
+    color: #d1d5db;
+}
+[data-mode="dark"] .ns-cal-dow-weekend {
+    color: #f87171;
+}
+[data-mode="dark"] .ns-cal-num {
+    color: #e5e7eb;
+}
+[data-mode="dark"] .ns-cal-hint {
+    color: #d1d5db;
+}
+[data-mode="dark"] .cal-weekend .ns-cal-num {
+    color: #f87171;
+}
+[data-mode="dark"] .ns-cal-legend {
+    color: #9ca3af;
+    border-top-color: #374151;
+}
 </style>

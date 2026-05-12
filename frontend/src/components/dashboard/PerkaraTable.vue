@@ -352,26 +352,26 @@ function getLamaProgress(days) {
     background: var(--surface-2);
 }
 
+[data-mode="light"] .ns-data-row:hover .ns-sticky {
+    background: rgba(255, 255, 255, 0.92);
+}
+
+[data-mode="dark"] .ns-data-row:hover .ns-sticky {
+    background: rgba(26, 24, 22, 0.92);
+}
+
 /* Priority highlighting for upcoming sidang */
 .ns-data-row.is-upcoming-row {
     position: relative;
     background: linear-gradient(90deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.02));
-    box-shadow: inset 3px 0 0 0 #f59e0b;
 }
 
-.ns-data-row.is-upcoming-row::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    background: linear-gradient(180deg, #f59e0b, #d97706);
+.ns-data-row.is-upcoming-row .ns-col-no {
+    border-left: 3px solid #f59e0b;
 }
 
 .ns-data-row.is-upcoming-row:hover {
     background: linear-gradient(90deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04));
-    box-shadow: inset 3px 0 0 0 #f59e0b, 0 2px 8px rgba(245, 158, 11, 0.15);
 }
 
 [data-mode="dark"] .ns-data-row.is-upcoming-row {
@@ -380,16 +380,29 @@ function getLamaProgress(days) {
 
 [data-mode="dark"] .ns-data-row.is-upcoming-row:hover {
     background: linear-gradient(90deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.05));
-    box-shadow: inset 3px 0 0 0 #f59e0b, 0 2px 12px rgba(245, 158, 11, 0.25);
 }
 
-/* Sticky columns */
+/* Sticky columns with glassmorphism */
 .ns-sticky {
     position: sticky;
     left: 0;
     background: var(--surface);
     z-index: 1;
     transition: background 120ms ease;
+    /* Glassmorphism effect */
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-right: 1px solid var(--border);
+}
+
+[data-mode="light"] .ns-sticky {
+    background: rgba(255, 255, 255, 0.85);
+    box-shadow: 2px 0 8px rgba(74, 28, 27, 0.06);
+}
+
+[data-mode="dark"] .ns-sticky {
+    background: rgba(26, 24, 22, 0.85);
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
 }
 
 .ns-data-table thead .ns-sticky {
@@ -397,10 +410,19 @@ function getLamaProgress(days) {
     background: var(--bg-2);
 }
 
+[data-mode="light"] .ns-data-table thead .ns-sticky {
+    background: rgba(250, 248, 245, 0.95);
+}
+
+[data-mode="dark"] .ns-data-table thead .ns-sticky {
+    background: rgba(38, 32, 32, 0.95);
+}
+
 .ns-col-no {
     left: 0;
     width: 50px;
     text-align: center;
+    padding-left: 12px;
 }
 
 .ns-col-jenis {
@@ -470,12 +492,18 @@ function getLamaProgress(days) {
 .ns-jenis-badge {
     display: inline-flex;
     align-items: center;
-    padding: 4px 10px;
-    border-radius: 6px;
+    padding: 5px 11px;
+    border-radius: 7px;
     font-size: 11px;
     font-weight: 600;
     background: var(--jenis-bg);
     color: var(--jenis-color);
+    transition: all 180ms ease;
+}
+
+.ns-jenis-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px var(--jenis-color);
 }
 
 .ns-nomor-text {
@@ -483,6 +511,7 @@ function getLamaProgress(days) {
     font-size: 12px;
     font-weight: 500;
     letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
 }
 
 .ns-nama-text {
@@ -497,6 +526,26 @@ function getLamaProgress(days) {
     font-family: "JetBrains Mono", monospace;
     font-size: 12px;
     color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Focus states for accessibility */
+.ns-data-row:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    background: var(--accentSoft);
+}
+
+.ns-data-row:focus-visible .ns-sticky {
+    background: var(--accentSoft);
+}
+
+[data-mode="light"] .ns-data-row:focus-visible .ns-sticky {
+    background: rgba(74, 28, 27, 0.08);
+}
+
+[data-mode="dark"] .ns-data-row:focus-visible .ns-sticky {
+    background: rgba(201, 169, 98, 0.12);
 }
 
 .ns-status-text {

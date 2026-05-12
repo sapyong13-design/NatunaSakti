@@ -155,7 +155,7 @@ const upcomingPerkaraNumbers = computed(() => {
         .filter(r => {
             // Highlight if actively in court (status contains "sidang")
             const status = (r.sipp_status || '').toLowerCase()
-            return status.includes('sidang')
+            return status.includes('sidang') || r.first_sidang_soon
         })
         .map(r => r.nomor_perkara)
 })
@@ -258,7 +258,6 @@ async function loadAll() {
         ])
         rows.value = Array.isArray(perkaraRes) ? perkaraRes : (perkaraRes.data || [])
         syncStatus.value = statusRes
-        // Load trend data based on current quickFilter
         await loadTrendData()
     } catch (err) {
         console.error('Load failed:', err.message)
@@ -355,7 +354,16 @@ onMounted(() => {
         </PageHeader>
 
         <!-- Quick Stats Cards -->
-        <QuickStatsCards :stats="quickStats" />
+        <div v-if="loading" class="ns-stats-skeleton">
+            <div v-for="i in 3" :key="i" class="ns-stat-skeleton-card">
+                <div class="ns-stat-skeleton-icon"></div>
+                <div class="ns-stat-skeleton-content">
+                    <div class="ns-stat-skeleton-value"></div>
+                    <div class="ns-stat-skeleton-label"></div>
+                </div>
+            </div>
+        </div>
+        <QuickStatsCards v-else :stats="quickStats" />
 
         <!-- Quick Filter Chips -->
         <div class="ns-quick-filters">
@@ -560,7 +568,7 @@ onMounted(() => {
     grid-template-columns: 1fr auto;
     gap: 16px;
     align-items: start;
-    margin-bottom: 20px;
+    margin-bottom: 28px;
 }
 
 .ns-c-trend-wrapper {
@@ -746,8 +754,12 @@ onMounted(() => {
     height: 100%;
     pointer-events: none;
     z-index: 0;
-    opacity: 0.03;
+    opacity: 0.02;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+[data-mode="dark"] .ns-grain-overlay {
+    opacity: 0.04;
 }
 
 /* Quick Filters */
@@ -756,6 +768,83 @@ onMounted(() => {
     gap: 8px;
     margin-bottom: 16px;
     flex-wrap: wrap;
+}
+
+/* Stats Skeleton Loading */
+.ns-stats-skeleton {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.ns-stat-skeleton-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    animation: skeletonPulse 1.5s ease-in-out infinite;
+}
+
+.ns-stat-skeleton-card:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.ns-stat-skeleton-card:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+.ns-stat-skeleton-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+.ns-stat-skeleton-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+
+.ns-stat-skeleton-value {
+    width: 40px;
+    height: 22px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+.ns-stat-skeleton-label {
+    width: 80px;
+    height: 11px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes skeletonPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+@media (max-width: 768px) {
+    .ns-stats-skeleton {
+        grid-template-columns: 1fr;
+    }
 }
 
 .ns-quick-filters :deep(.ns-filter-chip) {
