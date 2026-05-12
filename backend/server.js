@@ -14,6 +14,7 @@ const fs = require('fs');
 const SIPPSyncService = require('./services/sippSyncService');
 const sippRoutes = require('./routes/sipp');
 const { generateLaporanBulanan, generateLaporanMingguan, convertDocxToPdf } = require('./services/laporanService');
+const { generatePenutupanKasRtf } = require('./services/kasirRtfService');
 
 const app = express();
 const PORT = 3000;
@@ -179,6 +180,56 @@ app.get('/api/laporan-test', (req, res) => {
     res.json({ ok: true, message: 'Laporan test route works!' });
 });
 
+app.get('/api/kasir/templates/:type', (req, res) => {
+    const templates = {
+        'pemeriksaan-mendadak': {
+            file: 'berita-acara-pemeriksaan-mendadak.docx',
+            filename: 'BERITA_ACARA_PEMERIKSAAN_MENDADAK.docx',
+            contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        },
+        'penutupan-kas': {
+            file: 'penutupan-kas.rtf',
+            filename: 'PENUTUPAN_KAS_TEMPLATE.rtf',
+            contentType: 'application/rtf'
+        },
+        'penutupan-rekap': {
+            file: 'penutupan-rekap.xlsx',
+            filename: 'PENUTUPAN_REKAP.xlsx',
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        }
+    };
+
+    const tpl = templates[req.params.type];
+    if (!tpl) return res.status(404).json({ error: 'Template tidak ditemukan' });
+
+    if (tpl.generate) {
+        res.setHeader('Content-Type', tpl.contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${tpl.filename}"`);
+        return res.send(tpl.generate());
+    }
+
+    const templatePath = path.join(__dirname, 'templates', 'kasir', tpl.file);
+    if (!fs.existsSync(templatePath)) return res.status(404).json({ error: 'File template tidak ditemukan' });
+
+    res.setHeader('Content-Type', tpl.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${tpl.filename}"`);
+    res.sendFile(templatePath);
+});
+
+app.post('/api/kasir/generate/penutupan-kas', (req, res) => {
+    try {
+        const rtf = generatePenutupanKasRtf(req.body || {});
+        const bulan = (req.body?.bulanNama || 'PENUTUPAN_KAS').toString().replace(/[^\w-]+/g, '_');
+        const tahun = req.body?.tahun || new Date().getFullYear();
+        res.setHeader('Content-Type', 'application/rtf');
+        res.setHeader('Content-Disposition', `attachment; filename="PENUTUPAN_KAS_${bulan}_${tahun}.rtf"`);
+        res.send(rtf);
+    } catch (error) {
+        console.error('[KASIR-PENUTUPAN] Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ========================
 // LAPORAN DATA ROUTES (must come before general routes)
 // ========================
@@ -199,21 +250,43 @@ app.get('/api/laporan/bulanan/:jenis/data', (req, res) => {
 
         const jenisCapital = jenis.charAt(0).toUpperCase() + jenis.slice(1).toLowerCase();
 
-        // Month map for parsing Indonesian dates
         const monthMap = {
-            jan: 0, januari: 0, feb: 1, februari: 1, mar: 2, maret: 2,
-            apr: 3, april: 3, mei: 4, may: 4, jun: 5, juni: 5,
-            jul: 6, juli: 6, agu: 7, agustus: 7, sep: 8, september: 8,
-            okt: 9, oktober: 9, nov: 10, november: 10, des: 11, desember: 11
+            jan: 0, januari: 0,
+            feb: 1, februari: 1,
+            mar: 2, maret: 2,
+            apr: 3, april: 3,
+            mei: 4, may: 4,
+            jun: 5, juni: 5,
+            jul: 6, juli: 6,
+            agu: 7, agustus: 7, aug: 7, august: 7,
+            sep: 8, september: 8,
+            okt: 9, oktober: 9, oct: 9, october: 9,
+            nov: 10, november: 10,
+            des: 11, desember: 11, dec: 11, december: 11
         };
 
-        function parseTanggalIndo(s) {
+        function parseAnySippDate(s) {
             if (!s || typeof s !== 'string') return null;
-            const parts = s.trim().split(/\s+/);
+
+            const isoMatch = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if (isoMatch) {
+                return {
+                    day: parseInt(isoMatch[3]),
+                    mon: parseInt(isoMatch[2]) - 1,
+                    year: parseInt(isoMatch[1])
+                };
+            }
+
+            const cleaned = s
+                .replace(/^[^,]+,\s*/, '')
+                .replace(/\./g, '')
+                .trim();
+            const parts = cleaned.split(/\s+/);
             if (parts.length < 3) return null;
+
             const day = parseInt(parts[0]);
             const monKey = parts[1].toLowerCase();
-            const mon = monthMap[monKey];
+            const mon = monthMap[monKey] ?? monthMap[monKey.slice(0, 3)];
             const year = parseInt(parts[2]);
             if (isNaN(day) || mon === undefined || isNaN(year)) return null;
             return { day, mon, year };
@@ -229,7 +302,7 @@ app.get('/api/laporan/bulanan/:jenis/data', (req, res) => {
 
         const registeredInMonth = new Set();
         for (const row of registeredRows) {
-            const parsed = parseTanggalIndo(row.sipp_tanggal_register);
+            const parsed = parseAnySippDate(row.sipp_tanggal_register);
             if (parsed && parsed.mon + 1 === bulan && parsed.year === tahun) {
                 registeredInMonth.add(row.id);
             }
@@ -247,13 +320,9 @@ app.get('/api/laporan/bulanan/:jenis/data', (req, res) => {
 
         const withSidangInMonth = new Set();
         for (const row of sidangRows) {
-            // Parse jadwal tanggal (YYYY-MM-DD format)
-            const dateMatch = row.sidang_tanggal.match(/(\d{4})-(\d{2})-(\d{2})/);
-            if (dateMatch) {
-                const [, y, m, d] = dateMatch;
-                if (parseInt(m) === bulan && parseInt(y) === tahun) {
-                    withSidangInMonth.add(row.id);
-                }
+            const parsed = parseAnySippDate(row.sidang_tanggal);
+            if (parsed && parsed.mon + 1 === bulan && parsed.year === tahun) {
+                withSidangInMonth.add(row.id);
             }
         }
 
@@ -262,7 +331,20 @@ app.get('/api/laporan/bulanan/:jenis/data', (req, res) => {
         const result = [];
         for (const id of allIds) {
             const row = db.prepare('SELECT * FROM perkara WHERE id = ?').get(id);
-            if (row) result.push(row);
+            if (row) {
+                const registered = registeredInMonth.has(id);
+                const sidang = withSidangInMonth.has(id);
+                result.push({
+                    ...row,
+                    laporan_terdaftar_bulan_ini: registered,
+                    laporan_sidang_bulan_ini: sidang,
+                    laporan_kategori: registered && sidang
+                        ? 'Terdaftar & Sidang'
+                        : registered
+                            ? 'Terdaftar'
+                            : 'Sidang'
+                });
+            }
         }
 
         // Sort by sipp_tanggal_register
@@ -276,6 +358,139 @@ app.get('/api/laporan/bulanan/:jenis/data', (req, res) => {
         res.json({ data: result });
     } catch (err) {
         console.error('[LAPORAN-DATA] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get perkara data for weekly report (JSON, not file export)
+// Returns perkara that registered OR had sidang in the selected date range.
+app.get('/api/laporan/mingguan/:jenis/data', (req, res) => {
+    console.log('[LAPORAN-MINGGUAN-DATA] Called!', req.params, req.query);
+    try {
+        const { jenis } = req.params;
+        const { start, end } = req.query;
+
+        if (!start || !end) return res.status(400).json({ error: 'start dan end wajib diisi' });
+
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            return res.status(400).json({ error: 'rentang tanggal tidak valid' });
+        }
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+
+        const jenisCapital = jenis.charAt(0).toUpperCase() + jenis.slice(1).toLowerCase();
+
+        const monthMap = {
+            jan: 0, januari: 0,
+            feb: 1, februari: 1,
+            mar: 2, maret: 2,
+            apr: 3, april: 3,
+            mei: 4, may: 4,
+            jun: 5, juni: 5,
+            jul: 6, juli: 6,
+            agu: 7, agustus: 7, aug: 7, august: 7,
+            sep: 8, september: 8,
+            okt: 9, oktober: 9, oct: 9, october: 9,
+            nov: 10, november: 10,
+            des: 11, desember: 11, dec: 11, december: 11
+        };
+
+        function parseAnySippDate(s) {
+            if (!s || typeof s !== 'string') return null;
+
+            const isoMatch = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if (isoMatch) return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+
+            const cleaned = s
+                .replace(/^[^,]+,\s*/, '')
+                .replace(/\./g, '')
+                .trim();
+            const parts = cleaned.split(/\s+/);
+            if (parts.length < 3) return null;
+
+            const day = parseInt(parts[0]);
+            const monKey = parts[1].toLowerCase();
+            const mon = monthMap[monKey] ?? monthMap[monKey.slice(0, 3)];
+            const year = parseInt(parts[2]);
+            if (isNaN(day) || mon === undefined || isNaN(year)) return null;
+            return new Date(year, mon, day);
+        }
+
+        function isInRange(date) {
+            return date && date >= startDate && date <= endDate;
+        }
+
+        const perkaraRows = db.prepare(`
+            SELECT * FROM perkara
+            WHERE jenis_perkara = ?
+        `).all(jenisCapital);
+
+        const registeredInRange = new Set();
+        const perkaraById = new Map();
+        const perkaraByNomor = new Map();
+        for (const row of perkaraRows) {
+            perkaraById.set(row.id, row);
+            perkaraByNomor.set(row.nomor_perkara, row);
+            if (isInRange(parseAnySippDate(row.sipp_tanggal_register))) {
+                registeredInRange.add(row.id);
+            }
+        }
+
+        const sidangById = new Map();
+        const sidangRows = db.prepare(`
+            SELECT p.id, j.tanggal
+            FROM perkara p
+            INNER JOIN jadwal_sidang j ON j.nomor_perkara = p.nomor_perkara
+            WHERE p.jenis_perkara = ?
+            AND j.nomor IS NOT NULL
+            AND j.tanggal IS NOT NULL
+            AND j.tanggal != ''
+            ORDER BY j.id
+        `).all(jenisCapital);
+
+        for (const row of sidangRows) {
+            if (!isInRange(parseAnySippDate(row.tanggal))) continue;
+            if (!sidangById.has(row.id)) sidangById.set(row.id, []);
+            sidangById.get(row.id).push(row.tanggal);
+        }
+
+        const allIds = new Set([...registeredInRange, ...sidangById.keys()]);
+        const result = [];
+        for (const id of allIds) {
+            const row = perkaraById.get(id);
+            if (!row) continue;
+
+            const registered = registeredInRange.has(id);
+            const sidangDates = sidangById.get(id) || [];
+            const sidang = sidangDates.length > 0;
+            result.push({
+                ...row,
+                laporan_terdaftar_periode_ini: registered,
+                laporan_sidang_periode_ini: sidang,
+                laporan_tanggal_sidang: sidangDates,
+                laporan_kategori: registered && sidang
+                    ? 'Terdaftar & Sidang'
+                    : registered
+                        ? 'Terdaftar'
+                        : 'Sidang'
+            });
+        }
+
+        result.sort((a, b) => {
+            const da = parseAnySippDate(a.sipp_tanggal_register);
+            const db_ = parseAnySippDate(b.sipp_tanggal_register);
+            if (!da && !db_) return 0;
+            if (!da) return 1;
+            if (!db_) return -1;
+            return da - db_;
+        });
+
+        console.log('[LAPORAN-MINGGUAN-DATA] Returning', result.length, 'perkara');
+        res.json({ data: result });
+    } catch (err) {
+        console.error('[LAPORAN-MINGGUAN-DATA] Error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

@@ -29,5 +29,16 @@ export const SIDEBAR_ITEMS = [
             { id: 'mingguan-perikanan', label: 'Perikanan', icon: 'fish',      to: '/mingguan/perikanan' },
             { id: 'mingguan-hukum',     label: 'Hukum',     icon: 'fileCheck', to: '/mingguan/hukum' }
         ]
+    },
+    {
+        type: 'group',
+        id: 'kasir',
+        label: 'Kasir',
+        icon: 'wallet',
+        children: [
+            { id: 'kasir-rekap', label: 'Rekap Excel', icon: 'download', to: '/kasir/rekap' },
+            { id: 'kasir-mendadak', label: 'Pemeriksaan Mendadak', icon: 'fileCheck', to: '/kasir/pemeriksaan-mendadak' },
+            { id: 'kasir-penutupan', label: 'Penutupan Kas', icon: 'filePlus', to: '/kasir/penutupan-kas' }
+        ]
     }
 ]

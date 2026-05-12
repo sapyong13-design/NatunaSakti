@@ -14,20 +14,33 @@ const BULAN_NAMES = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
 
 const HARI_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
 
-// English 3-letter month abbreviations as stored by SIPP scraper
-const MONTH_ABBREV_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const MONTH_INDEX = {
+    jan: 0, januari: 0,
+    feb: 1, februari: 1,
+    mar: 2, maret: 2,
+    apr: 3, april: 3,
+    mei: 4, may: 4,
+    jun: 5, juni: 5,
+    jul: 6, juli: 6,
+    agu: 7, agustus: 7, aug: 7, august: 7,
+    sep: 8, september: 8,
+    okt: 9, oktober: 9, oct: 9, october: 9,
+    nov: 10, november: 10,
+    des: 11, desember: 11, dec: 11, december: 11
+}
 
 const MINGGU_ROMAN = ['I', 'II', 'III', 'IV', 'V']
 
 // Parse "08 May 2026" → { day: 8, month: 5, year: 2026, sort: 20260508 }
 function parseRegisterDate(dateStr) {
     if (!dateStr) return null
-    const parts = dateStr.trim().split(/\s+/)
+    const parts = dateStr.replace(/\./g, '').trim().split(/\s+/)
     if (parts.length < 3) return null
     const day = parseInt(parts[0])
-    const monIdx = MONTH_ABBREV_EN.indexOf(parts[1])
+    const monKey = parts[1].toLowerCase()
+    const monIdx = MONTH_INDEX[monKey] ?? MONTH_INDEX[monKey.slice(0, 3)]
     const year = parseInt(parts[2])
-    if (isNaN(day) || monIdx === -1 || isNaN(year)) return null
+    if (isNaN(day) || monIdx === undefined || isNaN(year)) return null
     return { day, month: monIdx + 1, year, sort: year * 10000 + (monIdx + 1) * 100 + day }
 }
 
@@ -38,9 +51,10 @@ function parseJadwalDateFull(dateStr) {
     const parts = cleaned.split(/\s+/)
     if (parts.length < 3) return null
     const day = parseInt(parts[0])
-    const monIdx = MONTH_ABBREV_EN.indexOf(parts[1])
+    const monKey = parts[1].toLowerCase()
+    const monIdx = MONTH_INDEX[monKey] ?? MONTH_INDEX[monKey.slice(0, 3)]
     const year = parseInt(parts[2])
-    if (isNaN(day) || monIdx === -1 || isNaN(year)) return null
+    if (isNaN(day) || monIdx === undefined || isNaN(year)) return null
     return new Date(year, monIdx, day)
 }
 
@@ -52,9 +66,10 @@ function parseJadwalDate(dateStr) {
     // Now: "27 Jan 2026"
     const parts = cleaned.split(/\s+/)
     if (parts.length < 3) return null
-    const monIdx = MONTH_ABBREV_EN.indexOf(parts[1])
+    const monKey = parts[1].toLowerCase()
+    const monIdx = MONTH_INDEX[monKey] ?? MONTH_INDEX[monKey.slice(0, 3)]
     const year = parseInt(parts[2])
-    if (monIdx === -1 || isNaN(year)) return null
+    if (monIdx === undefined || isNaN(year)) return null
     return { month: monIdx + 1, year }
 }
 

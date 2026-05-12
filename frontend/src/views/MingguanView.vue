@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import PageHeader from '../components/shell/PageHeader.vue'
 import MingguanFilterBar from '../components/report/MingguanFilterBar.vue'
 import ReportTable from '../components/report/ReportTable.vue'
-import { getPerkaraByDateRange, downloadLaporanMingguan } from '../lib/api'
+import { getPerkaraLaporanMingguan, downloadLaporanMingguan } from '../lib/api'
 
 const route = useRoute()
 
@@ -36,7 +36,7 @@ async function fetchData() {
     }
     loading.value = true
     try {
-        const data = await getPerkaraByDateRange(start.value, end.value, { jenis_perkara: jenisCanonical.value })
+        const data = await getPerkaraLaporanMingguan(jenisCanonical.value, start.value, end.value)
         rows.value = Array.isArray(data) ? data : []
     } catch (err) {
         console.error('Fetch failed:', err.message)

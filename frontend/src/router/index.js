@@ -25,6 +25,20 @@ const routes = [
         component: () => import('../views/MingguanView.vue')
     },
     {
+        path: '/kasir',
+        redirect: '/kasir/rekap'
+    },
+    {
+        path: '/kasir/rekap',
+        name: 'KasirRekap',
+        component: () => import('../views/KasirView.vue')
+    },
+    {
+        path: '/kasir/:template',
+        name: 'KasirTemplate',
+        component: () => import('../views/KasirTemplateView.vue')
+    },
+    {
         path: '/data',
         name: 'Data',
         component: () => import('../views/DataView.vue')

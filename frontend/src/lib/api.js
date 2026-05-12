@@ -221,6 +221,14 @@ export const getPerkaraLaporanBulanan = async (jenis, bulan, tahun) => {
     return result.data || result;
 };
 
+// Get perkara for weekly report (registered OR having sidang in the date range)
+export const getPerkaraLaporanMingguan = async (jenis, start, end) => {
+    const params = new URLSearchParams({ start, end });
+    const response = await fetchWithRetry(`${API_BASE}/laporan/mingguan/${jenis}/data?${params}`);
+    const result = await response.json();
+    return result.data || result;
+};
+
 // ========================
 // REPORTS EXPORT
 // ========================
@@ -262,6 +270,20 @@ export const downloadLaporanMingguan = async (jenis, start, end, format = 'docx'
 
     if (onProgress) onProgress({ step: 90, message: 'Finalizing...' });
 
+    return response.blob();
+}
+
+export const downloadKasirTemplate = async (type) => {
+    const response = await fetchWithRetry(`${API_BASE}/kasir/templates/${type}`);
+    return response.blob();
+}
+
+export const generatePenutupanKasRtf = async (payload) => {
+    const response = await fetchWithRetry(`${API_BASE}/kasir/generate/penutupan-kas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
     return response.blob();
 }
 

@@ -30,6 +30,25 @@ function getJenisBg(jenis) {
     }
     return colors[jenis] || 'rgba(156, 163, 175, 0.12)'
 }
+
+function getKategori(row) {
+    return row.laporan_kategori || row.keterangan || '-'
+}
+
+function getKategoriClass(row) {
+    const kategori = getKategori(row).toLowerCase()
+    if (kategori.includes('terdaftar') && kategori.includes('sidang')) return 'is-both'
+    if (kategori.includes('terdaftar')) return 'is-registered'
+    if (kategori.includes('sidang')) return 'is-hearing'
+    return ''
+}
+
+function getSidangDates(row) {
+    if (Array.isArray(row.laporan_tanggal_sidang) && row.laporan_tanggal_sidang.length) {
+        return row.laporan_tanggal_sidang.join(', ')
+    }
+    return '-'
+}
 </script>
 
 <template>
@@ -45,19 +64,20 @@ function getJenisBg(jenis) {
                         <th class="ns-col-jenis-detail">Jenis Perkara</th>
                         <th class="ns-col-tahun">Tahun</th>
                         <th class="ns-col-register">Tgl Register</th>
+                        <th class="ns-col-sidang">Tgl Sidang</th>
                         <th class="ns-col-putus">Tgl Minutasi</th>
-                        <th class="ns-col-ket">Ket</th>
+                        <th class="ns-col-ket">Kategori</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr v-if="loading">
-                        <td colspan="9" class="ns-loading">
+                        <td colspan="10" class="ns-loading">
                             <span class="ns-spinner"></span>
                             <span>Memuat data...</span>
                         </td>
                     </tr>
                     <tr v-else-if="!rows.length">
-                        <td colspan="9" class="ns-empty">
+                        <td colspan="10" class="ns-empty">
                             <div class="ns-empty-icon">📋</div>
                             <div>Tidak ada perkara di periode ini</div>
                         </td>
@@ -86,8 +106,13 @@ function getJenisBg(jenis) {
                         </td>
                         <td class="ns-col-tahun">{{ row.tahun_masuk }}</td>
                         <td class="ns-col-register">{{ formatDate(row.sipp_tanggal_register) }}</td>
+                        <td class="ns-col-sidang">{{ getSidangDates(row) }}</td>
                         <td class="ns-col-putus">{{ formatDate(row.tanggal_putus) }}</td>
-                        <td class="ns-col-ket">{{ row.keterangan || '-' }}</td>
+                        <td class="ns-col-ket">
+                            <span class="ns-kategori-pill" :class="getKategoriClass(row)">
+                                {{ getKategori(row) }}
+                            </span>
+                        </td>
                     </tr>
                 </tbody>
             </table>
@@ -230,13 +255,20 @@ function getJenisBg(jenis) {
     white-space: nowrap;
 }
 
+.ns-col-sidang {
+    min-width: 180px;
+    max-width: 260px;
+    white-space: normal;
+    line-height: 1.5;
+}
+
 .ns-col-putus {
     width: 110px;
     white-space: nowrap;
 }
 
 .ns-col-ket {
-    width: 80px;
+    width: 150px;
     text-align: center;
 }
 
@@ -258,6 +290,35 @@ function getJenisBg(jenis) {
     letter-spacing: 0.02em;
     background: var(--jenis-bg);
     color: var(--jenis-color);
+}
+
+.ns-kategori-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 84px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ns-kategori-pill.is-registered {
+    background: rgba(16, 185, 129, 0.12);
+    color: #059669;
+}
+
+.ns-kategori-pill.is-hearing {
+    background: rgba(59, 130, 246, 0.12);
+    color: #2563eb;
+}
+
+.ns-kategori-pill.is-both {
+    background: rgba(245, 158, 11, 0.14);
+    color: #b45309;
 }
 
 .ns-nomor {
@@ -283,6 +344,7 @@ function getJenisBg(jenis) {
 
 .ns-col-tahun,
 .ns-col-register,
+.ns-col-sidang,
 .ns-col-putus,
 .ns-col-ket {
     font-family: "JetBrains Mono", monospace;
