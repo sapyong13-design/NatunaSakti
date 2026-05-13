@@ -114,6 +114,21 @@ onMounted(() => {
             />
         </div>
 
+        <div class="ns-trend-legend" aria-label="Legenda jenis perkara">
+            <span class="ns-trend-legend-item">
+                <span class="ns-trend-legend-dot is-pidana"></span>
+                Pidana
+            </span>
+            <span class="ns-trend-legend-item">
+                <span class="ns-trend-legend-dot is-perdata"></span>
+                Perdata
+            </span>
+            <span class="ns-trend-legend-item">
+                <span class="ns-trend-legend-dot is-perikanan"></span>
+                Perikanan
+            </span>
+        </div>
+
         <!-- Stats Footer -->
         <div class="ns-trend-footer">
             <div class="ns-trend-stat">
@@ -224,6 +239,40 @@ onMounted(() => {
 
 .ns-trend-chart-wrap .ns-trend-chart {
     overflow: visible;
+}
+
+.ns-trend-legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: -4px 0 10px;
+    color: var(--text2);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.ns-trend-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.ns-trend-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+}
+
+.ns-trend-legend-dot.is-pidana {
+    background: var(--danger);
+}
+
+.ns-trend-legend-dot.is-perdata {
+    background: var(--success);
+}
+
+.ns-trend-legend-dot.is-perikanan {
+    background: #0ea5e9;
 }
 
 .ns-trend-footer {

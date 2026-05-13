@@ -12,7 +12,6 @@ import PerkaraTable from '../components/dashboard/PerkaraTable.vue'
 import KanbanBoard from '../components/dashboard/KanbanBoard.vue'
 import DetailPanel from '../components/dashboard/DetailPanel.vue'
 import Toast from '../components/dashboard/Toast.vue'
-import Skeleton from '../components/base/Skeleton.vue'
 import EmptyState from '../components/base/EmptyState.vue'
 import FilterChip from '../components/base/FilterChip.vue'
 import Sparkline from '../components/base/Sparkline.vue'
@@ -47,6 +46,7 @@ const selectedTrendYear = ref(2026)
 
 const selectedRow = ref(null)
 const scrollPosition = ref(0)
+const syncClusterRef = ref(null)
 
 // Pagination state
 const currentPage = ref(1)
@@ -127,6 +127,69 @@ const quickFilterCounts = computed(() => {
         thisYear: thisYearCount
     }
 })
+
+const activeFilterSummary = computed(() => {
+    const parts = []
+    if (filterJenis.value !== 'Semua') parts.push(filterJenis.value)
+    if (filterTahun.value) parts.push(`Tahun ${filterTahun.value}`)
+    if (filterStatus.value !== 'Semua') {
+        parts.push(filterStatus.value === 'Bersidang' ? 'Sedang Bersidang' : filterStatus.value)
+    }
+    if (quickFilter.value === 'thisYear') parts.push('Tahun Ini')
+    if (search.value.trim()) parts.push(`Cari "${search.value.trim()}"`)
+    return parts.length ? parts.join(' · ') : 'Semua perkara'
+})
+
+const activeFilterChips = computed(() => {
+    const chips = []
+    if (filterJenis.value !== 'Semua') chips.push({ key: 'jenis', label: filterJenis.value })
+    if (filterTahun.value) chips.push({ key: 'tahun', label: `Tahun ${filterTahun.value}` })
+    if (filterStatus.value !== 'Semua') {
+        chips.push({
+            key: 'status',
+            label: filterStatus.value === 'Bersidang' ? 'Sedang Bersidang' : filterStatus.value
+        })
+    }
+    if (quickFilter.value === 'thisYear') chips.push({ key: 'quick', label: 'Tahun Ini' })
+    if (search.value.trim()) chips.push({ key: 'search', label: `Cari "${search.value.trim()}"` })
+    return chips
+})
+
+const hasActiveFilters = computed(() => {
+    return Boolean(
+        search.value.trim() ||
+        filterJenis.value !== 'Semua' ||
+        filterStatus.value !== 'Semua' ||
+        quickFilter.value !== 'all'
+    )
+})
+
+function resetFilters() {
+    search.value = ''
+    filterJenis.value = 'Semua'
+    filterStatus.value = 'Semua'
+    quickFilter.value = 'all'
+    filterTahun.value = String(new Date().getFullYear())
+    currentPage.value = 1
+}
+
+function removeFilterChip(key) {
+    if (key === 'jenis') filterJenis.value = 'Semua'
+    if (key === 'tahun') filterTahun.value = ''
+    if (key === 'status') filterStatus.value = 'Semua'
+    if (key === 'quick') quickFilter.value = 'all'
+    if (key === 'search') search.value = ''
+    currentPage.value = 1
+}
+
+function handleEmptyAction(action) {
+    if (action.key === 'sync') triggerSippSync()
+    if (action.key === 'reset') resetFilters()
+}
+
+function triggerSippSync() {
+    syncClusterRef.value?.sync()
+}
 
 const stats = computed(() => ({
     total: rows.value.length,
@@ -212,6 +275,39 @@ const avgDaysByType = computed(() => {
 const syncRate = computed(() => {
     if (!syncStatus.value.total) return '—'
     return ((syncStatus.value.sipp_synced / syncStatus.value.total) * 100).toFixed(1)
+})
+
+const attentionStats = computed(() => {
+    const active = rows.value.filter(r => {
+        const status = (r.sipp_status || '').toLowerCase()
+        return status.includes('sidang') || r.first_sidang_soon
+    }).length
+    const unsynced = Math.max((syncStatus.value.total || 0) - (syncStatus.value.sipp_synced || 0), 0)
+    const completedThisYear = rows.value.filter(r => {
+        const status = (r.sipp_status || '').toLowerCase()
+        return status.includes('minutasi') && Number(r.tahun_masuk) === new Date().getFullYear()
+    }).length
+
+    return [
+        {
+            key: 'active',
+            label: 'Sedang berjalan',
+            value: active,
+            tone: 'warn'
+        },
+        {
+            key: 'unsynced',
+            label: 'Belum sinkron',
+            value: unsynced,
+            tone: unsynced > 0 ? 'danger' : 'safe'
+        },
+        {
+            key: 'completed',
+            label: 'Minutasi tahun ini',
+            value: completedThisYear,
+            tone: 'safe'
+        }
+    ]
 })
 
 const tahunOptions = computed(() => {
@@ -342,9 +438,6 @@ onMounted(() => {
 
 <template>
     <div class="ns-dashboard-view">
-        <!-- Grain texture overlay -->
-        <div class="ns-grain-overlay"></div>
-
         <PageHeader
             eyebrow="Dashboard"
             title="Data Perkara"
@@ -445,6 +538,7 @@ onMounted(() => {
                     <button
                         class="ns-view-btn"
                         :class="{ active: viewMode === 'table' }"
+                        aria-label="Tampilkan tabel"
                         @click="viewMode = 'table'"
                         title="Tabel View"
                     >
@@ -453,6 +547,7 @@ onMounted(() => {
                     <button
                         class="ns-view-btn"
                         :class="{ active: viewMode === 'kanban' }"
+                        aria-label="Tampilkan kanban"
                         @click="viewMode = 'kanban'"
                         title="Kanban View"
                     >
@@ -460,18 +555,72 @@ onMounted(() => {
                     </button>
                 </div>
                 <Toggles type="density" v-model="density" />
-                <SyncCluster :count="filtered.length" :total="rows.length" @synced="loadAll" />
+                <SyncCluster ref="syncClusterRef" :count="filtered.length" :total="rows.length" @synced="loadAll" />
                 <QuickActions :rows="filtered" @refresh="handleRefresh" />
             </div>
         </div>
 
+        <div class="ns-filter-summary" aria-live="polite">
+            <div class="ns-filter-summary-main">
+                <span class="ns-filter-summary-label">Tampilan</span>
+                <strong>{{ activeFilterSummary }}</strong>
+                <div v-if="activeFilterChips.length" class="ns-filter-chip-list">
+                    <button
+                        v-for="chip in activeFilterChips"
+                        :key="chip.key"
+                        type="button"
+                        class="ns-filter-summary-chip"
+                        :aria-label="`Hapus filter ${chip.label}`"
+                        @click="removeFilterChip(chip.key)"
+                    >
+                        {{ chip.label }}
+                        <span aria-hidden="true">×</span>
+                    </button>
+                </div>
+            </div>
+            <div class="ns-filter-summary-meta">
+                <span>{{ filtered.length }} dari {{ rows.length }} perkara</span>
+                <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    class="ns-filter-summary-reset"
+                    @click="resetFilters"
+                >
+                    Reset
+                </button>
+            </div>
+        </div>
+
+        <div class="ns-attention-strip" aria-label="Ringkasan perkara perlu perhatian">
+            <div
+                v-for="item in attentionStats"
+                :key="item.key"
+                class="ns-attention-item"
+                :class="`is-${item.tone}`"
+            >
+                <span class="ns-attention-dot"></span>
+                <span class="ns-attention-label">{{ item.label }}</span>
+                <strong class="ns-attention-value">{{ item.value }}</strong>
+            </div>
+        </div>
+
         <!-- Table with Skeleton Loading -->
-        <Skeleton v-if="loading" type="table" />
+        <div v-if="loading" class="ns-table-skeleton-panel" aria-label="Memuat tabel perkara">
+            <div class="ns-table-skeleton-head"></div>
+            <div v-for="i in 8" :key="i" class="ns-table-skeleton-row">
+                <span v-for="j in 8" :key="j"></span>
+            </div>
+        </div>
         <EmptyState
             v-else-if="!filtered.length"
             icon="document"
             title="Tidak ada perkara"
             :description="search || filterJenis !== 'Semua' ? 'Coba sesuaikan filter pencarian Anda' : 'Belum ada data perkara yang tersedia'"
+            :actions="[
+                { key: 'sync', label: 'Sync dari SIPP', icon: 'refresh', class: 'primary' },
+                { key: 'reset', label: 'Reset Filter', icon: 'filter' }
+            ]"
+            @action="handleEmptyAction"
         />
         <template v-else>
             <!-- Table View -->
@@ -480,6 +629,7 @@ onMounted(() => {
                 :rows="paginatedRows"
                 :start-index="(currentPage - 1) * itemsPerPage"
                 :upcoming-perkara-numbers="upcomingPerkaraNumbers"
+                :density="density"
                 @row-click="handleRowClick"
                 @menu-action="handleMenuAction"
             />
@@ -698,6 +848,214 @@ onMounted(() => {
     gap: 12px;
 }
 
+.ns-filter-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: -4px 0 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.ns-filter-summary-main {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+    font-size: 13px;
+}
+
+.ns-filter-summary-label {
+    color: var(--text-3);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.ns-filter-summary-main strong {
+    min-width: 0;
+    color: var(--text);
+    font-weight: 650;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ns-filter-chip-list {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+}
+
+.ns-filter-summary-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 220px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-2);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.ns-filter-summary-chip:hover {
+    background: var(--accentSoft);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.ns-filter-summary-chip:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.ns-filter-summary-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    color: var(--text-2);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.ns-filter-summary-reset {
+    padding: 5px 9px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--surface-2);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.ns-filter-summary-reset:hover {
+    background: var(--accentSoft);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.ns-filter-summary-reset:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.ns-attention-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.ns-attention-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.ns-attention-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--text-3);
+}
+
+.ns-attention-item.is-warn .ns-attention-dot {
+    background: #f59e0b;
+}
+
+.ns-attention-item.is-danger .ns-attention-dot {
+    background: #ef4444;
+}
+
+.ns-attention-item.is-safe .ns-attention-dot {
+    background: #10b981;
+}
+
+.ns-attention-label {
+    min-width: 0;
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ns-attention-value {
+    color: var(--text);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+}
+
+.ns-table-skeleton-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.ns-table-skeleton-head,
+.ns-table-skeleton-row {
+    display: grid;
+    grid-template-columns: 5% 9% 20% 19% 17% 10% 11% 9%;
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.ns-table-skeleton-head {
+    min-height: 44px;
+    background: var(--bg-2);
+}
+
+.ns-table-skeleton-head::before,
+.ns-table-skeleton-row span {
+    content: '';
+    display: block;
+    height: 12px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+.ns-table-skeleton-head::before {
+    grid-column: 1 / -1;
+    width: 34%;
+}
+
+.ns-table-skeleton-row:last-child {
+    border-bottom: none;
+}
+
 /* View Mode Toggle */
 .ns-view-toggle {
     display: flex;
@@ -741,25 +1099,8 @@ onMounted(() => {
     border-color: #2d3748;
 }
 
-/* Grain texture overlay */
 .ns-dashboard-view {
     position: relative;
-}
-
-.ns-grain-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 0;
-    opacity: 0.02;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-}
-
-[data-mode="dark"] .ns-grain-overlay {
-    opacity: 0.04;
 }
 
 /* Quick Filters */
@@ -844,6 +1185,38 @@ onMounted(() => {
 @media (max-width: 768px) {
     .ns-stats-skeleton {
         grid-template-columns: 1fr;
+    }
+
+    .ns-filter-summary {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .ns-filter-summary-main,
+    .ns-filter-summary-meta {
+        width: 100%;
+    }
+
+    .ns-filter-summary-main strong {
+        white-space: normal;
+    }
+
+    .ns-filter-chip-list {
+        width: 100%;
+    }
+
+    .ns-attention-strip {
+        grid-template-columns: 1fr;
+    }
+
+    .ns-attention-label {
+        white-space: normal;
+    }
+
+    .ns-table-skeleton-head,
+    .ns-table-skeleton-row {
+        gap: 4px;
+        padding: 10px 6px;
     }
 }
 

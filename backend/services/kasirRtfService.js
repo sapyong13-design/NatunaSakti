@@ -37,6 +37,38 @@ function amountRun(value) {
   return `Rp. ${padding}${rtfEscape(text)}`
 }
 
+const DEFAULT_DENOMINATIONS = [
+  { nominal: 100000, unit: 'lembar', type: 'Uang Kertas' },
+  { nominal: 50000, unit: 'lembar', type: 'Uang Kertas' },
+  { nominal: 20000, unit: 'lembar', type: 'Uang Kertas' },
+  { nominal: 10000, unit: 'lembar', type: 'Uang Kertas' },
+  { nominal: 5000, unit: 'lembar', type: 'Uang Kertas' },
+  { nominal: 2000, unit: 'lembar', type: 'Uang Kertas' },
+  { nominal: 1000, unit: 'lembar', type: 'Uang Kertas' },
+  { nominal: 500, unit: 'Koin', type: 'Uang Logam' },
+  { nominal: 200, unit: 'Koin', type: 'Uang Logam' },
+  { nominal: 100, unit: 'Koin', type: 'Uang Logam' }
+]
+
+function normalizeKasTunaiRows(rows) {
+  const byNominal = new Map(
+    (Array.isArray(rows) ? rows : []).map(row => [Number(row.nominal) || 0, Number(row.jumlah) || 0])
+  )
+
+  return DEFAULT_DENOMINATIONS.map(item => {
+    const jumlah = Math.max(0, Math.floor(byNominal.get(item.nominal) || 0))
+    return {
+      ...item,
+      jumlah,
+      total: item.nominal * jumlah
+    }
+  })
+}
+
+function totalKasTunai(payload) {
+  return normalizeKasTunaiRows(payload.kasTunaiRows).reduce((sum, row) => sum + row.total, 0)
+}
+
 function replaceDateParagraph(rtf, payload) {
   const parts = dateParts(payload.tanggalPemeriksaan)
   const sentence = `Pada hari ${parts.weekday} tanggal ${parts.dateText} telah dilakukan penutupan dengan uraian sebagai berikut:`
@@ -96,10 +128,11 @@ function replaceAmountsInTemplate(rtf, payload) {
   const saldoPembukuan = rows.reduce((sum, row) => {
     return sum + (Number(row.saldoLalu) || 0) + (Number(row.penerimaan) || 0) - (Number(row.pengeluaran) || 0)
   }, 0)
-  const kasBuku = rows.reduce((sum, row) => sum + (Number(row.kas) || 0), 0)
+  const kasTunai = totalKasTunai(payload) || rows.reduce((sum, row) => sum + (Number(row.kas) || 0), 0)
   const saldoBank = Number(payload.saldoBank) || 0
   const materai = Number(payload.materai) || 0
-  const saldoKas = kasBuku + saldoBank + materai
+  const saldoKas = kasTunai + saldoBank + materai
+  const selisih = saldoPembukuan - saldoKas
 
   rows.slice(0, 3).forEach((row, index) => {
     const saldoLalu = Number(row.saldoLalu) || 0
@@ -114,11 +147,48 @@ function replaceAmountsInTemplate(rtf, payload) {
   })
 
   rtf = replaceAmountsInRow(rtf, 'Saldo Pembukuan', 1, [saldoPembukuan])
-  rtf = replaceAmountsInRow(rtf, 'Menurut Kas', 1, [kasBuku, saldoBank, materai])
+  rtf = replaceAmountsInRow(rtf, 'Menurut Kas', 1, [kasTunai, saldoBank, materai])
+  rtf = replaceAmountsInRow(rtf, 'Menurut Kas', 2, [kasTunai, saldoBank, materai])
   rtf = replaceAmountsInRow(rtf, 'Saldo Kas', 1, [saldoKas])
-  rtf = replaceAmountsInRow(rtf, 'Selisih (IV-V)', 1, [saldoPembukuan - saldoKas])
+  rtf = replaceAmountsInRow(rtf, 'Saldo Kas', 2, [saldoKas])
+  rtf = replaceAmountsInRow(rtf, 'Selisih (IV-V)', 1, [selisih])
+  rtf = replaceAmountsInRow(rtf, 'Selisih (saldo pembukuan - saldo kas)', 1, [selisih])
+  rtf = replaceAmountsInRow(rtf, 'Selisih kurang', 1, [Math.max(0, -selisih)])
 
   return rtf
+}
+
+function kasTunaiLine(row, index) {
+  const letter = String.fromCharCode(97 + index)
+  return `${letter}. ${row.type} Rp ${money(row.nominal)} sebanyak ${row.jumlah || '-'} ${row.unit} : Rp ${money(row.total)}`
+}
+
+function replaceKasTunaiLampiran(rtf, payload) {
+  const rows = normalizeKasTunaiRows(payload.kasTunaiRows)
+  const kasTunai = rows.reduce((sum, row) => sum + row.total, 0)
+  const materai = Number(payload.materai) || 0
+  const materaiCount = materai > 0 ? Math.floor(materai / 10000) : 0
+  const lines = [
+    `Kas Tunai : Rp ${money(kasTunai)}`,
+    '',
+    'Terdiri dari perincian',
+    ...rows.map(kasTunaiLine),
+    `+ Rp ${money(kasTunai)}`,
+    '',
+    `Materai Rp. 10.000,- ${materaiCount} lembar : Rp ${money(materai)}`,
+    ''
+  ]
+  const replacement = lines.map(line => rtfEscape(line)).join('\\par ')
+  const start = rtf.indexOf('Kas Tunai\\tab')
+  const end = rtf.indexOf('Penjelasan :', start)
+
+  if (start === -1 || end === -1) return rtf
+  return rtf.slice(0, start) + replacement + rtf.slice(end)
+}
+
+function replaceExplanations(rtf, payload) {
+  const explanation = rtfEscape(payload.penjelasan || 'Tidak Ada Selisih')
+  return rtf.replace(/Tidak Ada Selisih/g, explanation)
 }
 
 function generatePenutupanKasRtf(payload = {}) {
@@ -126,6 +196,8 @@ function generatePenutupanKasRtf(payload = {}) {
   rtf = replaceMonthYearLabels(rtf, payload)
   rtf = replaceDateParagraph(rtf, payload)
   rtf = replaceAmountsInTemplate(rtf, payload)
+  rtf = replaceKasTunaiLampiran(rtf, payload)
+  rtf = replaceExplanations(rtf, payload)
   return Buffer.from(rtf, 'utf8')
 }
 

@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import PageHeader from '../components/shell/PageHeader.vue'
 import Icon from '../components/Icon.vue'
+import { generatePenutupanRekapXlsx } from '../lib/api'
 
 const STORAGE_KEY = 'natunasakti-kasir-rekap-v1'
 
@@ -29,6 +30,20 @@ const bukuOptions = [
     'Buku Keuangan Lain-Lain'
 ]
 
+const kategoriOptions = [
+    'PNBP',
+    'Biaya Pendaftaran',
+    'Materai',
+    'Biaya Panggilan',
+    'Lain-lain'
+]
+
+const sheetTabs = [
+    { id: 'input', label: 'Sheet 1 Input' },
+    { id: 'laporan', label: 'Sheet 2 Laporan' },
+    { id: 'rekap', label: 'Sheet 3 Rekap' }
+]
+
 const form = reactive({
     bulan: new Date().getMonth() + 1,
     tahun: new Date().getFullYear(),
@@ -42,6 +57,7 @@ const form = reactive({
 const newRow = reactive({
     tanggal: new Date().toISOString().slice(0, 10),
     buku: bukuOptions[0],
+    kategori: 'PNBP',
     nomorPerkara: '',
     uraian: '',
     penerimaan: 0,
@@ -51,6 +67,7 @@ const newRow = reactive({
 
 const rows = ref([])
 const exporting = ref(false)
+const activeSheet = ref('input')
 
 const rekap = computed(() => {
     return bukuOptions.map(buku => {
@@ -103,6 +120,7 @@ function addRow() {
         id: Date.now(),
         tanggal: newRow.tanggal,
         buku: newRow.buku,
+        kategori: newRow.kategori,
         nomorPerkara: newRow.nomorPerkara.trim(),
         uraian: newRow.uraian.trim(),
         penerimaan: toNumber(newRow.penerimaan),
@@ -115,6 +133,36 @@ function addRow() {
     newRow.penerimaan = 0
     newRow.pengeluaran = 0
     newRow.ket = ''
+}
+
+function appendTransaction(overrides) {
+    rows.value.push({
+        id: Date.now() + Math.random(),
+        tanggal: newRow.tanggal,
+        buku: newRow.buku,
+        kategori: overrides.kategori,
+        nomorPerkara: newRow.nomorPerkara.trim(),
+        uraian: overrides.uraian,
+        penerimaan: toNumber(overrides.penerimaan),
+        pengeluaran: toNumber(overrides.pengeluaran),
+        ket: overrides.ket || ''
+    })
+}
+
+function addBiayaPerkaraMasuk() {
+    appendTransaction({ kategori: 'PNBP', uraian: 'PNBP', penerimaan: 30000, pengeluaran: 0, ket: 'Auto biaya perkara masuk' })
+    appendTransaction({ kategori: 'Biaya Pendaftaran', uraian: 'Biaya Pendaftaran', penerimaan: 50000, pengeluaran: 0, ket: 'Auto biaya perkara masuk' })
+}
+
+function addMaterai() {
+    appendTransaction({ kategori: 'Materai', uraian: 'Materai', penerimaan: 10000, pengeluaran: 0, ket: 'Auto materai' })
+}
+
+function prepareBiayaPanggilan() {
+    newRow.kategori = 'Biaya Panggilan'
+    newRow.uraian = 'Biaya Panggilan'
+    newRow.penerimaan = 0
+    newRow.pengeluaran = 0
 }
 
 function removeRow(id) {
@@ -154,86 +202,18 @@ function escapeHtml(value) {
         .replace(/"/g, '&quot;')
 }
 
-function exportExcel() {
+async function exportExcel() {
     exporting.value = true
     try {
-        const transaksiRows = rows.value.map((row, index) => `
-            <tr>
-                <td>${index + 1}</td>
-                <td>${escapeHtml(formatDate(row.tanggal))}</td>
-                <td>${escapeHtml(row.buku)}</td>
-                <td style="mso-number-format:'\\@';">${escapeHtml(row.nomorPerkara || '-')}</td>
-                <td>${escapeHtml(row.uraian)}</td>
-                <td>${toNumber(row.penerimaan)}</td>
-                <td>${toNumber(row.pengeluaran)}</td>
-                <td>${escapeHtml(row.ket || '-')}</td>
-            </tr>
-        `).join('')
-
-        const rekapRows = rekap.value.map((row, index) => `
-            <tr>
-                <td>${index + 1}</td>
-                <td>${escapeHtml(row.buku)}</td>
-                <td>${row.penerimaan}</td>
-                <td>${row.pengeluaran}</td>
-                <td>${row.saldo}</td>
-            </tr>
-        `).join('')
-
-        const html = `
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <style>
-                    body { font-family: Arial, sans-serif; }
-                    h1, h2 { margin: 0 0 10px; }
-                    table { border-collapse: collapse; margin-bottom: 22px; font-size: 11pt; }
-                    th { background: #d9ead3; font-weight: bold; }
-                    th, td { border: 1px solid #777; padding: 6px 8px; vertical-align: top; }
-                    .money { mso-number-format: "#,##0"; }
-                </style>
-            </head>
-            <body>
-                <h1>REKAP KASIR ${escapeHtml(namaBulan.value.toUpperCase())} ${form.tahun}</h1>
-                <p>Tanggal Penutupan: ${escapeHtml(formatDate(form.tanggalPenutupan))}</p>
-
-                <h2>Ringkasan</h2>
-                <table>
-                    <tr><th>Uraian</th><th>Jumlah</th></tr>
-                    <tr><td>Total Penerimaan</td><td>${totalPenerimaan.value}</td></tr>
-                    <tr><td>Total Pengeluaran</td><td>${totalPengeluaran.value}</td></tr>
-                    <tr><td>Saldo Pembukuan</td><td>${saldoPembukuan.value}</td></tr>
-                    <tr><td>Saldo Bank</td><td>${toNumber(form.saldoBank)}</td></tr>
-                    <tr><td>Uang Tunai</td><td>${toNumber(form.uangTunai)}</td></tr>
-                    <tr><td>Materai</td><td>${toNumber(form.materai)}</td></tr>
-                    <tr><td>Saldo Kas</td><td>${saldoKas.value}</td></tr>
-                    <tr><td>Selisih</td><td>${selisih.value}</td></tr>
-                    <tr><td>Penjelasan</td><td>${escapeHtml(form.penjelasan)}</td></tr>
-                </table>
-
-                <h2>Rekap Per Buku</h2>
-                <table>
-                    <tr><th>No</th><th>Buku</th><th>Penerimaan</th><th>Pengeluaran</th><th>Saldo</th></tr>
-                    ${rekapRows}
-                </table>
-
-                <h2>Transaksi</h2>
-                <table>
-                    <tr>
-                        <th>No</th><th>Tanggal</th><th>Buku</th><th>Nomor Perkara</th>
-                        <th>Uraian</th><th>Penerimaan</th><th>Pengeluaran</th><th>Ket</th>
-                    </tr>
-                    ${transaksiRows}
-                </table>
-            </body>
-            </html>
-        `
-
-        const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+        const blob = await generatePenutupanRekapXlsx({
+            bulanNama: namaBulan.value,
+            tahun: form.tahun,
+            rows: rows.value
+        })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `PENUTUPAN_${namaBulan.value.toUpperCase()}_${form.tahun}.xls`
+        a.download = `REKAP_KASIR_${namaBulan.value.toUpperCase()}_${form.tahun}.xlsx`
         a.click()
         URL.revokeObjectURL(url)
     } finally {
@@ -317,12 +297,45 @@ onMounted(loadLocal)
             </div>
         </section>
 
+        <section class="ns-panel ns-excel-toolbar">
+            <div class="ns-panel-title">Menu Cepat Excel</div>
+            <div class="ns-quick-actions">
+                <button class="ns-btn ns-btn-primary" @click="addBiayaPerkaraMasuk">
+                    <Icon name="filePlus" :size="14" />
+                    Biaya Perkara Masuk
+                </button>
+                <button class="ns-btn ns-btn-ghost" @click="addMaterai">
+                    <Icon name="filePlus" :size="14" />
+                    Materai 10.000
+                </button>
+                <button class="ns-btn ns-btn-ghost" @click="prepareBiayaPanggilan">
+                    <Icon name="filePlus" :size="14" />
+                    Biaya Panggilan
+                </button>
+            </div>
+        </section>
+
+        <nav class="ns-sheet-tabs" aria-label="Sheet rekap kasir">
+            <button
+                v-for="tab in sheetTabs"
+                :key="tab.id"
+                type="button"
+                :class="{ active: activeSheet === tab.id }"
+                @click="activeSheet = tab.id"
+            >
+                {{ tab.label }}
+            </button>
+        </nav>
+
         <section class="ns-panel">
-            <div class="ns-panel-title">Input Transaksi</div>
+            <div class="ns-panel-title">Sheet 1 Input Transaksi</div>
             <div class="ns-transaction-form">
                 <input v-model="newRow.tanggal" type="date">
                 <select v-model="newRow.buku">
                     <option v-for="buku in bukuOptions" :key="buku" :value="buku">{{ buku }}</option>
+                </select>
+                <select v-model="newRow.kategori">
+                    <option v-for="kategori in kategoriOptions" :key="kategori" :value="kategori">{{ kategori }}</option>
                 </select>
                 <input v-model="newRow.nomorPerkara" type="text" placeholder="Nomor perkara">
                 <input v-model="newRow.uraian" type="text" placeholder="Uraian">
@@ -347,8 +360,8 @@ onMounted(loadLocal)
             </button>
         </div>
 
-        <section class="ns-panel">
-            <div class="ns-panel-title">Rekap Per Buku</div>
+        <section v-show="activeSheet === 'rekap'" class="ns-panel">
+            <div class="ns-panel-title">Sheet 3 Rekap Per Buku</div>
             <div class="ns-table-wrap">
                 <table>
                     <thead>
@@ -371,8 +384,8 @@ onMounted(loadLocal)
             </div>
         </section>
 
-        <section class="ns-panel">
-            <div class="ns-panel-title">Transaksi</div>
+        <section v-show="activeSheet === 'input'" class="ns-panel">
+            <div class="ns-panel-title">Sheet 1 Input</div>
             <div class="ns-table-wrap">
                 <table>
                     <thead>
@@ -380,6 +393,7 @@ onMounted(loadLocal)
                             <th>No</th>
                             <th>Tanggal</th>
                             <th>Buku</th>
+                            <th>Kategori</th>
                             <th>Nomor Perkara</th>
                             <th>Uraian</th>
                             <th>Penerimaan</th>
@@ -390,12 +404,13 @@ onMounted(loadLocal)
                     </thead>
                     <tbody>
                         <tr v-if="!rows.length">
-                            <td colspan="9" class="ns-empty">Belum ada transaksi</td>
+                            <td colspan="10" class="ns-empty">Belum ada transaksi</td>
                         </tr>
                         <tr v-for="(row, idx) in rows" :key="row.id">
                             <td>{{ idx + 1 }}</td>
                             <td>{{ formatDate(row.tanggal) }}</td>
                             <td>{{ row.buku }}</td>
+                            <td>{{ row.kategori || '-' }}</td>
                             <td>{{ row.nomorPerkara || '-' }}</td>
                             <td>{{ row.uraian }}</td>
                             <td>{{ formatCurrency(row.penerimaan) }}</td>
@@ -406,6 +421,35 @@ onMounted(loadLocal)
                                     <Icon name="trash" :size="14" />
                                 </button>
                             </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section v-show="activeSheet === 'laporan'" class="ns-panel">
+            <div class="ns-panel-title">Sheet 2 Laporan Mengikuti Sheet 1</div>
+            <div class="ns-table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>No</th>
+                            <th>Uraian Laporan</th>
+                            <th>Penerimaan</th>
+                            <th>Pengeluaran</th>
+                            <th>Saldo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-if="!rows.length">
+                            <td colspan="5" class="ns-empty">Sheet 2 akan terisi dari Sheet 1</td>
+                        </tr>
+                        <tr v-for="(row, idx) in rows" :key="`lap-${row.id}`">
+                            <td>{{ idx + 1 }}</td>
+                            <td>{{ row.uraian }}</td>
+                            <td>{{ formatCurrency(row.penerimaan) }}</td>
+                            <td>{{ formatCurrency(row.pengeluaran) }}</td>
+                            <td>{{ formatCurrency(toNumber(row.penerimaan) - toNumber(row.pengeluaran)) }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -495,9 +539,48 @@ select {
     color: var(--danger, #dc2626);
 }
 
+.ns-excel-toolbar {
+    display: grid;
+    gap: 10px;
+}
+
+.ns-quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.ns-sheet-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.ns-sheet-tabs button {
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text2);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.ns-sheet-tabs button.active {
+    color: var(--accent);
+    background: var(--accentSoft);
+    border-color: var(--accent);
+}
+
 .ns-transaction-form {
     display: grid;
-    grid-template-columns: 140px 240px 170px minmax(180px, 1fr) 130px 130px 130px auto;
+    grid-template-columns: 140px 220px 170px 160px minmax(180px, 1fr) 120px 120px 120px auto;
     gap: 8px;
 }
 

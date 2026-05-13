@@ -16,6 +16,8 @@ const lastSync = ref('--')
 const syncComplete = ref(false)
 let eventSource = null
 let completeTimeout = null
+let syncStarted = false
+let syncFinished = false
 
 const progressPercent = computed(() => {
     if (!progress.value.total) return 0
@@ -26,6 +28,8 @@ const circumference = 2 * Math.PI * 14 // r=14 for smaller circle
 const strokeDashoffset = computed(() => {
     return circumference - (progressPercent.value / 100) * circumference
 })
+
+const progressLabel = computed(() => `${Math.round(progressPercent.value)}%`)
 
 function formatTime(iso) {
     if (!iso) return '--'
@@ -43,32 +47,64 @@ async function loadStatus() {
 }
 
 async function handleSync() {
+    if (syncing.value) return
     syncing.value = true
     syncComplete.value = false
+    syncStarted = false
+    syncFinished = false
     progress.value = { current: 0, total: 200, message: 'Memulai...' }
 
+    function finishSync(finalProgress = null) {
+        if (syncFinished) return
+        syncFinished = true
+
+        if (finalProgress) {
+            progress.value = finalProgress
+        }
+
+        syncing.value = false
+        syncComplete.value = true
+
+        if (completeTimeout) clearTimeout(completeTimeout)
+        completeTimeout = setTimeout(() => {
+            syncComplete.value = false
+        }, 2000)
+
+        if (eventSource) {
+            eventSource.close()
+            eventSource = null
+        }
+
+        lastSync.value = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+        emit('synced')
+    }
+
     eventSource = subscribeSyncProgress((p) => {
+        if (p.inProgress) {
+            syncStarted = true
+        }
+
+        if (!syncStarted && !p.inProgress) {
+            return
+        }
+
         progress.value = p
         if (!p.inProgress) {
-            syncing.value = false
-            syncComplete.value = true
-
-            if (completeTimeout) clearTimeout(completeTimeout)
-            completeTimeout = setTimeout(() => {
-                syncComplete.value = false
-            }, 2000)
-
-            if (eventSource) {
-                eventSource.close()
-                eventSource = null
-            }
-            lastSync.value = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-            emit('synced')
+            finishSync(p)
         }
     })
 
     try {
-        await syncSippData()
+        const result = await syncSippData()
+        const total = Number(result?.fetched || result?.total_in_db || progress.value.total || 1)
+        finishSync({
+            current: total,
+            total,
+            page: progress.value.page || 0,
+            message: result?.message || `Selesai! ${total} perkara di-sync`,
+            inProgress: false,
+            error: null
+        })
     } catch (err) {
         console.error('Sync failed:', err.message)
         syncing.value = false
@@ -78,6 +114,8 @@ async function handleSync() {
         }
     }
 }
+
+defineExpose({ sync: handleSync })
 
 onMounted(loadStatus)
 onUnmounted(() => {
@@ -129,14 +167,20 @@ onUnmounted(() => {
                 </div>
                 <div class="ns-sync-detail">
                     <template v-if="syncing">
-                        {{ progress.current }}/{{ progress.total }} perkara
+                        {{ progress.current }}/{{ progress.total }} perkara · {{ progressLabel }}
                     </template>
                     <template v-else-if="syncComplete">
-                        {{ count }} perkara tersinkron
+                        {{ progress.current }} perkara diproses
                     </template>
                     <template v-else>
                         Terakhir {{ lastSync }}
                     </template>
+                </div>
+                <div v-if="syncing || syncComplete" class="ns-sync-message">
+                    {{ progress.message || (syncComplete ? 'Sinkronisasi selesai' : 'Sinkronisasi berjalan...') }}
+                </div>
+                <div v-if="syncing || syncComplete" class="ns-sync-progress-bar" role="progressbar" :aria-valuenow="Math.round(progressPercent)" aria-valuemin="0" aria-valuemax="100">
+                    <span :style="{ width: `${progressPercent}%` }"></span>
                 </div>
             </div>
 
@@ -266,7 +310,7 @@ onUnmounted(() => {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    min-width: 120px;
+    min-width: 170px;
 }
 
 .ns-sync-label {
@@ -278,6 +322,33 @@ onUnmounted(() => {
 .ns-sync-detail {
     font-size: 10px;
     color: var(--text3);
+}
+
+.ns-sync-message {
+    max-width: 220px;
+    color: var(--text2);
+    font-size: 10px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ns-sync-progress-bar {
+    width: 100%;
+    height: 4px;
+    margin-top: 3px;
+    border-radius: 999px;
+    background: var(--surface2);
+    overflow: hidden;
+}
+
+.ns-sync-progress-bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 300ms ease;
 }
 
 .ns-sync-btn {

@@ -287,6 +287,15 @@ export const generatePenutupanKasRtf = async (payload) => {
     return response.blob();
 }
 
+export const generatePenutupanRekapXlsx = async (payload) => {
+    const response = await fetchWithRetry(`${API_BASE}/kasir/generate/penutupan-rekap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    return response.blob();
+}
+
 // Force refresh jadwal sidang (bypass cache, re-scrape SIPP)
 export const refreshJadwal = async (nomorPerkara) => {
     const encoded = encodeURIComponent(nomorPerkara);

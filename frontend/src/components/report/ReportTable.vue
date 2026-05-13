@@ -119,7 +119,7 @@ function getSidangDates(row) {
         </div>
         <div class="ns-table-footer">
             <span class="ns-table-count">{{ rows.length }} perkara</span>
-            <span class="ns-table-hint">→ Scroll horizontal untuk lihat semua kolom</span>
+            <span class="ns-table-hint">Semua kolom ditampilkan dalam lebar halaman</span>
         </div>
     </div>
 </template>
@@ -133,34 +133,15 @@ function getSidangDates(row) {
 }
 
 .ns-report-table-scroll {
-    overflow-x: auto;
+    overflow-x: hidden;
     max-width: 100%;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
-}
-
-.ns-report-table-scroll::-webkit-scrollbar {
-    height: 8px;
-}
-
-.ns-report-table-scroll::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.ns-report-table-scroll::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 4px;
-}
-
-.ns-report-table-scroll::-webkit-scrollbar-thumb:hover {
-    background: var(--text-3);
 }
 
 .ns-report-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
-    min-width: 1200px;
+    table-layout: fixed;
+    font-size: 12px;
 }
 
 .ns-report-table thead {
@@ -171,22 +152,30 @@ function getSidangDates(row) {
 
 .ns-report-table th {
     text-align: left;
-    padding: 14px 16px;
-    font-size: 11px;
+    padding: 12px 10px;
+    font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     color: var(--text-3);
     background: var(--bg-2);
     border-bottom: 1px solid var(--border);
-    white-space: nowrap;
+    white-space: normal;
+    line-height: 1.25;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .ns-report-table td {
-    padding: 14px 16px;
+    padding: 12px 10px;
     border-bottom: 1px solid var(--border);
     color: var(--text);
-    vertical-align: middle;
+    vertical-align: top;
+    min-width: 0;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .ns-report-table tbody tr:last-child td {
@@ -201,74 +190,58 @@ function getSidangDates(row) {
     background: var(--surface-2);
 }
 
-.ns-report-table tbody tr:hover .ns-sticky-col {
-    background: var(--surface-2);
-}
-
-/* Sticky columns */
+/* Kept as a class hook, but full-width report tables do not need frozen columns. */
 .ns-sticky-col {
-    position: sticky;
-    left: 0;
     background: var(--surface);
-    z-index: 1;
     transition: background 120ms ease;
 }
 
 .ns-report-table thead .ns-sticky-col {
-    z-index: 11;
     background: var(--bg-2);
 }
 
 .ns-col-no {
-    left: 0;
-    width: 50px;
+    width: 4%;
     text-align: center;
 }
 
 .ns-col-jenis {
-    left: 50px;
-    width: 100px;
+    width: 8%;
 }
 
 .ns-col-nomor {
-    left: 150px;
-    width: 180px;
+    width: 18%;
 }
 
 .ns-col-nama {
-    min-width: 160px;
-    max-width: 220px;
+    width: 15%;
 }
 
 .ns-col-jenis-detail {
-    min-width: 160px;
-    max-width: 240px;
+    width: 14%;
 }
 
 .ns-col-tahun {
-    width: 80px;
+    width: 6%;
     text-align: center;
 }
 
 .ns-col-register {
-    width: 110px;
-    white-space: nowrap;
+    width: 9%;
 }
 
 .ns-col-sidang {
-    min-width: 180px;
-    max-width: 260px;
+    width: 11%;
     white-space: normal;
     line-height: 1.5;
 }
 
 .ns-col-putus {
-    width: 110px;
-    white-space: nowrap;
+    width: 9%;
 }
 
 .ns-col-ket {
-    width: 150px;
+    width: 10%;
     text-align: center;
 }
 
@@ -283,27 +256,35 @@ function getSidangDates(row) {
 .ns-jenis-pill {
     display: inline-flex;
     align-items: center;
-    padding: 4px 10px;
+    max-width: 100%;
+    min-width: 0;
+    padding: 4px 8px;
     border-radius: 6px;
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.02em;
     background: var(--jenis-bg);
     color: var(--jenis-color);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .ns-kategori-pill {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 84px;
+    max-width: 100%;
+    min-width: 0;
     padding: 4px 8px;
     border-radius: 6px;
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11px;
     font-weight: 600;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .ns-kategori-pill.is-registered {
@@ -322,17 +303,22 @@ function getSidangDates(row) {
 }
 
 .ns-nomor {
+    display: block;
     font-family: "JetBrains Mono", monospace;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
     color: var(--text);
     letter-spacing: -0.01em;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .ns-nama {
     display: block;
     font-weight: 500;
     line-height: 1.4;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .ns-jenis-detail {
@@ -340,6 +326,8 @@ function getSidangDates(row) {
     font-size: 12px;
     color: var(--text-2);
     line-height: 1.4;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .ns-col-tahun,
@@ -348,7 +336,7 @@ function getSidangDates(row) {
 .ns-col-putus,
 .ns-col-ket {
     font-family: "JetBrains Mono", monospace;
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-2);
 }
 
@@ -407,5 +395,85 @@ function getSidangDates(row) {
     display: flex;
     align-items: center;
     gap: 4px;
+}
+
+@media (max-width: 1280px) {
+    .ns-report-table th,
+    .ns-report-table td {
+        padding: 10px 8px;
+    }
+
+    .ns-report-table {
+        font-size: 11px;
+    }
+
+    .ns-nomor,
+    .ns-col-tahun,
+    .ns-col-register,
+    .ns-col-sidang,
+    .ns-col-putus,
+    .ns-col-ket,
+    .ns-jenis-detail {
+        font-size: 10.5px;
+    }
+
+    .ns-jenis-pill,
+    .ns-kategori-pill {
+        font-size: 10px;
+        padding: 3px 6px;
+    }
+}
+
+@media (max-width: 900px) {
+    .ns-report-table th,
+    .ns-report-table td {
+        padding: 8px 6px;
+    }
+
+    .ns-report-table {
+        font-size: 10.5px;
+    }
+
+    .ns-report-table th {
+        font-size: 9px;
+    }
+
+    .ns-table-footer {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+    }
+}
+
+@media (max-width: 480px) {
+    .ns-report-table th,
+    .ns-report-table td {
+        padding: 6px 3px;
+    }
+
+    .ns-report-table {
+        font-size: 9px;
+    }
+
+    .ns-report-table th {
+        font-size: 8px;
+        letter-spacing: 0;
+    }
+
+    .ns-nomor,
+    .ns-col-tahun,
+    .ns-col-register,
+    .ns-col-sidang,
+    .ns-col-putus,
+    .ns-col-ket,
+    .ns-jenis-detail {
+        font-size: 8.5px;
+    }
+
+    .ns-jenis-pill,
+    .ns-kategori-pill {
+        font-size: 8px;
+        padding: 2px 3px;
+    }
 }
 </style>

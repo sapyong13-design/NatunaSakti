@@ -73,6 +73,7 @@ const illustrationType = computed(() => {
                 :key="i"
                 type="button"
                 class="ns-empty-action"
+                :class="action.class"
                 @click="emit('action', action)"
             >
                 <Icon v-if="action.icon" :name="action.icon" :size="14" />

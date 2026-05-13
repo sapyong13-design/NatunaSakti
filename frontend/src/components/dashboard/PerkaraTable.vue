@@ -10,7 +10,8 @@ import EnhancedTooltip from './EnhancedTooltip.vue'
 const props = defineProps({
     rows: { type: Array, required: true },
     startIndex: { type: Number, default: 0 },
-    upcomingPerkaraNumbers: { type: Array, default: () => [] }
+    upcomingPerkaraNumbers: { type: Array, default: () => [] },
+    density: { type: String, default: 'default' }
 })
 
 const emit = defineEmits(['rowClick', 'menuAction'])
@@ -154,10 +155,11 @@ function getLamaColor(days) {
 function getLamaProgress(days) {
     return Math.min((days / 365) * 100, 100)
 }
+
 </script>
 
 <template>
-    <div class="ns-perkara-table-wrap">
+    <div class="ns-perkara-table-wrap" :class="`is-density-${density}`">
         <div class="ns-table-scroll">
             <table class="ns-data-table">
                 <thead>
@@ -188,7 +190,9 @@ function getLamaProgress(days) {
                         :key="row.id || row.nomor_perkara"
                         class="ns-data-row"
                         :class="{ 'is-upcoming-row': isUpcoming(row) }"
+                        tabindex="0"
                         @click="emit('rowClick', row)"
+                        @keydown.enter="emit('rowClick', row)"
                         @contextmenu="handleContextMenu($event, row)"
                     >
                         <td class="ns-sticky ns-col-no">{{ idx + 1 + props.startIndex }}</td>
@@ -244,7 +248,7 @@ function getLamaProgress(days) {
         </div>
         <div class="ns-table-footer">
             <span class="ns-row-count">{{ rows.length }} perkara</span>
-            <span class="ns-scroll-hint">← Scroll untuk lihat semua kolom →</span>
+            <span class="ns-scroll-hint">Semua kolom ditampilkan dalam lebar halaman</span>
         </div>
 
         <ContextualActionMenu
@@ -283,32 +287,15 @@ function getLamaProgress(days) {
 }
 
 .ns-table-scroll {
-    overflow-x: auto;
+    overflow-x: hidden;
     max-width: 100%;
-}
-
-.ns-table-scroll::-webkit-scrollbar {
-    height: 8px;
-}
-
-.ns-table-scroll::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.ns-table-scroll::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 4px;
-}
-
-.ns-table-scroll::-webkit-scrollbar-thumb:hover {
-    background: var(--text-3);
 }
 
 .ns-data-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
-    min-width: 900px;
+    table-layout: fixed;
 }
 
 .ns-data-table thead {
@@ -327,12 +314,20 @@ function getLamaProgress(days) {
     color: var(--text-3);
     background: var(--bg-2);
     border-bottom: 1px solid var(--border);
+    line-height: 1.25;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 
 .ns-data-table td {
     padding: 14px 16px;
     border-bottom: 1px solid var(--border);
     color: var(--text);
+    min-width: 0;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    vertical-align: top;
 }
 
 .ns-data-table tbody tr:last-child td {
@@ -382,16 +377,10 @@ function getLamaProgress(days) {
     background: linear-gradient(90deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.05));
 }
 
-/* Sticky columns with glassmorphism */
+/* Kept as a class hook, but the full-width dashboard table does not need frozen columns. */
 .ns-sticky {
-    position: sticky;
-    left: 0;
     background: var(--surface);
-    z-index: 1;
     transition: background 120ms ease;
-    /* Glassmorphism effect */
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     border-right: 1px solid var(--border);
 }
 
@@ -406,7 +395,6 @@ function getLamaProgress(days) {
 }
 
 .ns-data-table thead .ns-sticky {
-    z-index: 11;
     background: var(--bg-2);
 }
 
@@ -419,30 +407,25 @@ function getLamaProgress(days) {
 }
 
 .ns-col-no {
-    left: 0;
-    width: 50px;
+    width: 5%;
     text-align: center;
     padding-left: 12px;
 }
 
 .ns-col-jenis {
-    left: 50px;
-    width: 100px;
+    width: 9%;
 }
 
 .ns-col-nomor {
-    left: 150px;
-    width: 180px;
+    width: 20%;
 }
 
 .ns-col-nama {
-    min-width: 160px;
-    max-width: 220px;
+    width: 19%;
 }
 
 .ns-col-klasifikasi {
-    min-width: 140px;
-    max-width: 200px;
+    width: 17%;
 }
 
 .ns-klasifikasi-text {
@@ -453,16 +436,15 @@ function getLamaProgress(days) {
 }
 
 .ns-col-register {
-    width: 110px;
-    white-space: nowrap;
+    width: 10%;
 }
 
 .ns-col-status {
-    width: 140px;
+    width: 11%;
 }
 
 .ns-col-lama {
-    width: 120px;
+    width: 9%;
 }
 
 .ns-lama-cell {
@@ -473,6 +455,8 @@ function getLamaProgress(days) {
 
 .ns-lama-text {
     font-size: 12px;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .ns-lama-bar {
@@ -499,6 +483,9 @@ function getLamaProgress(days) {
     background: var(--jenis-bg);
     color: var(--jenis-color);
     transition: all 180ms ease;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .ns-jenis-badge:hover {
@@ -507,17 +494,20 @@ function getLamaProgress(days) {
 }
 
 .ns-nomor-text {
+    display: block;
     font-family: "JetBrains Mono", monospace;
     font-size: 12px;
     font-weight: 500;
     letter-spacing: -0.01em;
     font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
 }
 
 .ns-nama-text {
     display: block;
     font-weight: 500;
     line-height: 1.4;
+    overflow-wrap: anywhere;
 }
 
 .ns-col-register,
@@ -605,5 +595,90 @@ function getLamaProgress(days) {
 
 .ns-scroll-hint {
     color: var(--text-3);
+}
+
+.ns-perkara-table-wrap.is-density-compact .ns-data-table th,
+.ns-perkara-table-wrap.is-density-compact .ns-data-table td {
+    padding: 9px 10px;
+}
+
+.ns-perkara-table-wrap.is-density-compact .ns-data-table {
+    font-size: 12px;
+}
+
+.ns-perkara-table-wrap.is-density-compact .ns-nomor-text,
+.ns-perkara-table-wrap.is-density-compact .ns-klasifikasi-text,
+.ns-perkara-table-wrap.is-density-compact .ns-col-register,
+.ns-perkara-table-wrap.is-density-compact .ns-col-status,
+.ns-perkara-table-wrap.is-density-compact .ns-col-lama,
+.ns-perkara-table-wrap.is-density-compact .ns-lama-text {
+    font-size: 11px;
+}
+
+.ns-perkara-table-wrap.is-density-compact .ns-jenis-badge {
+    font-size: 9px;
+    padding: 2px 5px;
+}
+
+@media (max-width: 1280px) {
+    .ns-data-table th,
+    .ns-data-table td {
+        padding: 11px 9px;
+    }
+
+    .ns-data-table {
+        font-size: 12px;
+    }
+
+    .ns-nomor-text,
+    .ns-klasifikasi-text,
+    .ns-col-register,
+    .ns-col-status,
+    .ns-col-lama,
+    .ns-lama-text {
+        font-size: 11px;
+    }
+
+    .ns-jenis-badge {
+        padding: 4px 7px;
+        font-size: 10px;
+    }
+
+}
+
+@media (max-width: 760px) {
+    .ns-data-table th,
+    .ns-data-table td {
+        padding: 8px 4px;
+    }
+
+    .ns-data-table {
+        font-size: 10px;
+    }
+
+    .ns-data-table th {
+        font-size: 9px;
+        letter-spacing: 0;
+    }
+
+    .ns-nomor-text,
+    .ns-klasifikasi-text,
+    .ns-col-register,
+    .ns-col-status,
+    .ns-col-lama,
+    .ns-lama-text {
+        font-size: 9px;
+    }
+
+    .ns-jenis-badge {
+        padding: 2px 3px;
+        font-size: 8px;
+    }
+
+    .ns-table-footer {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+    }
 }
 </style>

@@ -68,6 +68,10 @@ function handleHover(bar, e) {
 function handleLeave() {
     emit('barLeave')
 }
+
+function getBarLabel(bar) {
+    return `${bar.label}: ${bar.total} perkara, Pidana ${bar.pidana}, Perdata ${bar.perdata}, Perikanan ${bar.perikanan}`
+}
 </script>
 
 <template>
@@ -110,9 +114,16 @@ function handleLeave() {
                 :key="b.index"
                 class="ns-bar-group"
                 :class="{ 'is-hovered': hovered?.index === b.index, 'is-peak': b.isPeak }"
+                tabindex="0"
+                role="button"
+                :aria-label="getBarLabel(b)"
                 @mouseenter="handleHover(b, $event)"
                 @mouseleave="handleLeave"
+                @focus="handleHover(b, $event)"
+                @blur="handleLeave"
                 @click="handleClick(b, $event)"
+                @keydown.enter.prevent="handleClick(b, $event)"
+                @keydown.space.prevent="handleClick(b, $event)"
             >
                 <!-- Pidana bar -->
                 <rect

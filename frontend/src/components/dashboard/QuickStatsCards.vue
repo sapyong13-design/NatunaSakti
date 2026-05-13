@@ -113,7 +113,11 @@ const cardData = [
             v-for="(card, index) in cardData"
             :key="card.key"
             class="ns-quick-stat-card"
-            :class="{ 'ns-card-primary': index === 0 }"
+            :class="{
+                'ns-card-primary': index === 0,
+                'ns-quick-stat-card-main': index === 0,
+                'ns-quick-stat-card-secondary': index !== 0
+            }"
             :style="{
                 '--stat-color': card.color,
                 '--stat-bg': card.bg,
@@ -163,7 +167,7 @@ const cardData = [
 <style scoped>
 .ns-quick-stats {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: minmax(260px, 1.35fr) repeat(2, minmax(180px, 1fr));
     gap: 12px;
     margin-bottom: 24px;
 }
@@ -183,6 +187,32 @@ const cardData = [
     animation: cardSlideIn 0.5s cubic-bezier(0.32, 0.72, 0, 1) backwards;
     animation-delay: calc(var(--card-index) * 0.1s);
     overflow: hidden;
+}
+
+.ns-quick-stat-card-main {
+    min-height: 92px;
+    padding: 20px 22px;
+}
+
+.ns-quick-stat-card-main .ns-quick-stat-icon {
+    width: 54px;
+    height: 54px;
+}
+
+.ns-quick-stat-card-main .ns-quick-stat-value {
+    font-size: clamp(24px, 3vw, 34px) !important;
+}
+
+.ns-quick-stat-card-main .ns-quick-stat-label {
+    font-size: 12px;
+}
+
+.ns-quick-stat-card-secondary {
+    min-height: 78px;
+}
+
+.ns-quick-stat-card-secondary .ns-sparkline {
+    opacity: 0.5;
 }
 
 @keyframes cardSlideIn {
@@ -333,6 +363,10 @@ const cardData = [
 @media (max-width: 768px) {
     .ns-quick-stats {
         grid-template-columns: 1fr;
+    }
+
+    .ns-quick-stat-card-main {
+        min-height: auto;
     }
 }
 </style>

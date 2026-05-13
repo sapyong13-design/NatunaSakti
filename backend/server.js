@@ -15,6 +15,7 @@ const SIPPSyncService = require('./services/sippSyncService');
 const sippRoutes = require('./routes/sipp');
 const { generateLaporanBulanan, generateLaporanMingguan, convertDocxToPdf } = require('./services/laporanService');
 const { generatePenutupanKasRtf } = require('./services/kasirRtfService');
+const { generateRekapExcelXlsx } = require('./services/kasirExcelService');
 
 const app = express();
 const PORT = 3000;
@@ -226,6 +227,20 @@ app.post('/api/kasir/generate/penutupan-kas', (req, res) => {
         res.send(rtf);
     } catch (error) {
         console.error('[KASIR-PENUTUPAN] Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/kasir/generate/penutupan-rekap', (req, res) => {
+    try {
+        const workbook = generateRekapExcelXlsx(req.body || {});
+        const bulan = (req.body?.bulanNama || 'REKAP').toString().replace(/[^\w-]+/g, '_');
+        const tahun = req.body?.tahun || new Date().getFullYear();
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="REKAP_KASIR_${bulan}_${tahun}.xlsx"`);
+        res.send(workbook);
+    } catch (error) {
+        console.error('[KASIR-REKAP] Error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });

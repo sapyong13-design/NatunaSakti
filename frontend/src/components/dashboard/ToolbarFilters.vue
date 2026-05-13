@@ -64,7 +64,10 @@ onUnmounted(() => {
             </span>
             <input
                 type="text"
-                placeholder="Cari nomor / pihak..."
+                name="dashboard-search"
+                autocomplete="off"
+                aria-label="Cari perkara"
+                placeholder="Cari nomor / pihak…"
                 :value="search"
                 @input="emit('update:search', $event.target.value)"
                 style="width: 100%; padding: 8px 12px 8px 32px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 13px;"
@@ -76,7 +79,10 @@ onUnmounted(() => {
                 type="button"
                 class="ns-chip-btn"
                 :class="{ 'is-open': openMenu === 'jenis' }"
+                aria-haspopup="listbox"
+                :aria-expanded="openMenu === 'jenis'"
                 @click.stop="toggleMenu('jenis', $event)"
+                @keydown.escape="openMenu = null"
             >
                 <span class="ns-chip-label">Jenis:</span>
                 <span class="ns-chip-value">{{ jenis }}</span>
@@ -89,7 +95,10 @@ onUnmounted(() => {
                 type="button"
                 class="ns-chip-btn"
                 :class="{ 'is-open': openMenu === 'tahun' }"
+                aria-haspopup="listbox"
+                :aria-expanded="openMenu === 'tahun'"
                 @click.stop="toggleMenu('tahun', $event)"
+                @keydown.escape="openMenu = null"
             >
                 <span class="ns-chip-label">Tahun:</span>
                 <span class="ns-chip-value">{{ tahun || 'Semua' }}</span>
@@ -102,7 +111,10 @@ onUnmounted(() => {
                 type="button"
                 class="ns-chip-btn"
                 :class="{ 'is-open': openMenu === 'status' }"
+                aria-haspopup="listbox"
+                :aria-expanded="openMenu === 'status'"
                 @click.stop="toggleMenu('status', $event)"
+                @keydown.escape="openMenu = null"
             >
                 <span class="ns-chip-label">Status:</span>
                 <span class="ns-chip-value">{{ status === 'Semua' ? 'Semua' : status === 'Bersidang' ? 'Sedang Bersidang' : status }}</span>
@@ -117,6 +129,7 @@ onUnmounted(() => {
         <div
             v-if="openMenu === 'jenis'"
             class="ns-chip-menu-teleported"
+            role="listbox"
             :style="{ top: menuPositions.jenis?.top + 'px', left: menuPositions.jenis?.left + 'px', background: menuBgColor }"
         >
             <div
@@ -124,7 +137,13 @@ onUnmounted(() => {
                 :key="opt"
                 class="ns-chip-option"
                 :class="{ 'is-selected': opt === jenis }"
+                role="option"
+                tabindex="0"
+                :aria-selected="opt === jenis"
                 @click="selectOption('jenis', opt)"
+                @keydown.enter.prevent="selectOption('jenis', opt)"
+                @keydown.space.prevent="selectOption('jenis', opt)"
+                @keydown.escape="openMenu = null"
             >
                 {{ opt }}
             </div>
@@ -134,12 +153,19 @@ onUnmounted(() => {
         <div
             v-if="openMenu === 'tahun'"
             class="ns-chip-menu-teleported"
+            role="listbox"
             :style="{ top: menuPositions.tahun?.top + 'px', left: menuPositions.tahun?.left + 'px', background: menuBgColor }"
         >
             <div
                 class="ns-chip-option"
                 :class="{ 'is-selected': tahun === '' }"
+                role="option"
+                tabindex="0"
+                :aria-selected="tahun === ''"
                 @click="selectOption('tahun', '')"
+                @keydown.enter.prevent="selectOption('tahun', '')"
+                @keydown.space.prevent="selectOption('tahun', '')"
+                @keydown.escape="openMenu = null"
             >
                 Semua
             </div>
@@ -148,7 +174,13 @@ onUnmounted(() => {
                 :key="opt"
                 class="ns-chip-option"
                 :class="{ 'is-selected': String(opt) === tahun }"
+                role="option"
+                tabindex="0"
+                :aria-selected="String(opt) === tahun"
                 @click="selectOption('tahun', String(opt))"
+                @keydown.enter.prevent="selectOption('tahun', String(opt))"
+                @keydown.space.prevent="selectOption('tahun', String(opt))"
+                @keydown.escape="openMenu = null"
             >
                 {{ opt }}
             </div>
@@ -158,26 +190,45 @@ onUnmounted(() => {
         <div
             v-if="openMenu === 'status'"
             class="ns-chip-menu-teleported"
+            role="listbox"
             :style="{ top: menuPositions.status?.top + 'px', left: menuPositions.status?.left + 'px', background: menuBgColor }"
         >
             <div
                 class="ns-chip-option"
                 :class="{ 'is-selected': status === 'Semua' }"
+                role="option"
+                tabindex="0"
+                :aria-selected="status === 'Semua'"
                 @click="selectOption('status', 'Semua')"
+                @keydown.enter.prevent="selectOption('status', 'Semua')"
+                @keydown.space.prevent="selectOption('status', 'Semua')"
+                @keydown.escape="openMenu = null"
             >
                 Semua
             </div>
             <div
                 class="ns-chip-option"
                 :class="{ 'is-selected': status === 'Bersidang' }"
+                role="option"
+                tabindex="0"
+                :aria-selected="status === 'Bersidang'"
                 @click="selectOption('status', 'Bersidang')"
+                @keydown.enter.prevent="selectOption('status', 'Bersidang')"
+                @keydown.space.prevent="selectOption('status', 'Bersidang')"
+                @keydown.escape="openMenu = null"
             >
                 Sedang Bersidang
             </div>
             <div
                 class="ns-chip-option"
                 :class="{ 'is-selected': status === 'Minutasi' }"
+                role="option"
+                tabindex="0"
+                :aria-selected="status === 'Minutasi'"
                 @click="selectOption('status', 'Minutasi')"
+                @keydown.enter.prevent="selectOption('status', 'Minutasi')"
+                @keydown.space.prevent="selectOption('status', 'Minutasi')"
+                @keydown.escape="openMenu = null"
             >
                 Minutasi
             </div>
@@ -261,6 +312,11 @@ onUnmounted(() => {
 
 .ns-chip-option:hover {
     background: var(--surface2);
+}
+
+.ns-chip-option:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 .ns-chip-option.is-selected {
