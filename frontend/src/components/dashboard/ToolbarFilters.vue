@@ -18,6 +18,7 @@ const menuPositions = ref({})
 
 const isDark = computed(() => document.documentElement.dataset.mode === 'dark')
 const menuBgColor = computed(() => isDark.value ? '#1a1d23' : '#ffffff')
+const currentYear = new Date().getFullYear()
 
 function toggleMenu(name, event) {
     if (openMenu.value === name) {
@@ -40,6 +41,17 @@ function selectOption(name, value) {
     openMenu.value = null
 }
 
+function updateOpenMenuPosition() {
+    if (!openMenu.value) return
+    const button = document.querySelector(`.ns-chip-btn[data-menu="${openMenu.value}"]`)
+    if (!button) return
+    const rect = button.getBoundingClientRect()
+    menuPositions.value[openMenu.value] = {
+        top: rect.bottom + 6,
+        left: Math.min(rect.left, window.innerWidth - 220)
+    }
+}
+
 // Close dropdown when clicking outside
 function handleClickOutside(event) {
     if (!event.target.closest('.ns-chip-menu-teleported') && !event.target.closest('.ns-chip-btn')) {
@@ -49,17 +61,21 @@ function handleClickOutside(event) {
 
 onMounted(() => {
     document.addEventListener('click', handleClickOutside)
+    window.addEventListener('resize', updateOpenMenuPosition)
+    window.addEventListener('scroll', updateOpenMenuPosition, true)
 })
 
 onUnmounted(() => {
     document.removeEventListener('click', handleClickOutside)
+    window.removeEventListener('resize', updateOpenMenuPosition)
+    window.removeEventListener('scroll', updateOpenMenuPosition, true)
 })
 </script>
 
 <template>
     <div class="ns-toolbar-filters">
-        <div style="position: relative; flex: 1; max-width: 280px;">
-            <span style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text3);">
+        <div class="ns-search-wrap">
+            <span class="ns-search-icon" aria-hidden="true">
                 <Icon name="search" :size="14" />
             </span>
             <input
@@ -67,10 +83,10 @@ onUnmounted(() => {
                 name="dashboard-search"
                 autocomplete="off"
                 aria-label="Cari perkara"
-                placeholder="Cari nomor / pihak…"
+                placeholder="Cari nomor / pihak..."
                 :value="search"
                 @input="emit('update:search', $event.target.value)"
-                style="width: 100%; padding: 8px 12px 8px 32px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 13px;"
+                class="ns-search-input"
             />
         </div>
 
@@ -78,6 +94,7 @@ onUnmounted(() => {
             <button
                 type="button"
                 class="ns-chip-btn"
+                data-menu="jenis"
                 :class="{ 'is-open': openMenu === 'jenis' }"
                 aria-haspopup="listbox"
                 :aria-expanded="openMenu === 'jenis'"
@@ -94,6 +111,7 @@ onUnmounted(() => {
             <button
                 type="button"
                 class="ns-chip-btn"
+                data-menu="tahun"
                 :class="{ 'is-open': openMenu === 'tahun' }"
                 aria-haspopup="listbox"
                 :aria-expanded="openMenu === 'tahun'"
@@ -110,6 +128,7 @@ onUnmounted(() => {
             <button
                 type="button"
                 class="ns-chip-btn"
+                data-menu="status"
                 :class="{ 'is-open': openMenu === 'status' }"
                 aria-haspopup="listbox"
                 :aria-expanded="openMenu === 'status'"
@@ -145,7 +164,7 @@ onUnmounted(() => {
                 @keydown.space.prevent="selectOption('jenis', opt)"
                 @keydown.escape="openMenu = null"
             >
-                {{ opt }}
+                {{ Number(opt) === currentYear ? `${opt} (berjalan)` : opt }}
             </div>
         </div>
 
@@ -241,19 +260,55 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
+    flex-wrap: nowrap;
+}
+
+.ns-search-wrap {
+    position: relative;
+    flex: 1 1 260px;
+    min-width: 0;
+    max-width: 360px;
+}
+
+.ns-search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    display: grid;
+    place-items: center;
+    color: var(--text3);
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.ns-search-input {
+    width: 100%;
+    min-height: 36px;
+    padding: 8px 12px 8px 32px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.2;
 }
 
 .ns-filter-chip {
     position: relative;
+    flex: 0 0 auto;
+    min-width: 112px;
 }
 
 .ns-chip-btn {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 7px 12px;
+    min-height: 36px;
+    width: 100%;
+    max-width: 150px;
+    padding: 7px 10px;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface);
@@ -277,13 +332,17 @@ onUnmounted(() => {
 }
 
 .ns-chip-value {
+    min-width: 0;
     font-weight: 500;
     font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .ns-chip-menu-teleported {
     position: fixed;
-    min-width: 160px;
+    min-width: 180px;
+    max-width: min(260px, calc(100vw - 20px));
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 4px;
@@ -294,6 +353,29 @@ onUnmounted(() => {
     z-index: 99999;
     max-height: 300px;
     overflow-y: auto;
+}
+
+@media (max-width: 1100px) {
+    .ns-toolbar-filters {
+        flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 720px) {
+    .ns-toolbar-filters {
+        align-items: stretch;
+    }
+
+    .ns-search-wrap,
+    .ns-filter-chip,
+    .ns-chip-btn {
+        width: 100%;
+        max-width: none;
+    }
+
+    .ns-chip-btn {
+        justify-content: space-between;
+    }
 }
 
 .ns-chip-option {

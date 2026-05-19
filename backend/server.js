@@ -16,6 +16,13 @@ const sippRoutes = require('./routes/sipp');
 const { generateLaporanBulanan, generateLaporanMingguan, convertDocxToPdf } = require('./services/laporanService');
 const { generatePenutupanKasRtf } = require('./services/kasirRtfService');
 const { generateRekapExcelXlsx } = require('./services/kasirExcelService');
+const {
+    createInitialSyncProgress,
+    applyFetchProgress,
+    startSaveProgress,
+    completeSyncProgress,
+    failSyncProgress
+} = require('./lib/sippProgress');
 
 const app = express();
 const PORT = 3000;
@@ -143,9 +150,13 @@ app.set('sippService', sippService);
 // Sync progress state (in-memory for SSE clients)
 let syncProgress = {
     inProgress: false,
+    phase: 'idle',
     current: 0,
     total: 0,
     page: 0,
+    maxPages: 0,
+    fetchedCount: 0,
+    unit: 'halaman',
     message: '',
     error: null
 };
@@ -678,29 +689,17 @@ app.post('/api/perkara/sipp/sync', async (req, res) => {
         const oldCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get().c;
         const isFirstSync = oldCount === 0;
 
-        syncProgress = {
-            inProgress: true,
-            current: 0,
-            total: isFirstSync ? 9999 : 200, // First sync: unlimited, incremental: 200
-            page: 0,
-            message: isFirstSync ? 'First sync: mengambil SEMUA data...' : 'Sync incremental: 200 perkara terbaru...',
-            error: null,
-            isFirstSync
-        };
+        syncProgress = createInitialSyncProgress({ isFirstSync });
 
         console.log(`[SIPP-SYNC] ${isFirstSync ? 'FIRST SYNC' : 'INCREMENTAL SYNC'} - Starting fetch...`);
-        syncProgress.message = isFirstSync ? 'Mengambil semua data dari SIPP...' : 'Mengambil 200 perkara terbaru...';
 
         const data = await sippService.fetchSIPPData((progress) => {
-            // Progress callback during fetch
-            syncProgress.current = progress.current;
-            syncProgress.page = progress.page;
-            syncProgress.message = `Fetching halaman ${progress.page}... (${progress.current} perkara)`;
+            syncProgress = applyFetchProgress(syncProgress, progress);
             console.log(`[SIPP-SYNC] ${syncProgress.message}`);
         });
 
         console.log(`[SIPP-SYNC] Fetched ${data.length} items`);
-        syncProgress.message = 'Menyimpan ke database...';
+        syncProgress = startSaveProgress(syncProgress);
 
         console.log('[SIPP-SYNC] Starting save...');
         const count = await sippService.saveToDatabase(data);
@@ -710,9 +709,10 @@ app.post('/api/perkara/sipp/sync', async (req, res) => {
         const dbCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get();
         console.log(`[SIPP-SYNC] Actual DB count: ${dbCount.c}`);
 
-        syncProgress.inProgress = false;
-        syncProgress.message = `Selesai! ${count} perkara di-sync`;
-        syncProgress.current = count;
+        syncProgress = completeSyncProgress(syncProgress, {
+            savedCount: count,
+            dbCount: dbCount.c
+        });
 
         res.json({
             success: true,
@@ -727,9 +727,7 @@ app.post('/api/perkara/sipp/sync', async (req, res) => {
         });
     } catch (error) {
         console.error('[SIPP] Sync error:', error.message);
-        syncProgress.inProgress = false;
-        syncProgress.error = error.message;
-        syncProgress.message = 'Error: ' + error.message;
+        syncProgress = failSyncProgress(syncProgress, error);
         res.status(500).json({
             success: false,
             error: error.message

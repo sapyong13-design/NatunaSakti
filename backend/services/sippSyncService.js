@@ -60,6 +60,14 @@ class SIPPSyncService {
 
       while (currentPage <= maxPages && consecutiveEmptyPages < maxEmptyPages) {
         console.log(`[SIPP] Scraping page ${currentPage}...`);
+        if (progressCallback) {
+          progressCallback({
+            page: currentPage,
+            maxPages,
+            fetchedCount: perkaraList.length,
+            status: 'page-start'
+          });
+        }
 
         // Navigate to specific page by clicking the page number link
         if (currentPage > 1) {
@@ -154,9 +162,10 @@ class SIPPSyncService {
         // Report progress
         if (progressCallback) {
           progressCallback({
-            current: perkaraList.length,
             page: currentPage,
-            total: seenNomor.size
+            maxPages,
+            fetchedCount: perkaraList.length,
+            status: 'page-complete'
           });
         }
 
@@ -166,9 +175,10 @@ class SIPPSyncService {
           // Create a temporary callback to save current batch
           if (progressCallback) {
             progressCallback({
-              current: perkaraList.length,
               page: currentPage,
-              total: seenNomor.size,
+              maxPages,
+              fetchedCount: perkaraList.length,
+              status: 'batch-save',
               saveBatch: true  // Signal to save current batch
             });
           }

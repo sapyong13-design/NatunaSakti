@@ -34,6 +34,8 @@ function setValue(val) {
             type="button"
             class="ns-toggle-btn"
             :class="{ 'is-active': localValue === 'compact' }"
+            aria-label="Kepadatan tabel rapat"
+            title="Rapat"
             @click="setValue('compact')"
         >
             <Icon name="moreHorizontal" :size="12" />
@@ -42,6 +44,8 @@ function setValue(val) {
             type="button"
             class="ns-toggle-btn"
             :class="{ 'is-active': localValue === 'spacious' }"
+            aria-label="Kepadatan tabel lega"
+            title="Lega"
             @click="setValue('spacious')"
         >
             <Icon name="menu" :size="12" />
@@ -67,13 +71,14 @@ function setValue(val) {
     background: var(--surface2);
     border-radius: 8px;
     padding: 2px;
+    flex-shrink: 0;
 }
 
 .ns-toggle-btn {
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     border: none;
     border-radius: 6px;
     background: transparent;

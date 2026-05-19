@@ -32,10 +32,9 @@ defineProps({
 <style scoped>
 .ns-c-mini-card {
     background: var(--bg, #fff);
-    border-radius: 16px;
-    padding: 14px 18px;
+    border-radius: 10px;
+    padding: 12px 14px;
     border: 1px solid var(--border);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -57,7 +56,7 @@ defineProps({
 }
 
 .ns-c-mini-value {
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 700;
     color: var(--text);
     line-height: 1;

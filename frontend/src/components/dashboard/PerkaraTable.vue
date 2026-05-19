@@ -287,12 +287,13 @@ function getLamaProgress(days) {
 }
 
 .ns-table-scroll {
-    overflow-x: hidden;
+    overflow-x: auto;
     max-width: 100%;
 }
 
 .ns-data-table {
     width: 100%;
+    min-width: 920px;
     border-collapse: collapse;
     font-size: 13px;
     table-layout: fixed;
@@ -407,25 +408,25 @@ function getLamaProgress(days) {
 }
 
 .ns-col-no {
-    width: 5%;
+    width: 52px;
     text-align: center;
     padding-left: 12px;
 }
 
 .ns-col-jenis {
-    width: 9%;
+    width: 86px;
 }
 
 .ns-col-nomor {
-    width: 20%;
+    width: 190px;
 }
 
 .ns-col-nama {
-    width: 19%;
+    width: 220px;
 }
 
 .ns-col-klasifikasi {
-    width: 17%;
+    width: 170px;
 }
 
 .ns-klasifikasi-text {
@@ -436,15 +437,15 @@ function getLamaProgress(days) {
 }
 
 .ns-col-register {
-    width: 10%;
+    width: 112px;
 }
 
 .ns-col-status {
-    width: 11%;
+    width: 126px;
 }
 
 .ns-col-lama {
-    width: 9%;
+    width: 84px;
 }
 
 .ns-lama-cell {
@@ -647,9 +648,18 @@ function getLamaProgress(days) {
 }
 
 @media (max-width: 760px) {
+    .ns-data-table {
+        min-width: 760px;
+    }
+
+    .ns-col-klasifikasi,
+    .ns-col-lama {
+        display: none;
+    }
+
     .ns-data-table th,
     .ns-data-table td {
-        padding: 8px 4px;
+        padding: 8px 6px;
     }
 
     .ns-data-table {

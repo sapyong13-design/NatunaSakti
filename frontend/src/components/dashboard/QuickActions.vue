@@ -83,10 +83,11 @@ function exportToCSV() {
             :key="action.key"
             type="button"
             class="ns-action-btn"
+            :aria-label="action.label"
+            :title="action.label"
             @click="(e) => handleAction(action.key, e)"
         >
             <Icon :name="action.icon" :size="14" />
-            <span>{{ action.label }}</span>
             <!-- Ripple elements -->
             <template v-for="(ripple, id) in rippleStates" :key="id">
                 <span
@@ -103,7 +104,8 @@ function exportToCSV() {
 .ns-quick-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    flex-shrink: 0;
 }
 
 .ns-action-btn {
@@ -111,14 +113,14 @@ function exportToCSV() {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 8px 14px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
     border: 1px solid var(--border);
     border-radius: 10px;
     background: var(--surface);
     color: var(--text);
     font-size: 12px;
-    font-weight: 500;
     cursor: pointer;
     transition: all 180ms ease;
     overflow: hidden;
@@ -129,8 +131,7 @@ function exportToCSV() {
     border-color: var(--accent);
     background: var(--accentSoft);
     color: var(--accent);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px var(--accentGlow);
+    box-shadow: 0 2px 8px var(--accentGlow);
 }
 
 .ns-action-btn:active {

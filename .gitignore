@@ -30,3 +30,6 @@ backend/data/akurasi.db-wal
 dist/
 dist-ssr/
 *.local
+
+# Local runtime logs
+.runtime-logs/

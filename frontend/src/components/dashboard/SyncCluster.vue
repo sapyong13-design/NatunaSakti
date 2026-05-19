@@ -127,7 +127,11 @@ onUnmounted(() => {
 <template>
     <div class="ns-sync-wrapper">
         <!-- Status Card -->
-        <div class="ns-sync-status" :class="{ 'is-syncing': syncing, 'is-complete': syncComplete }">
+        <div
+            class="ns-sync-status"
+            :class="{ 'is-syncing': syncing, 'is-complete': syncComplete }"
+            :title="syncing ? progress.message : `Terakhir ${lastSync}`"
+        >
             <!-- Circular Progress -->
             <div class="ns-sync-circle">
                 <svg class="ns-sync-ring" viewBox="0 0 32 32">
@@ -163,7 +167,7 @@ onUnmounted(() => {
             <!-- Status Info -->
             <div class="ns-sync-info">
                 <div class="ns-sync-label">
-                    {{ syncing ? 'Menyinkronkan...' : syncComplete ? 'Selesai!' : 'SIPP Sync' }}
+                    {{ syncing ? 'Sync...' : syncComplete ? 'Selesai' : 'SIPP' }}
                 </div>
                 <div class="ns-sync-detail">
                     <template v-if="syncing">
@@ -176,9 +180,6 @@ onUnmounted(() => {
                         Terakhir {{ lastSync }}
                     </template>
                 </div>
-                <div v-if="syncing || syncComplete" class="ns-sync-message">
-                    {{ progress.message || (syncComplete ? 'Sinkronisasi selesai' : 'Sinkronisasi berjalan...') }}
-                </div>
                 <div v-if="syncing || syncComplete" class="ns-sync-progress-bar" role="progressbar" :aria-valuenow="Math.round(progressPercent)" aria-valuemin="0" aria-valuemax="100">
                     <span :style="{ width: `${progressPercent}%` }"></span>
                 </div>
@@ -189,10 +190,11 @@ onUnmounted(() => {
                 class="ns-sync-btn"
                 type="button"
                 :disabled="syncing"
+                aria-label="Sinkronkan SIPP"
+                title="Sinkronkan SIPP"
                 @click="handleSync"
             >
                 <Icon name="refresh" :size="12" />
-                <span>Sync</span>
             </button>
         </div>
     </div>
@@ -202,13 +204,15 @@ onUnmounted(() => {
 .ns-sync-wrapper {
     display: flex;
     align-items: center;
+    flex-shrink: 0;
 }
 
 .ns-sync-status {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 6px 12px;
+    gap: 8px;
+    min-height: 40px;
+    padding: 4px 6px 4px 8px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -310,7 +314,8 @@ onUnmounted(() => {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    min-width: 170px;
+    min-width: 82px;
+    max-width: 108px;
 }
 
 .ns-sync-label {
@@ -322,6 +327,9 @@ onUnmounted(() => {
 .ns-sync-detail {
     font-size: 10px;
     color: var(--text3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .ns-sync-message {
@@ -354,8 +362,11 @@ onUnmounted(() => {
 .ns-sync-btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 5px;
-    padding: 6px 10px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface2);
@@ -364,6 +375,12 @@ onUnmounted(() => {
     font-weight: 500;
     cursor: pointer;
     transition: all 200ms;
+}
+
+@media (max-width: 720px) {
+    .ns-sync-info {
+        display: none;
+    }
 }
 
 .ns-sync-btn:hover:not(:disabled) {

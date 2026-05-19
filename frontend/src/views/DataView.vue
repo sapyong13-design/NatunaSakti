@@ -2,7 +2,6 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import PageHeader from '../components/shell/PageHeader.vue'
 import StatsStrip from '../components/dashboard/StatsStrip.vue'
-import QuickStatsCards from '../components/dashboard/QuickStatsCards.vue'
 import TrendCard from '../components/dashboard/TrendCard.vue'
 import MiniStatCard from '../components/dashboard/MiniStatCard.vue'
 import ToolbarFilters from '../components/dashboard/ToolbarFilters.vue'
@@ -13,11 +12,17 @@ import KanbanBoard from '../components/dashboard/KanbanBoard.vue'
 import DetailPanel from '../components/dashboard/DetailPanel.vue'
 import Toast from '../components/dashboard/Toast.vue'
 import EmptyState from '../components/base/EmptyState.vue'
-import FilterChip from '../components/base/FilterChip.vue'
-import Sparkline from '../components/base/Sparkline.vue'
 import Toggles from '../components/dashboard/Toggles.vue'
 import Icon from '../components/Icon.vue'
 import { getPerkara, getSippStatus, getPerkaraTrendMonthly, getPerkaraTrendYearly } from '../lib/api'
+import { getDashboardAlerts, isPerkaraAktif } from '../lib/perkaraStats'
+import {
+    applyPerkaraFilters,
+    createDefaultFilters,
+    getActiveFilterChips,
+    getActiveFilterSummary,
+    hasActiveFilters as hasFilters
+} from '../lib/dashboardFilters'
 
 const rows = ref([])
 const trendData = ref([])
@@ -25,11 +30,7 @@ const syncStatus = ref({ total: 0, sipp_synced: 0, last_sync: null })
 const isDark = ref(document.documentElement.dataset.mode === 'dark')
 const loading = ref(true)
 const density = ref('default')
-const compareMode = ref(false)
 const viewMode = ref('table') // table, kanban
-
-// Quick filter states
-const quickFilter = ref('all') // all, thisYear
 
 // Toast state
 const toast = ref({
@@ -38,11 +39,11 @@ const toast = ref({
     message: ''
 })
 
-const search = ref('')
-const filterJenis = ref('Semua')
-const filterTahun = ref(String(new Date().getFullYear()))
-const filterStatus = ref('Semua')
-const selectedTrendYear = ref(2026)
+const defaultFilters = createDefaultFilters()
+const search = ref(defaultFilters.search)
+const filterJenis = ref(defaultFilters.jenis)
+const filterTahun = ref(defaultFilters.tahun)
+const filterStatus = ref(defaultFilters.status)
 
 const selectedRow = ref(null)
 const scrollPosition = ref(0)
@@ -53,25 +54,12 @@ const currentPage = ref(1)
 const itemsPerPage = 100
 
 const filtered = computed(() => {
-    let result = rows.value.filter(r => {
-        if (filterJenis.value !== 'Semua' && r.jenis_perkara !== filterJenis.value) return false
-        if (filterTahun.value && String(r.tahun_masuk) !== filterTahun.value) return false
-        if (filterStatus.value === 'Bersidang' && r.sipp_status === 'Minutasi') return false
-        if (filterStatus.value === 'Minutasi' && r.sipp_status !== 'Minutasi') return false
-        if (search.value) {
-            const q = search.value.toLowerCase()
-            const nomor = (r.nomor_perkara || '').toLowerCase()
-            const pihak = (r.para_pihak || '').toLowerCase()
-            if (!nomor.includes(q) && !pihak.includes(q)) return false
-        }
-        return true
+    const result = applyPerkaraFilters(rows.value, {
+        search: search.value,
+        jenis: filterJenis.value,
+        tahun: filterTahun.value,
+        status: filterStatus.value
     })
-
-    // Apply quick filter
-    if (quickFilter.value === 'thisYear') {
-        const currentYear = new Date().getFullYear()
-        result = result.filter(r => r.tahun_masuk === currentYear)
-    }
 
     // Sort by tanggal register (newest first)
     result.sort((a, b) => {
@@ -117,59 +105,33 @@ function goToPage(page) {
     }
 }
 
-// Quick filter counts
-const quickFilterCounts = computed(() => {
-    const currentYear = new Date().getFullYear()
-    const thisYearCount = rows.value.filter(r => r.tahun_masuk === currentYear).length
+const activeFilterSummary = computed(() => getActiveFilterSummary({
+    search: search.value,
+    jenis: filterJenis.value,
+    tahun: filterTahun.value,
+    status: filterStatus.value
+}))
 
-    return {
-        all: rows.value.length,
-        thisYear: thisYearCount
-    }
-})
+const activeFilterChips = computed(() => getActiveFilterChips({
+    search: search.value,
+    jenis: filterJenis.value,
+    tahun: filterTahun.value,
+    status: filterStatus.value
+}))
 
-const activeFilterSummary = computed(() => {
-    const parts = []
-    if (filterJenis.value !== 'Semua') parts.push(filterJenis.value)
-    if (filterTahun.value) parts.push(`Tahun ${filterTahun.value}`)
-    if (filterStatus.value !== 'Semua') {
-        parts.push(filterStatus.value === 'Bersidang' ? 'Sedang Bersidang' : filterStatus.value)
-    }
-    if (quickFilter.value === 'thisYear') parts.push('Tahun Ini')
-    if (search.value.trim()) parts.push(`Cari "${search.value.trim()}"`)
-    return parts.length ? parts.join(' · ') : 'Semua perkara'
-})
-
-const activeFilterChips = computed(() => {
-    const chips = []
-    if (filterJenis.value !== 'Semua') chips.push({ key: 'jenis', label: filterJenis.value })
-    if (filterTahun.value) chips.push({ key: 'tahun', label: `Tahun ${filterTahun.value}` })
-    if (filterStatus.value !== 'Semua') {
-        chips.push({
-            key: 'status',
-            label: filterStatus.value === 'Bersidang' ? 'Sedang Bersidang' : filterStatus.value
-        })
-    }
-    if (quickFilter.value === 'thisYear') chips.push({ key: 'quick', label: 'Tahun Ini' })
-    if (search.value.trim()) chips.push({ key: 'search', label: `Cari "${search.value.trim()}"` })
-    return chips
-})
-
-const hasActiveFilters = computed(() => {
-    return Boolean(
-        search.value.trim() ||
-        filterJenis.value !== 'Semua' ||
-        filterStatus.value !== 'Semua' ||
-        quickFilter.value !== 'all'
-    )
-})
+const hasActiveFilters = computed(() => hasFilters({
+    search: search.value,
+    jenis: filterJenis.value,
+    tahun: filterTahun.value,
+    status: filterStatus.value
+}))
 
 function resetFilters() {
-    search.value = ''
-    filterJenis.value = 'Semua'
-    filterStatus.value = 'Semua'
-    quickFilter.value = 'all'
-    filterTahun.value = String(new Date().getFullYear())
+    const filters = createDefaultFilters()
+    search.value = filters.search
+    filterJenis.value = filters.jenis
+    filterStatus.value = filters.status
+    filterTahun.value = filters.tahun
     currentPage.value = 1
 }
 
@@ -177,7 +139,6 @@ function removeFilterChip(key) {
     if (key === 'jenis') filterJenis.value = 'Semua'
     if (key === 'tahun') filterTahun.value = ''
     if (key === 'status') filterStatus.value = 'Semua'
-    if (key === 'quick') quickFilter.value = 'all'
     if (key === 'search') search.value = ''
     currentPage.value = 1
 }
@@ -196,20 +157,7 @@ const stats = computed(() => ({
     pidana: rows.value.filter(r => r.jenis_perkara === 'Pidana').length,
     perdata: rows.value.filter(r => r.jenis_perkara === 'Perdata').length,
     perikanan: rows.value.filter(r => r.jenis_perkara === 'Perikanan').length,
-    aktif: rows.value.filter(r => {
-        // Tahun < 2016 = tidak aktif
-        if (r.tahun_masuk < 2016) return false
-        // Status Minutasi/Putusan = tidak aktif
-        if (r.sipp_status === 'Minutasi' || r.sipp_status === 'Putusan') return false
-        return true
-    }).length
-}))
-
-// Quick stats for cards
-const quickStats = computed(() => ({
-    total: rows.value.length,
-    bersidang: rows.value.filter(r => r.sipp_status === 'Persidangan' || r.sipp_status === 'PERSIDANGAN').length,
-    minutasi: rows.value.filter(r => r.sipp_status === 'Minutasi' || r.sipp_status === 'MINUTASI').length
+    aktif: rows.value.filter(isPerkaraAktif).length
 }))
 
 // Perkara yang sedang bersidang (highlight kuning)
@@ -240,7 +188,7 @@ const avgDaysByType = computed(() => {
     // Filter by sipp_status === 'Minutasi' dan 3 tahun terakhir
     const currentYear = new Date().getFullYear()
     const completed = rows.value.filter(r => r.sipp_status === 'Minutasi' && r.tahun_masuk >= currentYear - 2)
-    if (!completed.length) return { pidana: '—', perdata: '—', perikanan: '—' }
+    if (!completed.length) return { pidana: '-', perdata: '-', perikanan: '-' }
 
     let pidanaTotal = 0, pidanaCount = 0
     let perdataTotal = 0, perdataCount = 0
@@ -266,49 +214,18 @@ const avgDaysByType = computed(() => {
     }
 
     return {
-        pidana: pidanaCount > 0 ? `${Math.round(pidanaTotal / pidanaCount)} Hari` : '—',
-        perdata: perdataCount > 0 ? `${Math.round(perdataTotal / perdataCount)} Hari` : '—',
-        perikanan: perikananCount > 0 ? `${Math.round(perikananTotal / perikananCount)} Hari` : '—'
+        pidana: pidanaCount > 0 ? `${Math.round(pidanaTotal / pidanaCount)} Hari` : '-',
+        perdata: perdataCount > 0 ? `${Math.round(perdataTotal / perdataCount)} Hari` : '-',
+        perikanan: perikananCount > 0 ? `${Math.round(perikananTotal / perikananCount)} Hari` : '-'
     }
 })
 
 const syncRate = computed(() => {
-    if (!syncStatus.value.total) return '—'
+    if (!syncStatus.value.total) return '-'
     return ((syncStatus.value.sipp_synced / syncStatus.value.total) * 100).toFixed(1)
 })
 
-const attentionStats = computed(() => {
-    const active = rows.value.filter(r => {
-        const status = (r.sipp_status || '').toLowerCase()
-        return status.includes('sidang') || r.first_sidang_soon
-    }).length
-    const unsynced = Math.max((syncStatus.value.total || 0) - (syncStatus.value.sipp_synced || 0), 0)
-    const completedThisYear = rows.value.filter(r => {
-        const status = (r.sipp_status || '').toLowerCase()
-        return status.includes('minutasi') && Number(r.tahun_masuk) === new Date().getFullYear()
-    }).length
-
-    return [
-        {
-            key: 'active',
-            label: 'Sedang berjalan',
-            value: active,
-            tone: 'warn'
-        },
-        {
-            key: 'unsynced',
-            label: 'Belum sinkron',
-            value: unsynced,
-            tone: unsynced > 0 ? 'danger' : 'safe'
-        },
-        {
-            key: 'completed',
-            label: 'Minutasi tahun ini',
-            value: completedThisYear,
-            tone: 'safe'
-        }
-    ]
-})
+const dashboardAlerts = computed(() => getDashboardAlerts(rows.value, syncStatus.value))
 
 const tahunOptions = computed(() => {
     const set = new Set(rows.value.map(r => r.tahun_masuk).filter(Boolean))
@@ -318,15 +235,10 @@ const tahunOptions = computed(() => {
 const jenisOptions = ['Semua', 'Pidana', 'Perdata', 'Perikanan', 'Hukum']
 const monthNames = ['jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'sep', 'okt', 'nov', 'des']
 
-const availableTrendYears = computed(() => {
-    const set = new Set(rows.value.map(r => r.tahun_masuk).filter(Boolean))
-    return Array.from(set).sort((a, b) => b - a)
-})
-
 async function loadTrendData() {
     try {
-        if (quickFilter.value === 'thisYear') {
-            trendData.value = await getPerkaraTrendMonthly(selectedTrendYear.value)
+        if (filterTahun.value) {
+            trendData.value = await getPerkaraTrendMonthly(Number(filterTahun.value))
         } else {
             trendData.value = await getPerkaraTrendYearly()
         }
@@ -335,14 +247,13 @@ async function loadTrendData() {
     }
 }
 
-// Watch quickFilter changes to reload trend data
-watch(quickFilter, () => {
-    loadTrendData()
-})
-
 // Reset page when filters change
 watch([search, filterJenis, filterTahun, filterStatus], () => {
     currentPage.value = 1
+})
+
+watch(filterTahun, () => {
+    loadTrendData()
 })
 
 async function loadAll() {
@@ -446,56 +357,18 @@ onMounted(() => {
             <StatsStrip :stats="stats" />
         </PageHeader>
 
-        <!-- Quick Stats Cards -->
-        <div v-if="loading" class="ns-stats-skeleton">
-            <div v-for="i in 3" :key="i" class="ns-stat-skeleton-card">
-                <div class="ns-stat-skeleton-icon"></div>
-                <div class="ns-stat-skeleton-content">
-                    <div class="ns-stat-skeleton-value"></div>
-                    <div class="ns-stat-skeleton-label"></div>
-                </div>
-            </div>
-        </div>
-        <QuickStatsCards v-else :stats="quickStats" />
-
-        <!-- Quick Filter Chips -->
-        <div class="ns-quick-filters">
-            <FilterChip
-                label="Semua"
-                :count="quickFilterCounts.all"
-                :active="quickFilter === 'all'"
-                @click="quickFilter = 'all'"
-            />
-            <FilterChip
-                label="Tahun Ini"
-                :count="quickFilterCounts.thisYear"
-                :active="quickFilter === 'thisYear'"
-                @click="quickFilter = 'thisYear'"
-            />
-        </div>
-
         <div class="ns-c-cards-row">
             <div class="ns-c-trend-wrapper">
-                <select
-                    v-show="quickFilter === 'thisYear'"
-                    v-model="selectedTrendYear"
-                    @change="loadTrendData"
-                    class="ns-year-select"
-                >
-                    <option v-for="year in availableTrendYears" :key="year" :value="year">
-                        Tahun {{ year }}
-                    </option>
-                </select>
                 <TrendCard
                     :data="trendData"
-                    :mode="quickFilter === 'thisYear' ? 'monthly' : 'yearly'"
-                    :year="selectedTrendYear"
+                    :mode="filterTahun ? 'monthly' : 'yearly'"
+                    :year="Number(filterTahun) || new Date().getFullYear()"
                     @period-click="onMonthClick"
                 />
             </div>
             <div class="ns-c-side-cards">
                 <div class="ns-c-avg-card" :class="{ 'is-dark': isDark }">
-                    <div class="ns-stat-label">Rata-rata penyelesaian 3 tahun terakhir</div>
+                    <div class="ns-stat-label">Rata-rata 3 tahun</div>
                     <div class="ns-c-avg-boxes">
                         <div class="ns-c-avg-box ns-c-avg-pidana">
                             <span class="ns-c-avg-value">{{ avgDaysByType.pidana }}</span>
@@ -510,10 +383,10 @@ onMounted(() => {
                             <span class="ns-c-avg-type">Perikanan</span>
                         </div>
                     </div>
-                    <div class="ns-c-avg-sub">Status: Minutasi</div>
+                    <div class="ns-c-avg-sub">Minutasi</div>
                 </div>
                 <MiniStatCard
-                    label="Sync rate"
+                    label="Sync"
                     :value="syncRate"
                     unit="%"
                     delta-text="Stabil"
@@ -532,26 +405,25 @@ onMounted(() => {
                 :jenis-options="jenisOptions"
                 :tahun-options="tahunOptions"
             />
-            <div class="ns-toolbar-right">
-                <!-- View Mode Toggle -->
-                <div class="ns-view-toggle">
+            <div class="ns-toolbar-action-row">
+                <div class="ns-view-toggle" aria-label="Mode tampilan">
                     <button
                         class="ns-view-btn"
                         :class="{ active: viewMode === 'table' }"
                         aria-label="Tampilkan tabel"
                         @click="viewMode = 'table'"
-                        title="Tabel View"
+                        title="Tabel"
                     >
-                        <Icon name="menu" :size="14" />
+                        <Icon name="table" :size="15" />
                     </button>
                     <button
                         class="ns-view-btn"
                         :class="{ active: viewMode === 'kanban' }"
                         aria-label="Tampilkan kanban"
                         @click="viewMode = 'kanban'"
-                        title="Kanban View"
+                        title="Kanban"
                     >
-                        <Icon name="filter" :size="14" />
+                        <Icon name="layoutGrid" :size="15" />
                     </button>
                 </div>
                 <Toggles type="density" v-model="density" />
@@ -560,9 +432,9 @@ onMounted(() => {
             </div>
         </div>
 
-        <div class="ns-filter-summary" aria-live="polite">
+        <div v-if="hasActiveFilters" class="ns-filter-summary" aria-live="polite">
             <div class="ns-filter-summary-main">
-                <span class="ns-filter-summary-label">Tampilan</span>
+                <span class="ns-filter-summary-label">Filter</span>
                 <strong>{{ activeFilterSummary }}</strong>
                 <div v-if="activeFilterChips.length" class="ns-filter-chip-list">
                     <button
@@ -574,14 +446,13 @@ onMounted(() => {
                         @click="removeFilterChip(chip.key)"
                     >
                         {{ chip.label }}
-                        <span aria-hidden="true">×</span>
+                        <span aria-hidden="true">x</span>
                     </button>
                 </div>
             </div>
             <div class="ns-filter-summary-meta">
-                <span>{{ filtered.length }} dari {{ rows.length }} perkara</span>
+                <span>{{ filtered.length }} dari {{ rows.length }}</span>
                 <button
-                    v-if="hasActiveFilters"
                     type="button"
                     class="ns-filter-summary-reset"
                     @click="resetFilters"
@@ -591,9 +462,9 @@ onMounted(() => {
             </div>
         </div>
 
-        <div class="ns-attention-strip" aria-label="Ringkasan perkara perlu perhatian">
+        <div v-if="dashboardAlerts.length" class="ns-attention-strip" aria-label="Peringatan dashboard">
             <div
-                v-for="item in attentionStats"
+                v-for="item in dashboardAlerts"
                 :key="item.key"
                 class="ns-attention-item"
                 :class="`is-${item.tone}`"
@@ -718,7 +589,7 @@ onMounted(() => {
     grid-template-columns: 1fr auto;
     gap: 16px;
     align-items: start;
-    margin-bottom: 28px;
+    margin-bottom: 12px;
 }
 
 .ns-c-trend-wrapper {
@@ -736,34 +607,12 @@ onMounted(() => {
     flex-shrink: 0;
 }
 
-.ns-year-select {
-    position: absolute;
-    top: 12px;
-    right: 16px;
-    z-index: 20;
-    padding: 6px 10px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: var(--bg2);
-    color: var(--text);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms;
-}
-
-.ns-year-select:hover {
-    border-color: var(--accent);
-    background: var(--surface);
-}
-
 .ns-c-avg-card {
     flex-shrink: 0;
     background: var(--bg, #fff);
-    border-radius: 16px;
+    border-radius: 10px;
     padding: 12px 16px 16px;
     border: 1px solid var(--border);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
 }
 
 .ns-c-avg-card.is-dark {
@@ -842,10 +691,37 @@ onMounted(() => {
     text-align: center;
 }
 
-.ns-toolbar-right {
+.ns-toolbar {
     display: flex;
     align-items: center;
     gap: 12px;
+    margin-bottom: 12px;
+    padding: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.ns-toolbar-action-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex: 0 0 auto;
+    min-width: max-content;
+}
+
+@media (max-width: 1100px) {
+    .ns-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .ns-toolbar-action-row {
+        justify-content: flex-start;
+        min-width: 0;
+        flex-wrap: wrap;
+    }
 }
 
 .ns-filter-summary {
@@ -853,8 +729,8 @@ onMounted(() => {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin: -4px 0 12px;
-    padding: 10px 14px;
+    margin: 0 0 12px;
+    padding: 8px 10px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -959,7 +835,7 @@ onMounted(() => {
 
 .ns-attention-strip {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 10px;
     margin-bottom: 12px;
 }
@@ -1063,14 +939,15 @@ onMounted(() => {
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 2px;
+    flex-shrink: 0;
 }
 
 .ns-view-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     border: none;
     border-radius: 6px;
     background: transparent;
@@ -1101,14 +978,6 @@ onMounted(() => {
 
 .ns-dashboard-view {
     position: relative;
-}
-
-/* Quick Filters */
-.ns-quick-filters {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
 }
 
 /* Stats Skeleton Loading */
@@ -1217,26 +1086,6 @@ onMounted(() => {
     .ns-table-skeleton-row {
         gap: 4px;
         padding: 10px 6px;
-    }
-}
-
-.ns-quick-filters :deep(.ns-filter-chip) {
-    animation: ns-stagger-fade-in 0.3s ease-out backwards;
-}
-
-.ns-quick-filters :deep(.ns-filter-chip:nth-child(1)) { animation-delay: 0.05s; }
-.ns-quick-filters :deep(.ns-filter-chip:nth-child(2)) { animation-delay: 0.1s; }
-.ns-quick-filters :deep(.ns-filter-chip:nth-child(3)) { animation-delay: 0.15s; }
-.ns-quick-filters :deep(.ns-filter-chip:nth-child(4)) { animation-delay: 0.2s; }
-
-@keyframes ns-stagger-fade-in {
-    from {
-        opacity: 0;
-        transform: translateY(-8px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
     }
 }
 

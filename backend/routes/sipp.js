@@ -24,25 +24,8 @@ router.get('/status', (req, res) => {
 });
 
 // POST /api/perkara/sipp/sync - Trigger manual sync
-router.post('/sync', async (req, res) => {
-    try {
-        const sippService = req.app.get('sippService');
-        console.log('[SIPP] Manual sync triggered');
-        const data = await sippService.fetchSIPPData();
-        const count = await sippService.saveToDatabase(data);
-        res.json({
-            success: true,
-            synced: count,
-            timestamp: new Date().toISOString(),
-            message: `Synced ${count} perkara from SIPP`
-        });
-    } catch (error) {
-        console.error('[SIPP] Sync error:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
+router.post('/sync', (req, res, next) => {
+    next();
 });
 
 module.exports = router;

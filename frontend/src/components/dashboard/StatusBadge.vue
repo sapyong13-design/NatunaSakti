@@ -21,7 +21,17 @@ const statusConfig = {
 }
 
 const config = computed(() => {
-    return statusConfig[props.status] || { variant: 'default', label: props.status }
+    if (statusConfig[props.status]) return statusConfig[props.status]
+
+    const status = props.status || ''
+    const lower = status.toLowerCase()
+    if (lower.includes('sidang')) return { variant: 'warning', label: 'Sidang', pulse: true }
+    if (lower.includes('banding') || lower.includes('kasasi') || lower.includes('keberatan')) {
+        return { variant: 'info', label: 'Upaya Hukum', pulse: false }
+    }
+    if (lower.includes('cabut')) return { variant: 'danger', label: 'Cabut', pulse: false }
+    if (lower.includes('putusan')) return { variant: 'info', label: 'Putusan', pulse: false }
+    return { variant: 'default', label: status || 'Aktif' }
 })
 </script>
 
@@ -29,7 +39,7 @@ const config = computed(() => {
     <span class="ns-status-badge" :class="[`ns-status-${config.variant}`, `ns-status-${size}`, { 'has-pulse': config.pulse }]">
         <span v-if="config.pulse" class="ns-status-pulse"></span>
         <span class="ns-status-dot"></span>
-        {{ config.label }}
+        <span class="ns-status-label">{{ config.label }}</span>
     </span>
 </template>
 
@@ -48,6 +58,12 @@ const config = computed(() => {
     position: relative;
     overflow: hidden;
     transition: all 180ms ease;
+}
+
+.ns-status-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Gradient overlay for all badges */
@@ -101,6 +117,7 @@ const config = computed(() => {
 .ns-status-badge.ns-status-sm {
     padding: 4px 9px;
     font-size: 10px;
+    max-width: 116px;
 }
 
 .ns-status-dot {
