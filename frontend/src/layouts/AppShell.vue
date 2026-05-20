@@ -48,6 +48,7 @@ function removeToast(id) {
 
 <template>
     <div class="ns-app ns-skin-c" :data-mode="theme.mode.value">
+        <a class="sr-only sr-only-focusable" href="#main-content">Lewati ke konten utama</a>
         <div class="ns-c-hero-bg" />
         <Sidebar
             :items="SIDEBAR_ITEMS"
@@ -58,7 +59,7 @@ function removeToast(id) {
             @toggle-group="toggleGroup"
             @close-mobile="mobileMenuOpen = false"
         />
-        <main class="ns-main">
+        <main id="main-content" class="ns-main" tabindex="-1">
             <TopBar :mobile-menu-open="mobileMenuOpen" @toggle-menu="toggleMobileMenu" />
             <div class="ns-page">
                 <slot />

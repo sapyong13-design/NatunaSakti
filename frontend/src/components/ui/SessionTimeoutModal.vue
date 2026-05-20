@@ -11,8 +11,8 @@ const emit = defineEmits(['extend', 'logout'])
     <Teleport to="body">
         <Transition name="ns-timeout-modal">
             <div v-if="show" class="ns-timeout-backdrop">
-                <div class="ns-timeout-dialog" role="dialog" aria-labelledby="timeout-title">
-                    <div class="ns-timeout-icon">⏰</div>
+                <div class="ns-timeout-dialog" role="dialog" aria-modal="true" aria-labelledby="timeout-title">
+                    <div class="ns-timeout-icon" aria-hidden="true">TIME</div>
 
                     <h3 id="timeout-title" class="ns-timeout-title">Sesi Segera Berakhir</h3>
 
@@ -27,7 +27,7 @@ const emit = defineEmits(['extend', 'logout'])
                             class="ns-btn ns-btn-extend"
                             @click="$emit('extend')"
                         >
-                            🔄 Perpanjang Sesi
+                            Perpanjang Sesi
                         </button>
                         <button
                             type="button"
@@ -47,7 +47,7 @@ const emit = defineEmits(['extend', 'logout'])
 .ns-timeout-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 99999;
+    z-index: var(--z-modal, 1600);
     display: grid;
     place-items: center;
     background: rgba(0, 0, 0, 0.6);
@@ -126,7 +126,8 @@ const emit = defineEmits(['extend', 'logout'])
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+                box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .ns-btn-extend {

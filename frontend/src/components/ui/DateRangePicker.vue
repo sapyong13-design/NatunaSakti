@@ -393,7 +393,7 @@ defineExpose({ open, close, focus: () => inputRef.value?.focus() })
 
                 <!-- Range Info -->
                 <div v-if="startDate || endDate" class="ns-range-info">
-                    <span v-if="startDate && !endDate" class="ns-range-hint">Pilih tanggal akhir...</span>
+                    <span v-if="startDate && !endDate" class="ns-range-hint">Pilih tanggal akhir…</span>
                     <span v-else-if="startDate && endDate" class="ns-range-result">
                         {{ formatDate(startDate) }} - {{ formatDate(endDate) }}
                     </span>
@@ -426,15 +426,15 @@ defineExpose({ open, close, focus: () => inputRef.value?.focus() })
     font-size: 14px;
     color: var(--text);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
 .ns-daterange-input:hover {
     border-color: var(--accent);
 }
 
-.ns-daterange-input:focus {
-    outline: none;
+.ns-daterange-input:focus-visible {
+    outline: 0;
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
 }
@@ -467,7 +467,7 @@ defineExpose({ open, close, focus: () => inputRef.value?.focus() })
     font-size: 12px;
     color: var(--text-3);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .ns-daterange-clear:hover {
@@ -480,7 +480,9 @@ defineExpose({ open, close, focus: () => inputRef.value?.focus() })
     top: calc(100% + 4px);
     left: 0;
     right: 0;
-    z-index: 100;
+    z-index: var(--z-dropdown, 1200);
+    width: min(360px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
     background: var(--bg-2);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -489,7 +491,7 @@ defineExpose({ open, close, focus: () => inputRef.value?.focus() })
 }
 
 .ns-range-dropdown {
-    min-width: 320px;
+    min-width: min(320px, calc(100vw - 24px));
 }
 
 /* Quick Select */
@@ -510,7 +512,7 @@ defineExpose({ open, close, focus: () => inputRef.value?.focus() })
     border-radius: 6px;
     color: var(--text-2);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .ns-quick-preset:hover {
@@ -536,7 +538,7 @@ defineExpose({ open, close, focus: () => inputRef.value?.focus() })
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease;
 }
 
 .ns-picker-nav:hover {
@@ -578,7 +580,7 @@ defineExpose({ open, close, focus: () => inputRef.value?.focus() })
     border-radius: 6px;
     color: var(--accent);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .ns-picker-today:hover {
@@ -617,7 +619,7 @@ defineExpose({ open, close, focus: () => inputRef.value?.focus() })
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    transition: all 0.1s ease;
+    transition: background-color 0.1s ease, color 0.1s ease;
 }
 
 .ns-picker-day.is-padding {
@@ -681,7 +683,7 @@ defineExpose({ open, close, focus: () => inputRef.value?.focus() })
 /* Dropdown transition */
 .ns-picker-dropdown-enter-active,
 .ns-picker-dropdown-leave-active {
-    transition: all 0.2s ease;
+    transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .ns-picker-dropdown-enter-from,

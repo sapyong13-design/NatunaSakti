@@ -41,7 +41,7 @@ function isGroupExpanded(group) {
     <aside class="ns-sidebar" :class="{ 'is-collapsed': collapsed, 'is-mobile-open': mobileOpen }">
         <div class="ns-brand">
             <LambangPN :size="32" primary="#047857" />
-            <div v-if="!collapsed" class="ns-brand-text">
+            <div v-if="!collapsed || mobileOpen" class="ns-brand-text">
                 <div class="ns-brand-title">Natuna Sakti</div>
                 <div class="ns-brand-sub">PN Natuna Kelas II</div>
             </div>
@@ -56,7 +56,7 @@ function isGroupExpanded(group) {
                     :class="{ 'is-active': isItemActive(item) }"
                 >
                     <span class="ns-nav-icon"><Icon :name="item.icon" :size="18" /></span>
-                    <span v-if="!collapsed" class="ns-nav-label">{{ item.label }}</span>
+                    <span v-if="!collapsed || mobileOpen" class="ns-nav-label">{{ item.label }}</span>
                 </RouterLink>
 
                 <div v-else-if="item.type === 'group'" class="ns-nav-group">
@@ -67,15 +67,15 @@ function isGroupExpanded(group) {
                         @click="emit('toggleGroup', item.id)"
                     >
                         <span class="ns-nav-icon"><Icon :name="item.icon" :size="18" /></span>
-                        <span v-if="!collapsed" class="ns-nav-label">{{ item.label }}</span>
-                        <span v-if="!collapsed" class="ns-nav-chevron">
+                        <span v-if="!collapsed || mobileOpen" class="ns-nav-label">{{ item.label }}</span>
+                        <span v-if="!collapsed || mobileOpen" class="ns-nav-chevron">
                             <Icon
                                 :name="isGroupExpanded(item) ? 'chevronDown' : 'chevronRight'"
                                 :size="14"
                             />
                         </span>
                     </button>
-                    <div v-if="!collapsed && isGroupExpanded(item)" class="ns-nav-children">
+                    <div v-if="(!collapsed || mobileOpen) && isGroupExpanded(item)" class="ns-nav-children">
                         <RouterLink
                             v-for="child in item.children"
                             :key="child.id"
@@ -113,7 +113,7 @@ function isGroupExpanded(group) {
 :deep(.ns-sidebar-backdrop) {
     position: fixed;
     inset: 0;
-    z-index: 998;
+    z-index: var(--z-backdrop, 910);
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(4px);
 }
@@ -131,7 +131,7 @@ function isGroupExpanded(group) {
         top: 0;
         left: 0;
         bottom: 0;
-        z-index: 999;
+        z-index: var(--z-sidebar, 900);
         width: 280px !important;
         transform: translateX(-100%);
         transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
@@ -143,6 +143,20 @@ function isGroupExpanded(group) {
 
     .ns-sidebar.is-collapsed {
         width: 280px !important;
+    }
+
+    .ns-sidebar.is-mobile-open .ns-brand-text,
+    .ns-sidebar.is-mobile-open .ns-nav-label,
+    .ns-sidebar.is-mobile-open .ns-nav-chevron {
+        display: flex;
+    }
+
+    .ns-sidebar.is-mobile-open .ns-nav-item {
+        justify-content: flex-start;
+    }
+
+    .ns-sidebar.is-mobile-open .ns-collapse-btn {
+        display: none;
     }
 }
 </style>

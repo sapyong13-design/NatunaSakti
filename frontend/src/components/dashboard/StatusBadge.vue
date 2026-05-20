@@ -29,8 +29,11 @@ const config = computed(() => {
     if (lower.includes('banding') || lower.includes('kasasi') || lower.includes('keberatan')) {
         return { variant: 'info', label: 'Upaya Hukum', pulse: false }
     }
+    if (lower.includes('eksekusi')) return { variant: 'info', label: 'Eksekusi', pulse: false }
+    if (lower.includes('damai')) return { variant: 'success', label: 'Damai', pulse: false }
     if (lower.includes('cabut')) return { variant: 'danger', label: 'Cabut', pulse: false }
     if (lower.includes('putusan')) return { variant: 'info', label: 'Putusan', pulse: false }
+    if (lower.includes('daftar') || lower.includes('distribusi')) return { variant: 'default', label: 'Terdaftar', pulse: false }
     return { variant: 'default', label: status || 'Aktif' }
 })
 </script>
@@ -57,7 +60,7 @@ const config = computed(() => {
     white-space: nowrap;
     position: relative;
     overflow: hidden;
-    transition: all 180ms ease;
+    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
 }
 
 .ns-status-label {

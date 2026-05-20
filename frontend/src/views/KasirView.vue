@@ -68,6 +68,7 @@ const newRow = reactive({
 const rows = ref([])
 const exporting = ref(false)
 const activeSheet = ref('input')
+const notice = ref({ type: '', message: '' })
 
 const rekap = computed(() => {
     return bukuOptions.map(buku => {
@@ -112,7 +113,7 @@ function formatDate(iso) {
 
 function addRow() {
     if (!newRow.uraian.trim()) {
-        alert('Uraian wajib diisi')
+        notice.value = { type: 'error', message: 'Uraian transaksi wajib diisi.' }
         return
     }
 
@@ -133,6 +134,7 @@ function addRow() {
     newRow.penerimaan = 0
     newRow.pengeluaran = 0
     newRow.ket = ''
+    notice.value = { type: 'success', message: 'Transaksi ditambahkan.' }
 }
 
 function appendTransaction(overrides) {
@@ -204,6 +206,7 @@ function escapeHtml(value) {
 
 async function exportExcel() {
     exporting.value = true
+    notice.value = { type: '', message: '' }
     try {
         const blob = await generatePenutupanRekapXlsx({
             bulanNama: namaBulan.value,
@@ -216,6 +219,9 @@ async function exportExcel() {
         a.download = `REKAP_KASIR_${namaBulan.value.toUpperCase()}_${form.tahun}.xlsx`
         a.click()
         URL.revokeObjectURL(url)
+        notice.value = { type: 'success', message: 'File rekap Excel dibuat.' }
+    } catch (err) {
+        notice.value = { type: 'error', message: 'Gagal membuat Excel: ' + err.message }
     } finally {
         exporting.value = false
     }
@@ -315,12 +321,17 @@ onMounted(loadLocal)
             </div>
         </section>
 
+        <div v-if="notice.message" class="ns-kasir-notice" :class="`is-${notice.type}`" role="status" aria-live="polite">
+            {{ notice.message }}
+        </div>
+
         <nav class="ns-sheet-tabs" aria-label="Sheet rekap kasir">
             <button
                 v-for="tab in sheetTabs"
                 :key="tab.id"
                 type="button"
                 :class="{ active: activeSheet === tab.id }"
+                :aria-selected="activeSheet === tab.id"
                 @click="activeSheet = tab.id"
             >
                 {{ tab.label }}
@@ -356,7 +367,7 @@ onMounted(loadLocal)
             </button>
             <button class="ns-btn ns-btn-primary" :disabled="exporting || !rows.length" @click="exportExcel">
                 <Icon name="download" :size="14" />
-                {{ exporting ? 'Exporting...' : 'Export Excel' }}
+                {{ exporting ? 'Mengekspor…' : 'Export Excel' }}
             </button>
         </div>
 
@@ -417,7 +428,7 @@ onMounted(loadLocal)
                             <td>{{ formatCurrency(row.pengeluaran) }}</td>
                             <td>{{ row.ket || '-' }}</td>
                             <td>
-                                <button class="ns-icon-btn" @click="removeRow(row.id)" title="Hapus">
+                                <button class="ns-icon-btn" @click="removeRow(row.id)" title="Hapus" aria-label="Hapus transaksi">
                                     <Icon name="trash" :size="14" />
                                 </button>
                             </td>
@@ -511,7 +522,14 @@ select {
     padding: 0 10px;
     background: var(--bg);
     color: var(--text);
-    outline: none;
+    outline: 0;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+input:focus-visible,
+select:focus-visible {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accentSoft);
 }
 
 .ns-summary {
@@ -552,15 +570,19 @@ select {
 
 .ns-sheet-tabs {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
     padding: 6px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 10px;
+    overflow-x: auto;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
 }
 
 .ns-sheet-tabs button {
+    flex: 0 0 auto;
     height: 34px;
     padding: 0 12px;
     border: 1px solid transparent;
@@ -570,12 +592,33 @@ select {
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 
 .ns-sheet-tabs button.active {
     color: var(--accent);
     background: var(--accentSoft);
     border-color: var(--accent);
+}
+
+.ns-kasir-notice {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.ns-kasir-notice.is-success {
+    border-color: color-mix(in srgb, var(--success, #4A7C59) 32%, var(--border));
+    background: color-mix(in srgb, var(--success, #4A7C59) 10%, var(--surface));
+}
+
+.ns-kasir-notice.is-error {
+    border-color: color-mix(in srgb, var(--danger, #C75B4A) 32%, var(--border));
+    background: color-mix(in srgb, var(--danger, #C75B4A) 10%, var(--surface));
 }
 
 .ns-transaction-form {
@@ -592,6 +635,8 @@ select {
 
 .ns-table-wrap {
     overflow-x: auto;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
 }
 
 table {
@@ -620,12 +665,21 @@ th {
 
 td {
     color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+td:nth-child(1),
+td:nth-child(7),
+td:nth-child(8),
+td:nth-child(4) {
+    font-variant-numeric: tabular-nums;
 }
 
 .ns-empty {
     height: 90px;
     text-align: center;
     color: var(--text3);
+    font-weight: 600;
 }
 
 .ns-icon-btn {
@@ -659,6 +713,14 @@ td {
     .ns-form-grid,
     .ns-transaction-form {
         grid-template-columns: 1fr;
+    }
+
+    .ns-panel {
+        padding: 12px;
+    }
+
+    table {
+        min-width: 760px;
     }
 }
 </style>

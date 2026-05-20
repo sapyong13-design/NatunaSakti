@@ -70,15 +70,15 @@ function getSidangDates(row) {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-if="loading">
+                    <tr v-if="loading" aria-live="polite">
                         <td colspan="10" class="ns-loading">
                             <span class="ns-spinner"></span>
-                            <span>Memuat data...</span>
+                            <span>Memuat data laporan…</span>
                         </td>
                     </tr>
                     <tr v-else-if="!rows.length">
                         <td colspan="10" class="ns-empty">
-                            <div class="ns-empty-icon">📋</div>
+                            <div class="ns-empty-icon">Data</div>
                             <div>Tidak ada perkara di periode ini</div>
                         </td>
                     </tr>
@@ -96,20 +96,20 @@ function getSidangDates(row) {
                             </span>
                         </td>
                         <td class="ns-sticky-col ns-col-nomor">
-                            <span class="ns-nomor">{{ row.nomor_perkara }}</span>
+                            <span class="ns-nomor" :title="row.nomor_perkara">{{ row.nomor_perkara }}</span>
                         </td>
                         <td class="ns-col-nama">
-                            <span class="ns-nama">{{ pihakUtama(row.para_pihak) }}</span>
+                            <span class="ns-nama" :title="pihakUtama(row.para_pihak)">{{ pihakUtama(row.para_pihak) }}</span>
                         </td>
                         <td class="ns-col-jenis-detail">
-                            <span class="ns-jenis-detail">{{ row.nama_perkara }}</span>
+                            <span class="ns-jenis-detail" :title="row.nama_perkara">{{ row.nama_perkara }}</span>
                         </td>
                         <td class="ns-col-tahun">{{ row.tahun_masuk }}</td>
                         <td class="ns-col-register">{{ formatDate(row.sipp_tanggal_register) }}</td>
                         <td class="ns-col-sidang">{{ getSidangDates(row) }}</td>
                         <td class="ns-col-putus">{{ formatDate(row.tanggal_putus) }}</td>
                         <td class="ns-col-ket">
-                            <span class="ns-kategori-pill" :class="getKategoriClass(row)">
+                            <span class="ns-kategori-pill" :class="getKategoriClass(row)" :title="getKategori(row)">
                                 {{ getKategori(row) }}
                             </span>
                         </td>
@@ -119,7 +119,7 @@ function getSidangDates(row) {
         </div>
         <div class="ns-table-footer">
             <span class="ns-table-count">{{ rows.length }} perkara</span>
-            <span class="ns-table-hint">Semua kolom ditampilkan dalam lebar halaman</span>
+            <span class="ns-table-hint">Geser tabel untuk melihat kolom tambahan</span>
         </div>
     </div>
 </template>
@@ -133,12 +133,15 @@ function getSidangDates(row) {
 }
 
 .ns-report-table-scroll {
-    overflow-x: hidden;
+    overflow-x: auto;
     max-width: 100%;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
 }
 
 .ns-report-table {
     width: 100%;
+    min-width: 980px;
     border-collapse: collapse;
     table-layout: fixed;
     font-size: 12px;
@@ -147,7 +150,7 @@ function getSidangDates(row) {
 .ns-report-table thead {
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: var(--z-sticky, 40);
 }
 
 .ns-report-table th {
@@ -158,13 +161,17 @@ function getSidangDates(row) {
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-3);
-    background: var(--bg-2);
+    background: #f8fafc;
     border-bottom: 1px solid var(--border);
     white-space: normal;
     line-height: 1.25;
     overflow: hidden;
     overflow-wrap: anywhere;
     word-break: break-word;
+}
+
+[data-mode="dark"] .ns-report-table th {
+    background: #111827;
 }
 
 .ns-report-table td {
@@ -183,7 +190,7 @@ function getSidangDates(row) {
 }
 
 .ns-report-table tbody tr {
-    transition: background 120ms ease;
+    transition: background-color 120ms ease;
 }
 
 .ns-report-table tbody tr:hover {
@@ -193,55 +200,60 @@ function getSidangDates(row) {
 /* Kept as a class hook, but full-width report tables do not need frozen columns. */
 .ns-sticky-col {
     background: var(--surface);
-    transition: background 120ms ease;
+    transition: background-color 120ms ease;
+    box-shadow: 1px 0 0 var(--border), 8px 0 14px -14px rgba(0, 0, 0, 0.35);
 }
 
 .ns-report-table thead .ns-sticky-col {
-    background: var(--bg-2);
+    background: #f8fafc;
+}
+
+[data-mode="dark"] .ns-report-table thead .ns-sticky-col {
+    background: #111827;
 }
 
 .ns-col-no {
-    width: 4%;
+    width: 54px;
     text-align: center;
 }
 
 .ns-col-jenis {
-    width: 8%;
+    width: 96px;
 }
 
 .ns-col-nomor {
-    width: 18%;
+    width: 190px;
 }
 
 .ns-col-nama {
-    width: 15%;
+    width: 180px;
 }
 
 .ns-col-jenis-detail {
-    width: 14%;
+    width: 190px;
 }
 
 .ns-col-tahun {
-    width: 6%;
+    width: 72px;
     text-align: center;
 }
 
 .ns-col-register {
-    width: 9%;
+    width: 118px;
 }
 
 .ns-col-sidang {
-    width: 11%;
+    width: 140px;
     white-space: normal;
     line-height: 1.5;
 }
 
 .ns-col-putus {
-    width: 9%;
+    width: 118px;
 }
 
 .ns-col-ket {
-    width: 10%;
+    width: 130px;
     text-align: center;
 }
 
@@ -265,9 +277,7 @@ function getSidangDates(row) {
     letter-spacing: 0.02em;
     background: var(--jenis-bg);
     color: var(--jenis-color);
-    white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    white-space: nowrap;
 }
 
 .ns-kategori-pill {
@@ -282,9 +292,9 @@ function getSidangDates(row) {
     color: var(--text-2);
     font-size: 11px;
     font-weight: 600;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .ns-kategori-pill.is-registered {
@@ -309,23 +319,30 @@ function getSidangDates(row) {
     font-weight: 500;
     color: var(--text);
     letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     overflow-wrap: anywhere;
-    word-break: break-word;
 }
 
 .ns-nama {
-    display: block;
+    display: -webkit-box;
     font-weight: 500;
     line-height: 1.4;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
     overflow-wrap: anywhere;
-    word-break: break-word;
 }
 
 .ns-jenis-detail {
-    display: block;
+    display: -webkit-box;
     font-size: 12px;
     color: var(--text-2);
     line-height: 1.4;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
     overflow-wrap: anywhere;
     word-break: break-word;
 }
@@ -369,9 +386,20 @@ function getSidangDates(row) {
 }
 
 .ns-empty-icon {
-    font-size: 32px;
+    font-size: 12px;
     margin-bottom: 8px;
     opacity: 0.5;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.ns-empty::after {
+    content: "Ubah periode atau pastikan data SIPP sudah tersinkron.";
+    display: block;
+    margin-top: 6px;
+    color: var(--text-3);
+    font-size: 12px;
 }
 
 /* Footer */
@@ -452,7 +480,13 @@ function getSidangDates(row) {
     }
 
     .ns-report-table {
+        min-width: 760px;
         font-size: 9px;
+    }
+
+    .ns-col-jenis-detail,
+    .ns-col-putus {
+        display: none;
     }
 
     .ns-report-table th {

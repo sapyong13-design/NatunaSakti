@@ -64,12 +64,12 @@ onMounted(() => {
 <template>
     <Teleport to="body">
         <Transition name="ns-toast">
-            <div v-if="isVisible" class="ns-toast" :class="`ns-toast-${type}`">
+            <div v-if="isVisible" class="ns-toast" :class="`ns-toast-${type}`" role="status" aria-live="polite" aria-atomic="true">
                 <div class="ns-toast-icon" :style="{ color: typeConfig.color }">
                     <Icon :name="typeConfig.icon" :size="18" />
                 </div>
                 <span class="ns-toast-message">{{ message }}</span>
-                <button type="button" class="ns-toast-close" @click="close">
+                <button type="button" class="ns-toast-close" aria-label="Tutup notifikasi" @click="close">
                     <Icon name="close" :size="14" />
                 </button>
                 <div class="ns-toast-progress" :style="{ width: progress + '%' }"></div>
@@ -83,12 +83,13 @@ onMounted(() => {
     position: fixed;
     bottom: 24px;
     right: 24px;
-    z-index: 1000;
+    z-index: var(--z-toast, 1500);
     display: flex;
     align-items: center;
     gap: 12px;
     padding: 14px 16px;
-    min-width: 300px;
+    min-width: min(300px, calc(100vw - 24px));
+    max-width: min(460px, calc(100vw - 24px));
     background: var(--bg2);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -119,7 +120,7 @@ onMounted(() => {
     color: var(--text3);
     cursor: pointer;
     border-radius: 4px;
-    transition: all 150ms;
+    transition: background-color 150ms ease, color 150ms ease;
 }
 
 .ns-toast-close:hover {
@@ -144,7 +145,16 @@ onMounted(() => {
 
 .ns-toast-enter-active,
 .ns-toast-leave-active {
-    transition: all 250ms cubic-bezier(0.32, 0.72, 0, 1);
+    transition: opacity 250ms cubic-bezier(0.32, 0.72, 0, 1),
+                transform 250ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (max-width: 520px) {
+    .ns-toast {
+        right: 12px;
+        bottom: 12px;
+        left: 12px;
+    }
 }
 
 .ns-toast-enter-from {

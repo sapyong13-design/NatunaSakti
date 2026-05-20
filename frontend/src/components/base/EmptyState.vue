@@ -74,6 +74,7 @@ const illustrationType = computed(() => {
                 type="button"
                 class="ns-empty-action"
                 :class="action.class"
+                :aria-label="action.label"
                 @click="emit('action', action)"
             >
                 <Icon v-if="action.icon" :name="action.icon" :size="14" />
@@ -148,7 +149,7 @@ const illustrationType = computed(() => {
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 180ms ease;
+    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
 .ns-empty-action:hover {

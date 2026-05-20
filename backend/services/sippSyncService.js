@@ -6,6 +6,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const puppeteer = require('puppeteer');
+const { savePutusanCache } = require('../lib/putusanCache');
 
 class SIPPSyncService {
   constructor(db) {
@@ -492,8 +493,134 @@ class SIPPSyncService {
     return jadwal.length;
   }
 
+  async fetchPutusan(nomorPerkara) {
+    console.log('[SIPP] Fetching putusan for:', nomorPerkara);
+
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    });
+
+    try {
+      const page = await browser.newPage();
+      return await this._fetchPutusanFromPage(page, nomorPerkara);
+    } catch (error) {
+      console.error('[SIPP] Error fetching putusan:', error.message);
+      return null;
+    } finally {
+      await browser.close();
+    }
+  }
+
+  async _fetchPutusanFromPage(page, nomorPerkara) {
+    await page.goto(this.sippUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForSelector('#search-box', { timeout: 10000 });
+    await page.click('#search-box');
+    await page.$eval('#search-box', (el) => { el.value = ''; });
+    await page.type('#search-box', nomorPerkara, { delay: 25 });
+
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }),
+      page.evaluate(() => {
+        const form = document.querySelector('form[action*="search"]');
+        if (form) form.submit();
+      })
+    ]);
+
+    const detilUrl = await page.evaluate((nomor) => {
+      const rows = document.querySelectorAll('table tr');
+      for (const row of rows) {
+        const cols = row.querySelectorAll('td');
+        if (cols.length >= 2 && cols[1].textContent.trim() === nomor) {
+          const a = row.querySelector('a[href*="show_detil"]');
+          return a ? a.href : null;
+        }
+      }
+      return null;
+    }, nomorPerkara);
+
+    if (!detilUrl) {
+      console.log('[SIPP] Perkara not found in search results:', nomorPerkara);
+      return null;
+    }
+
+    await page.goto(detilUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+    const clicked = await page.evaluate(() => {
+      const links = Array.from(document.querySelectorAll('a[href^="#tabs"], a[href*="#tabs"]'));
+      const putusanLink = links.find(a => /putusan/i.test(a.textContent || ''));
+      const fallback = document.querySelector('a[href*="#tabs5"]');
+      const link = putusanLink || fallback;
+      if (!link) return false;
+      link.click();
+      return true;
+    });
+
+    if (clicked) {
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    const putusan = await page.evaluate(() => {
+      function clean(text) {
+        return (text || '').replace(/\s+/g, ' ').trim();
+      }
+
+      const tabLinks = Array.from(document.querySelectorAll('a[href^="#tabs"], a[href*="#tabs"]'));
+      const putusanHref = tabLinks.find(a => /putusan/i.test(a.textContent || ''))?.getAttribute('href') || '#tabs5';
+      const container = document.querySelector(putusanHref) || document.getElementById('tabs5') || document.body;
+      const raw = [];
+
+      container.querySelectorAll('table tr').forEach(row => {
+        const cols = Array.from(row.querySelectorAll('td, th')).map(col => clean(col.textContent));
+        const values = cols.filter(Boolean);
+        if (values.length >= 2) {
+          raw.push({ label: values[0].replace(/:$/, ''), value: values.slice(1).join(' ') });
+        } else if (values.length === 1) {
+          raw.push({ label: '', value: values[0] });
+        }
+      });
+
+      if (raw.length === 0) {
+        container.querySelectorAll('p, li, div').forEach(el => {
+          const text = clean(el.textContent);
+          if (text && text.length > 3 && text.length < 2000) raw.push({ label: '', value: text });
+        });
+      }
+
+      const rawText = clean(container.textContent);
+      if (!rawText && raw.length === 0) return null;
+
+      function findValue(patterns) {
+        const row = raw.find(item => patterns.some(pattern => pattern.test(`${item.label} ${item.value}`)));
+        if (!row) return null;
+        if (row.label && patterns.some(pattern => pattern.test(row.label))) return row.value || null;
+        return row.value || null;
+      }
+
+      return {
+        tanggal_putusan: findValue([/tanggal putusan/i, /tgl putusan/i, /tanggal putus/i]),
+        amar_putusan: findValue([/amar/i, /bunyi putusan/i]),
+        status_putusan: findValue([/status putusan/i, /^status$/i]),
+        tanggal_minutasi: findValue([/tanggal minutasi/i, /tgl minutasi/i, /minutasi/i]),
+        majelis_hakim: findValue([/majelis hakim/i, /hakim majelis/i]),
+        panitera_pengganti: findValue([/panitera pengganti/i, /panitera/i]),
+        raw_text: rawText,
+        raw
+      };
+    });
+
+    console.log('[SIPP] Found putusan data for', nomorPerkara, putusan ? 'yes' : 'no');
+    return putusan;
+  }
+
+  async fetchAndCachePutusan(nomorPerkara, page) {
+    const putusan = await this._fetchPutusanFromPage(page, nomorPerkara);
+    savePutusanCache(this.db, nomorPerkara, putusan);
+    return putusan ? 1 : 0;
+  }
+
   /**
-   * Cache jadwal sidang untuk 100 perkara terbaru.
+   * Cache jadwal sidang dan putusan untuk 100 perkara terbaru.
    * 1 browser instance dipakai ulang untuk seluruh batch.
    *
    * Concurrency-guarded: kalau call kedua masuk saat batch sebelumnya masih
@@ -517,10 +644,10 @@ class SIPPSyncService {
         LIMIT 100
       `).all();
 
-      console.log(`[CACHE] Caching jadwal for ${perkara.length} newest perkara`);
+      console.log(`[CACHE] Caching jadwal and putusan for ${perkara.length} newest perkara`);
 
       if (perkara.length === 0) {
-        return { ok: 0, failed: 0, total: 0 };
+        return { ok: 0, failed: 0, jadwalOk: 0, jadwalFailed: 0, putusanOk: 0, putusanFailed: 0, total: 0 };
       }
 
       const browser = await puppeteer.launch({
@@ -528,30 +655,46 @@ class SIPPSyncService {
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
       });
 
-      let ok = 0;
-      let failed = 0;
+      let jadwalOk = 0;
+      let jadwalFailed = 0;
+      let putusanOk = 0;
+      let putusanFailed = 0;
       try {
         const page = await browser.newPage();
-        for (const p of perkara) {
+        for (let i = 0; i < perkara.length; i++) {
+          const p = perkara[i];
           try {
             const n = await this.fetchAndCacheJadwal(p.nomor_perkara, page);
-            ok++;
-            console.log(`[CACHE] ${ok + failed}/${perkara.length}: ${p.nomor_perkara} -> ${n} jadwal`);
+            jadwalOk++;
+            console.log(`[CACHE] ${i + 1}/${perkara.length}: ${p.nomor_perkara} -> ${n} jadwal`);
           } catch (err) {
-            failed++;
-            console.error(`[CACHE] failed ${p.nomor_perkara}:`, err.message);
+            jadwalFailed++;
+            console.error(`[CACHE] jadwal failed ${p.nomor_perkara}:`, err.message);
             // Reset page state so a wedged page (crashed frame, dangling
             // navigation) doesn't cascade into the next iteration.
             try { await page.goto('about:blank'); } catch (_) { /* ignore */ }
           }
+
+          try {
+            const n = await this.fetchAndCachePutusan(p.nomor_perkara, page);
+            putusanOk++;
+            console.log(`[CACHE] ${i + 1}/${perkara.length}: ${p.nomor_perkara} -> ${n ? 'putusan' : 'no putusan'}`);
+          } catch (err) {
+            putusanFailed++;
+            console.error(`[CACHE] putusan failed ${p.nomor_perkara}:`, err.message);
+            try { await page.goto('about:blank'); } catch (_) { /* ignore */ }
+          }
+
           await new Promise(r => setTimeout(r, 200)); // throttle SIPP
         }
       } finally {
         await browser.close();
       }
 
-      console.log(`[CACHE] done: ok=${ok}, failed=${failed}, total=${perkara.length}`);
-      return { ok, failed, total: perkara.length };
+      const ok = jadwalOk + putusanOk;
+      const failed = jadwalFailed + putusanFailed;
+      console.log(`[CACHE] done: jadwalOk=${jadwalOk}, putusanOk=${putusanOk}, failed=${failed}, total=${perkara.length}`);
+      return { ok, failed, jadwalOk, jadwalFailed, putusanOk, putusanFailed, total: perkara.length };
     } finally {
       this.cachePopulateInProgress = false;
     }

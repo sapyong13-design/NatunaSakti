@@ -95,6 +95,75 @@ const checks = [
     name: 'view toggle icon buttons are labelled',
     test: (source) => /aria-label="Tampilkan tabel"/.test(source) && /aria-label="Tampilkan kanban"/.test(source),
   },
+  {
+    file: 'src/assets/styles/design-responsive.css',
+    name: 'mobile drawer keeps full navigation labels visible',
+    test: (source) => /\.ns-sidebar\.is-mobile-open\s+\.ns-brand-text/.test(source) && /\.ns-sidebar\.is-mobile-open\s+\.ns-nav-label/.test(source),
+  },
+  {
+    file: 'src/assets/styles/design-tokens.css',
+    name: 'global overlay z-index tokens are defined',
+    test: (source) => /--z-sidebar:/.test(source) && /--z-dropdown:/.test(source) && /--z-toast:/.test(source) && /--z-modal:/.test(source),
+  },
+  {
+    file: 'src/components/feedback/Toast.vue',
+    name: 'toast clamps to mobile viewport width',
+    test: (source) => /max-width:\s*min\(480px,\s*calc\(100vw - 24px\)\)/.test(source),
+  },
+  {
+    file: 'src/components/dashboard/ToolbarFilters.vue',
+    name: 'teleported filter menus clamp to viewport edge',
+    test: (source) => /const menuWidth = 260/.test(source) && /Math\.max\(gutter,\s*Math\.min/.test(source),
+  },
+  {
+    file: 'src/components/shell/TopBar.vue',
+    name: 'topbar text can shrink without overlapping actions',
+    test: (source) => /\.ns-c-org\s*\{[^}]*min-width:\s*0/s.test(source) && /overflow:\s*hidden/.test(source),
+  },
+  {
+    file: 'src/components/dashboard/PerkaraTable.vue',
+    name: 'jenis perkara badges stay on one line',
+    test: (source) => /\.ns-jenis-badge\s*\{[^}]*white-space:\s*nowrap/s.test(source) && /\.ns-col-jenis\s*\{[^}]*width:\s*96px/s.test(source),
+  },
+  {
+    file: 'src/components/report/BulananFilterBar.vue',
+    name: 'monthly report toolbar has responsive action group with history',
+    test: (source) => /'history'/.test(source) && /class="ns-report-toolbar-actions"/.test(source) && /@click="emit\('history'\)"/.test(source),
+  },
+  {
+    file: 'src/components/report/MingguanFilterBar.vue',
+    name: 'weekly report toolbar has responsive action group with history',
+    test: (source) => /'history'/.test(source) && /class="ns-report-toolbar-actions"/.test(source) && /@click="emit\('history'\)"/.test(source),
+  },
+  {
+    file: 'src/components/report/ReportTable.vue',
+    name: 'report table uses scroll container, sticky solid header, and clamped long text',
+    test: (source) =>
+      /overflow-x:\s*auto/.test(source) &&
+      /min-width:\s*980px/.test(source) &&
+      /position:\s*sticky/.test(source) &&
+      /-webkit-line-clamp:\s*2/.test(source) &&
+      /title="pihakUtama/.test(source),
+  },
+  {
+    file: 'src/components/report/ReportHistoryModal.vue',
+    name: 'report history modal scrolls internally and truncates long filenames',
+    test: (source) =>
+      /max-height:\s*min\(680px,\s*calc\(100vh - 24px\)\)/.test(source) &&
+      /overflow:\s*auto/.test(source) &&
+      /text-overflow:\s*ellipsis/.test(source) &&
+      /:title="item\.filename"/.test(source),
+  },
+  {
+    file: 'src/views/BulananView.vue',
+    name: 'monthly report error stacks on mobile and history action lives in toolbar',
+    test: (source) => !/ns-report-actions/.test(source) && /@history="openHistory"/.test(source) && /@media \(max-width:\s*560px\)/.test(source),
+  },
+  {
+    file: 'src/views/MingguanView.vue',
+    name: 'weekly report error stacks on mobile and history action lives in toolbar',
+    test: (source) => !/ns-report-actions/.test(source) && /@history="openHistory"/.test(source) && /@media \(max-width:\s*560px\)/.test(source),
+  },
 ];
 
 const failures = [];

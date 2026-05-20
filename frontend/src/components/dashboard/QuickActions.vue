@@ -9,6 +9,7 @@ const props = defineProps({
 const emit = defineEmits(['refresh'])
 
 const rippleStates = ref({})
+const actionMessage = ref('')
 
 const actions = [
     { key: 'refresh', icon: 'refresh', label: 'Refresh' },
@@ -40,7 +41,10 @@ function handleAction(key, event) {
 
 function exportToCSV() {
     if (!props.rows.length) {
-        alert('Tidak ada data untuk diexport')
+        actionMessage.value = 'Tidak ada data untuk diexport'
+        setTimeout(() => {
+            actionMessage.value = ''
+        }, 2500)
         return
     }
 
@@ -73,11 +77,16 @@ function exportToCSV() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+    actionMessage.value = `${props.rows.length} perkara diexport`
+    setTimeout(() => {
+        actionMessage.value = ''
+    }, 2500)
 }
 </script>
 
 <template>
     <div class="ns-quick-actions">
+        <span v-if="actionMessage" class="ns-action-message" role="status" aria-live="polite">{{ actionMessage }}</span>
         <button
             v-for="action in actions"
             :key="action.key"
@@ -106,6 +115,16 @@ function exportToCSV() {
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
+}
+
+.ns-action-message {
+    max-width: 180px;
+    color: var(--text-2);
+    font-size: 11px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .ns-action-btn {

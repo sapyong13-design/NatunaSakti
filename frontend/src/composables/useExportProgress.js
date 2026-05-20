@@ -35,7 +35,7 @@ export function useExportProgress() {
         isExporting.value = true
         currentStep.value = 0
         totalSteps.value = steps
-        currentStepName.value = 'Memulai...'
+        currentStepName.value = 'Memulai proses export…'
         startTime.value = Date.now()
         exportId.value = Date.now()
     }

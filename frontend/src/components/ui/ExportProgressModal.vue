@@ -12,9 +12,9 @@ defineProps({
     <Teleport to="body">
         <Transition name="ns-export-modal">
             <div v-if="show" class="ns-export-backdrop">
-                <div class="ns-export-dialog" role="dialog" aria-labelledby="export-title">
+                <div class="ns-export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-title">
                     <div class="ns-export-header">
-                        <div class="ns-export-icon">📄</div>
+                        <div class="ns-export-icon" aria-hidden="true">DOC</div>
                         <div class="ns-export-title">
                             <h3 id="export-title"> Mengeksport Dokumen</h3>
                             <p v-if="filename" class="ns-export-filename">{{ filename }}</p>
@@ -51,7 +51,7 @@ defineProps({
 .ns-export-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 9999;
+    z-index: var(--z-modal, 1600);
     display: grid;
     place-items: center;
     background: rgba(0, 0, 0, 0.5);
@@ -171,7 +171,8 @@ defineProps({
 
 .ns-export-modal-enter-active .ns-export-dialog,
 .ns-export-modal-leave-active .ns-export-dialog {
-    transition: all 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    transition: opacity 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+                transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .ns-export-modal-enter-from,

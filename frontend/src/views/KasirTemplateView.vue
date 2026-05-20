@@ -235,7 +235,7 @@ async function downloadTemplate() {
 
             <button class="ns-btn ns-btn-primary" :disabled="downloading" @click="downloadTemplate">
                 <Icon name="download" :size="14" />
-                {{ downloading ? 'Mengunduh...' : 'Download Template' }}
+                {{ downloading ? 'Mengunduh…' : 'Download Template' }}
             </button>
         </section>
 
@@ -755,7 +755,7 @@ select {
     padding: 0 9px;
     background: var(--bg);
     color: var(--text);
-    outline: none;
+    outline: 0;
 }
 
 .ns-summary-grid {

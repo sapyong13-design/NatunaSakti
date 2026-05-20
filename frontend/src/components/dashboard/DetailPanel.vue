@@ -1,9 +1,10 @@
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, nextTick } from 'vue'
 import Icon from '../Icon.vue'
-import { getJadwalSidang, refreshJadwal, deletePerkara } from '../../lib/api'
+import { getJadwalSidang, refreshJadwal, getPutusanPerkara, refreshPutusan, deletePerkara } from '../../lib/api'
 import { pihakUtama } from '../../lib/pihak'
 import { parseDateIndo, formatDateIndo } from '../../lib/date'
+import { buildPutusanDisplay } from '../../lib/putusanDisplay'
 
 const props = defineProps({
     row: { type: Object, default: null },
@@ -13,10 +14,16 @@ const props = defineProps({
 const emit = defineEmits(['close', 'deleted'])
 
 const jadwal = ref([])
+const putusan = ref(null)
+const activeTab = ref('jadwal')
 const isDark = computed(() => document.documentElement.dataset.mode === 'dark')
 const loadingJadwal = ref(false)
+const loadingPutusan = ref(false)
 const refreshing = ref(false)
+const refreshingPutusan = ref(false)
 const deleting = ref(false)
+const panelRef = ref(null)
+const actionError = ref('')
 
 // Get month from Indonesian date string
 function getMonthFromIndoDate(dateStr) {
@@ -135,12 +142,13 @@ async function loadJadwal(nomor) {
 async function handleRefreshJadwal() {
     if (!props.row) return
     refreshing.value = true
+    actionError.value = ''
     try {
         const res = await refreshJadwal(props.row.nomor_perkara)
         jadwal.value = res.jadwal || []
     } catch (err) {
         console.error('Refresh jadwal failed:', err.message)
-        alert('Gagal refresh jadwal: ' + err.message)
+        actionError.value = 'Gagal refresh jadwal: ' + err.message
     } finally {
         refreshing.value = false
     }
@@ -150,17 +158,60 @@ async function handleDelete() {
     if (!props.row) return
     if (!window.confirm(`Hapus perkara ${props.row.nomor_perkara}?`)) return
     deleting.value = true
+    actionError.value = ''
     try {
         await deletePerkara(props.row.id)
         emit('deleted', props.row.nomor_perkara)
         emit('close')
     } catch (err) {
         console.error('Delete failed:', err.message)
-        alert('Gagal hapus: ' + err.message)
+        actionError.value = 'Gagal hapus: ' + err.message
     } finally {
         deleting.value = false
     }
 }
+
+async function loadPutusan(nomor) {
+    loadingPutusan.value = true
+    putusan.value = null
+    try {
+        const res = await getPutusanPerkara(nomor)
+        putusan.value = res.putusan || null
+    } catch (err) {
+        console.error('Load putusan failed:', err.message)
+    } finally {
+        loadingPutusan.value = false
+    }
+}
+
+function closePanel() {
+    emit('close')
+}
+
+async function handleRefreshPutusan() {
+    if (!props.row) return
+    refreshingPutusan.value = true
+    actionError.value = ''
+    try {
+        const res = await refreshPutusan(props.row.nomor_perkara)
+        putusan.value = res.putusan || null
+    } catch (err) {
+        console.error('Refresh putusan failed:', err.message)
+        actionError.value = 'Gagal refresh putusan: ' + err.message
+    } finally {
+        refreshingPutusan.value = false
+    }
+}
+
+const hasPutusanData = computed(() => {
+    return putusanDisplay.value.hasData
+})
+
+const putusanDisplay = computed(() => buildPutusanDisplay(putusan.value))
+
+const putusanRows = computed(() => {
+    return putusanDisplay.value.summary
+})
 
 // Check if jadwal is upcoming, past, or completed
 function getJadwalStatus(jadwalItem, isMinutasi) {
@@ -175,24 +226,43 @@ function getJadwalStatus(jadwalItem, isMinutasi) {
 }
 
 watch(() => props.row, (newRow) => {
-    if (newRow) loadJadwal(newRow.nomor_perkara)
+    if (newRow) {
+        activeTab.value = 'jadwal'
+        loadJadwal(newRow.nomor_perkara)
+        loadPutusan(newRow.nomor_perkara)
+    }
+})
+
+watch(() => props.open, async (open) => {
+    if (!open) return
+    await nextTick()
+    panelRef.value?.focus()
 })
 </script>
 
 <template>
     <Teleport to="body">
         <Transition name="ns-backdrop">
-            <div v-if="open" class="ns-detail-backdrop" @click="emit('close')" />
+            <div v-if="open" class="ns-detail-backdrop" @click="closePanel" />
         </Transition>
         <Transition name="ns-panel">
-            <aside v-if="open && row" class="ns-detail-panel">
+            <aside
+                v-if="open && row"
+                ref="panelRef"
+                class="ns-detail-panel"
+                role="dialog"
+                aria-modal="true"
+                :aria-label="`Detail perkara ${row.nomor_perkara}`"
+                tabindex="-1"
+                @keydown.escape="closePanel"
+            >
                 <header class="ns-detail-head" :style="{ background: getJenisPerkaraGradient(row.jenis_perkara) }">
                     <div>
                         <div class="ns-detail-eyebrow">{{ row.jenis_perkara }}</div>
                         <h2 class="ns-detail-title ns-mono">{{ row.nomor_perkara }}</h2>
                         <div class="ns-detail-pihak">{{ pihakUtama(row.para_pihak) }}</div>
                     </div>
-                    <button class="ns-icon-btn ns-icon-btn-light" type="button" @click="emit('close')" aria-label="Close">
+                    <button class="ns-icon-btn ns-icon-btn-light" type="button" @click="closePanel" aria-label="Tutup detail perkara">
                         <Icon name="close" :size="18" class="close-icon" />
                     </button>
                 </header>
@@ -228,7 +298,32 @@ watch(() => props.row, (newRow) => {
                         </div>
                     </div>
 
-                    <div class="ns-detail-section ns-jadwal-section">
+                    <div class="ns-detail-tabs" role="tablist" aria-label="Detail SIPP">
+                        <button
+                            type="button"
+                            class="ns-detail-tab"
+                            :class="{ 'is-active': activeTab === 'jadwal' }"
+                            role="tab"
+                            :aria-selected="activeTab === 'jadwal'"
+                            @click="activeTab = 'jadwal'"
+                        >
+                            <Icon name="calendar" :size="13" />
+                            Jadwal
+                        </button>
+                        <button
+                            type="button"
+                            class="ns-detail-tab"
+                            :class="{ 'is-active': activeTab === 'putusan' }"
+                            role="tab"
+                            :aria-selected="activeTab === 'putusan'"
+                            @click="activeTab = 'putusan'"
+                        >
+                            <Icon name="scale" :size="13" />
+                            Putusan
+                        </button>
+                    </div>
+
+                    <div v-if="activeTab === 'jadwal'" class="ns-detail-section ns-jadwal-section">
                         <div class="ns-detail-section-title">Jadwal Sidang</div>
 
                         <!-- Progress Bar -->
@@ -372,16 +467,56 @@ watch(() => props.row, (newRow) => {
                             </template>
                         </div>
                     </div>
+
+                    <div v-else class="ns-detail-section ns-jadwal-section ns-putusan-section">
+                        <div class="ns-detail-section-title">Putusan</div>
+
+                        <div v-if="loadingPutusan" class="ns-jadwal-loading">
+                            <div v-for="i in 2" :key="i" class="ns-jadwal-skeleton">
+                                <div class="ns-jadwal-skeleton-date"></div>
+                                <div class="ns-jadwal-skeleton-content"></div>
+                                <div class="ns-jadwal-skeleton-content-sm"></div>
+                            </div>
+                        </div>
+
+                        <div v-else-if="!hasPutusanData" class="ns-jadwal-empty">
+                            <div class="ns-jadwal-empty-icon">
+                                <Icon name="scale" :size="36" />
+                            </div>
+                            <p>Data putusan belum tersedia</p>
+                            <span>Klik "Refresh Putusan" untuk memuat tab putusan dari SIPP</span>
+                        </div>
+
+                        <div v-else class="ns-putusan-content">
+                            <div v-if="putusanRows.length" class="ns-putusan-grid">
+                                <div v-for="[label, value] in putusanRows" :key="label" class="ns-detail-field">
+                                    <div class="ns-detail-field-label">{{ label }}</div>
+                                    <div class="ns-detail-field-value">{{ value }}</div>
+                                </div>
+                            </div>
+
+                            <div v-if="putusanDisplay.amar" class="ns-putusan-amar">
+                                <div class="ns-detail-field-label">Amar Putusan</div>
+                                <p>{{ putusanDisplay.amar }}</p>
+                            </div>
+
+                        </div>
+                    </div>
                 </div>
 
                 <div class="ns-detail-actions">
-                    <button class="ns-btn ns-btn-ghost" type="button" :disabled="refreshing" @click="handleRefreshJadwal">
+                    <div v-if="actionError" class="ns-detail-action-error" role="alert">{{ actionError }}</div>
+                    <button v-if="activeTab === 'jadwal'" class="ns-btn ns-btn-ghost" type="button" :disabled="refreshing" @click="handleRefreshJadwal">
                         <Icon :name="refreshing ? 'sync' : 'refresh'" :size="14" :class="{ 'ns-spin': refreshing, 'refresh-icon': !refreshing }" />
-                        {{ refreshing ? 'Refreshing...' : 'Refresh Jadwal' }}
+                        {{ refreshing ? 'Memperbarui…' : 'Refresh Jadwal' }}
+                    </button>
+                    <button v-else class="ns-btn ns-btn-ghost" type="button" :disabled="refreshingPutusan" @click="handleRefreshPutusan">
+                        <Icon :name="refreshingPutusan ? 'sync' : 'refresh'" :size="14" :class="{ 'ns-spin': refreshingPutusan, 'refresh-icon': !refreshingPutusan }" />
+                        {{ refreshingPutusan ? 'Memperbarui...' : 'Refresh Putusan' }}
                     </button>
                     <button class="ns-btn ns-btn-danger" type="button" :disabled="deleting" @click="handleDelete">
                         <Icon name="trash" :size="14" />
-                        {{ deleting ? 'Deleting...' : 'Delete' }}
+                        {{ deleting ? 'Menghapus…' : 'Hapus' }}
                     </button>
                 </div>
             </aside>
@@ -462,7 +597,7 @@ watch(() => props.row, (newRow) => {
 }
 
 .ns-progress-label {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     color: #1f2937;
     text-transform: uppercase;
@@ -822,7 +957,7 @@ watch(() => props.row, (newRow) => {
     background: rgba(8, 145, 178, 0.12);
     color: #0891b2;
     border-radius: 6px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.02em;
 }
@@ -833,10 +968,10 @@ watch(() => props.row, (newRow) => {
 }
 
 .ns-jadwal-agenda {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     color: #1f2937;
-    line-height: 1.4;
+    line-height: 1.5;
 }
 
 [data-mode="dark"] .ns-jadwal-agenda {
@@ -868,7 +1003,7 @@ watch(() => props.row, (newRow) => {
     color: #d97706;
     border: 1px solid rgba(245, 158, 11, 0.25);
     border-radius: 8px;
-    font-size: 11px;
+    font-size: 12.5px;
     font-weight: 600;
 }
 
@@ -1130,6 +1265,13 @@ watch(() => props.row, (newRow) => {
     will-change: transform;
     backface-visibility: hidden;
     -webkit-font-smoothing: antialiased;
+    outline: 0;
+    overscroll-behavior: contain;
+}
+
+.ns-detail-panel:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
 }
 
 [data-mode="light"] .ns-detail-panel {
@@ -1193,12 +1335,13 @@ watch(() => props.row, (newRow) => {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 16px 22px;
+    padding: 16px 22px 88px;
     position: relative;
     /* Smooth scroll optimizations */
     -webkit-overflow-scrolling: touch;
     /* Enable GPU acceleration for smoother scrolling */
     transform: translateZ(0);
+    overscroll-behavior: contain;
 }
 
 /* Custom scrollbar for webkit browsers */
@@ -1217,6 +1360,75 @@ watch(() => props.row, (newRow) => {
 
 .ns-detail-body::-webkit-scrollbar-thumb:hover {
     background: var(--text-3);
+}
+
+.ns-detail-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.ns-detail-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 42px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-2);
+    font-size: 13.5px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.ns-detail-tab.is-active {
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+    color: var(--text);
+}
+
+.ns-detail-tab:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.ns-putusan-content {
+    display: grid;
+    gap: 14px;
+}
+
+.ns-putusan-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.ns-putusan-section .ns-detail-field {
+    padding: 12px 14px;
+}
+
+.ns-putusan-section .ns-detail-field-label {
+    font-size: 11.5px;
+}
+
+.ns-putusan-section .ns-detail-field-value {
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.ns-putusan-amar {
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+}
+
+.ns-putusan-amar p {
+    margin: 8px 0 0;
+    color: var(--text);
+    font-size: 14.5px;
+    line-height: 1.65;
 }
 
 /* Sticky Jadwal Sidang Section */
@@ -1346,12 +1558,24 @@ watch(() => props.row, (newRow) => {
     position: sticky;
     bottom: 0;
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
-    padding: 16px 0;
+    padding: 14px 0 calc(14px + env(safe-area-inset-bottom));
     margin: 16px 0 0 0;
     border-top: 1px solid var(--border);
-    background: transparent;
+    background: linear-gradient(180deg, transparent, var(--surface) 22%);
     z-index: 5;
+}
+
+.ns-detail-action-error {
+    flex: 1 0 100%;
+    padding: 9px 10px;
+    border: 1px solid color-mix(in srgb, var(--danger, #C75B4A) 30%, var(--border));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--danger, #C75B4A) 10%, var(--surface));
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
 }
 
 .ns-icon-btn {
@@ -1365,7 +1589,7 @@ watch(() => props.row, (newRow) => {
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
 }
 
 [data-mode="dark"] .ns-icon-btn {
@@ -1393,7 +1617,7 @@ watch(() => props.row, (newRow) => {
     border-radius: 8px;
     border: none;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: background-color 150ms ease, color 150ms ease, transform 150ms ease, opacity 150ms ease;
 }
 
 .ns-btn-ghost {
@@ -1414,5 +1638,24 @@ watch(() => props.row, (newRow) => {
 .ns-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+@media (max-width: 560px) {
+    .ns-detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ns-detail-head {
+        padding: 16px;
+    }
+
+    .ns-detail-body {
+        padding: 14px 16px 96px;
+    }
+
+    .ns-jadwal-section {
+        margin: -14px -16px 16px;
+    }
+
 }
 </style>

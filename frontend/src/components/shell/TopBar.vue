@@ -86,7 +86,7 @@ onUnmounted(() => {
         </button>
 
         <div class="ns-c-org">
-            <div class="ns-c-org-line">PENGADILAN NEGERI NATUNA · KELAS II</div>
+            <div class="ns-c-org-line">PENGADILAN NEGERI NATUNA &middot; KELAS II</div>
             <div class="ns-c-org-sub">Mahkamah Agung Republik Indonesia</div>
         </div>
         <div class="ns-topbar-actions">
@@ -117,7 +117,7 @@ onUnmounted(() => {
     border: 1px solid var(--border);
     border-radius: 8px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .ns-hamburger:hover {
@@ -130,7 +130,7 @@ onUnmounted(() => {
     height: 2px;
     background: var(--text);
     border-radius: 1px;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
 .ns-hamburger--open .ns-hamburger-line:nth-child(1) {
@@ -163,6 +163,7 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex: 0 0 auto;
 }
 
 .ns-icon-btn {
@@ -177,7 +178,7 @@ onUnmounted(() => {
     background: var(--surface);
     color: var(--text2);
     cursor: pointer;
-    transition: all 150ms;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 
 .ns-icon-btn:hover {
@@ -187,7 +188,9 @@ onUnmounted(() => {
 
 .ns-c-org {
     flex: 1;
+    min-width: 0;
     text-align: center;
+    overflow: hidden;
 }
 
 .ns-c-org-line {
@@ -195,6 +198,9 @@ onUnmounted(() => {
     font-weight: 600;
     color: var(--text);
     letter-spacing: 0.05em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .ns-c-org-sub {

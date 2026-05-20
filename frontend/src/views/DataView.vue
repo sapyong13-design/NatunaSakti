@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '../components/shell/PageHeader.vue'
 import StatsStrip from '../components/dashboard/StatsStrip.vue'
 import TrendCard from '../components/dashboard/TrendCard.vue'
@@ -23,14 +24,18 @@ import {
     getActiveFilterSummary,
     hasActiveFilters as hasFilters
 } from '../lib/dashboardFilters'
+import { dashboardStateFromQuery, dashboardStateToQuery } from '../lib/dashboardViewState'
 
 const rows = ref([])
 const trendData = ref([])
 const syncStatus = ref({ total: 0, sipp_synced: 0, last_sync: null })
 const isDark = ref(document.documentElement.dataset.mode === 'dark')
 const loading = ref(true)
+const loadError = ref('')
 const density = ref('default')
 const viewMode = ref('table') // table, kanban
+const route = useRoute()
+const router = useRouter()
 
 // Toast state
 const toast = ref({
@@ -52,6 +57,36 @@ const syncClusterRef = ref(null)
 // Pagination state
 const currentPage = ref(1)
 const itemsPerPage = 100
+let syncingRouteState = false
+
+function applyRouteState() {
+    const state = dashboardStateFromQuery(route.query)
+    syncingRouteState = true
+    search.value = state.search
+    filterJenis.value = state.jenis
+    filterTahun.value = state.tahun
+    filterStatus.value = state.status
+    viewMode.value = state.viewMode
+    density.value = state.density
+    currentPage.value = state.page
+    nextTick(() => {
+        syncingRouteState = false
+    })
+}
+
+function syncRouteState() {
+    if (syncingRouteState) return
+    const query = dashboardStateToQuery({
+        search: search.value,
+        jenis: filterJenis.value,
+        tahun: filterTahun.value,
+        status: filterStatus.value,
+        viewMode: viewMode.value,
+        density: density.value,
+        page: currentPage.value
+    })
+    router.replace({ query })
+}
 
 const filtered = computed(() => {
     const result = applyPerkaraFilters(rows.value, {
@@ -225,7 +260,7 @@ const syncRate = computed(() => {
     return ((syncStatus.value.sipp_synced / syncStatus.value.total) * 100).toFixed(1)
 })
 
-const dashboardAlerts = computed(() => getDashboardAlerts(rows.value, syncStatus.value))
+const attentionStats = computed(() => getDashboardAlerts(rows.value, syncStatus.value))
 
 const tahunOptions = computed(() => {
     const set = new Set(rows.value.map(r => r.tahun_masuk).filter(Boolean))
@@ -252,12 +287,16 @@ watch([search, filterJenis, filterTahun, filterStatus], () => {
     currentPage.value = 1
 })
 
+watch([search, filterJenis, filterTahun, filterStatus, viewMode, density, currentPage], syncRouteState)
+watch(() => route.query, applyRouteState)
+
 watch(filterTahun, () => {
     loadTrendData()
 })
 
 async function loadAll() {
     loading.value = true
+    loadError.value = ''
     try {
         const [perkaraRes, statusRes] = await Promise.all([
             getPerkara({ limit: 5000 }),
@@ -268,6 +307,7 @@ async function loadAll() {
         await loadTrendData()
     } catch (err) {
         console.error('Load failed:', err.message)
+        loadError.value = err.message || 'Gagal memuat data perkara'
     } finally {
         loading.value = false
     }
@@ -339,6 +379,7 @@ watch(selectedRow, (newVal, oldVal) => {
 })
 
 onMounted(() => {
+    applyRouteState()
     loadAll()
     const observer = new MutationObserver(() => {
         isDark.value = document.documentElement.dataset.mode === 'dark'
@@ -462,9 +503,9 @@ onMounted(() => {
             </div>
         </div>
 
-        <div v-if="dashboardAlerts.length" class="ns-attention-strip" aria-label="Peringatan dashboard">
+        <div v-if="attentionStats.length" class="ns-attention-strip" aria-label="Peringatan dashboard">
             <div
-                v-for="item in dashboardAlerts"
+                v-for="item in attentionStats"
                 :key="item.key"
                 class="ns-attention-item"
                 :class="`is-${item.tone}`"
@@ -473,6 +514,19 @@ onMounted(() => {
                 <span class="ns-attention-label">{{ item.label }}</span>
                 <strong class="ns-attention-value">{{ item.value }}</strong>
             </div>
+        </div>
+
+        <div v-if="loadError" class="ns-dashboard-error" role="alert">
+            <div class="ns-dashboard-error-icon">
+                <Icon name="alert" :size="18" />
+            </div>
+            <div class="ns-dashboard-error-copy">
+                <strong>Data belum bisa dimuat</strong>
+                <span>{{ loadError }}</span>
+            </div>
+            <button type="button" class="ns-dashboard-error-action" @click="loadAll">
+                Coba lagi
+            </button>
         </div>
 
         <!-- Table with Skeleton Loading -->
@@ -522,34 +576,39 @@ onMounted(() => {
                     <button
                         class="ns-pagination-btn"
                         :disabled="currentPage === 1"
+                        aria-label="Halaman sebelumnya"
                         @click="goToPage(currentPage - 1)"
                     >
-                        &laquo; Prev
+                        &laquo; Sebelumnya
                     </button>
 
                     <button
                         v-if="pageNumbers[0] > 1"
                         class="ns-pagination-btn"
+                        aria-label="Halaman 1"
                         @click="goToPage(1)"
                     >
                         1
                     </button>
-                    <span v-if="pageNumbers[0] > 2" class="ns-pagination-ellipsis">...</span>
+                    <span v-if="pageNumbers[0] > 2" class="ns-pagination-ellipsis">…</span>
 
                     <button
                         v-for="page in pageNumbers"
                         :key="page"
                         class="ns-pagination-btn"
                         :class="{ 'is-active': page === currentPage }"
+                        :aria-label="`Halaman ${page}`"
+                        :aria-current="page === currentPage ? 'page' : undefined"
                         @click="goToPage(page)"
                     >
                         {{ page }}
                     </button>
 
-                    <span v-if="pageNumbers[pageNumbers.length - 1] < totalPages - 1" class="ns-pagination-ellipsis">...</span>
+                    <span v-if="pageNumbers[pageNumbers.length - 1] < totalPages - 1" class="ns-pagination-ellipsis">…</span>
                     <button
                         v-if="pageNumbers[pageNumbers.length - 1] < totalPages"
                         class="ns-pagination-btn"
+                        :aria-label="`Halaman ${totalPages}`"
                         @click="goToPage(totalPages)"
                     >
                         {{ totalPages }}
@@ -558,9 +617,10 @@ onMounted(() => {
                     <button
                         class="ns-pagination-btn"
                         :disabled="currentPage === totalPages"
+                        aria-label="Halaman berikutnya"
                         @click="goToPage(currentPage + 1)"
                     >
-                        Next &raquo;
+                        Berikutnya &raquo;
                     </button>
                 </div>
             </div>
@@ -888,6 +948,64 @@ onMounted(() => {
     font-variant-numeric: tabular-nums;
 }
 
+.ns-dashboard-error {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 12px;
+    background: color-mix(in srgb, var(--danger, #C75B4A) 10%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--danger, #C75B4A) 32%, var(--border));
+    border-radius: 10px;
+}
+
+.ns-dashboard-error-icon {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    color: var(--danger, #C75B4A);
+    background: color-mix(in srgb, var(--danger, #C75B4A) 12%, transparent);
+}
+
+.ns-dashboard-error-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.ns-dashboard-error-copy strong {
+    color: var(--text);
+    font-size: 13px;
+}
+
+.ns-dashboard-error-copy span {
+    color: var(--text-2);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.ns-dashboard-error-action {
+    min-height: 34px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.ns-dashboard-error-action:hover {
+    border-color: var(--danger, #C75B4A);
+    color: var(--danger, #C75B4A);
+}
+
 .ns-table-skeleton-panel {
     display: flex;
     flex-direction: column;
@@ -953,7 +1071,7 @@ onMounted(() => {
     background: transparent;
     color: var(--text-3);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
 }
 
 .ns-view-btn:hover {
@@ -1078,6 +1196,15 @@ onMounted(() => {
         grid-template-columns: 1fr;
     }
 
+    .ns-dashboard-error {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .ns-dashboard-error-action {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+
     .ns-attention-label {
         white-space: normal;
     }
@@ -1123,7 +1250,7 @@ onMounted(() => {
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 
 .ns-pagination-btn:hover:not(:disabled) {

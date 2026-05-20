@@ -141,10 +141,10 @@ const tooltipStyle = computed(() => {
         const tooltipHeight = 200
 
         if (props.x + tooltipWidth > window.innerWidth) {
-            style.left = `${props.x - tooltipWidth}px`
+            style.left = `${Math.max(12, props.x - tooltipWidth)}px`
         }
         if (props.y + 10 + tooltipHeight > window.innerHeight) {
-            style.top = `${props.y - tooltipHeight - 10}px`
+            style.top = `${Math.max(12, props.y - tooltipHeight - 10)}px`
         }
     }
 
@@ -163,7 +163,7 @@ const statusBorderColor = computed(() => {
 
 // Format waktu
 function formatWaktu(waktu) {
-    if (!waktu) return '—'
+    if (!waktu) return '-'
     return waktu.slice(0, 5) // HH:MM
 }
 
@@ -172,7 +172,7 @@ const paraPihakPreview = computed(() => {
     if (!props.row?.para_pihak) return null
     const text = props.row.para_pihak
     if (text.length <= 40) return text
-    return text.substring(0, 40) + '...'
+    return text.substring(0, 40) + '…'
 })
 
 function handleViewFullJadwal() {
@@ -296,8 +296,9 @@ function handleViewFullJadwal() {
 /* Main container with embossed paper texture */
 .ns-jadwal-preview {
     position: fixed;
-    min-width: 300px;
-    max-width: 360px;
+    width: min(360px, calc(100vw - 24px));
+    min-width: min(300px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -306,12 +307,11 @@ function handleViewFullJadwal() {
         inset 0 1px 0 rgba(255, 255, 255, 0.7),
         inset 0 -1px 0 rgba(0, 0, 0, 0.05),
         0 12px 48px rgba(0, 0, 0, 0.15);
-    z-index: 1000;
+    z-index: var(--z-dropdown, 1200);
     overflow: hidden;
     pointer-events: auto;
     cursor: pointer;
     transition: transform 200ms cubic-bezier(0.32, 0.72, 0, 1), box-shadow 200ms ease;
-    position: relative;
 }
 
 /* Damask pattern overlay - very subtle legal motif */

@@ -10,7 +10,6 @@ app.use(router)
 app.mount('#app')
 
 // Add ARIA landmarks to body after mount
-document.body.setAttribute('role', 'application')
 document.body.setAttribute('aria-label', 'Natuna Sakti - Sistem Akurasi Kepaniteraan PN Natuna')
 
 // Announce to screen reader when app is ready

@@ -12,7 +12,7 @@ const props = defineProps({
     canExport:  { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['update:start', 'update:end', 'update:format', 'fetch', 'export'])
+const emit = defineEmits(['update:start', 'update:end', 'update:format', 'fetch', 'export', 'history'])
 
 const BULAN_NAMA = ['Januari','Februari','Maret','April','Mei','Juni',
                     'Juli','Agustus','September','Oktober','November','Desember']
@@ -76,6 +76,8 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
             <!-- Calendar date range picker -->
             <div class="ns-filter-chip" ref="calBtn">
                 <button type="button" class="ns-chip-btn"
+                        aria-haspopup="dialog"
+                        :aria-expanded="openMenu === 'cal'"
                         :class="{ 'is-open': openMenu === 'cal', 'is-active': start && end }"
                         @click.stop="toggleMenu('cal')">
                     <Icon name="calendar" :size="13" />
@@ -87,6 +89,8 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
             <!-- Format picker -->
             <div class="ns-filter-chip" ref="formatBtn">
                 <button type="button" class="ns-chip-btn"
+                        aria-haspopup="listbox"
+                        :aria-expanded="openMenu === 'format'"
                         :class="{ 'is-open': openMenu === 'format' }"
                         @click.stop="toggleMenu('format')">
                     <span class="ns-chip-label">Format:</span>
@@ -96,16 +100,20 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
             </div>
         </div>
 
-        <div style="display: flex; gap: 8px;">
+        <div class="ns-report-toolbar-actions">
             <button type="button" class="ns-btn ns-btn-ghost" :disabled="loading" @click="emit('fetch')">
                 <Icon name="refresh" :size="14" />
-                {{ loading ? 'Memuat...' : 'Tampilkan' }}
+                {{ loading ? 'Memuat…' : 'Tampilkan' }}
+            </button>
+            <button type="button" class="ns-btn ns-btn-ghost" @click="emit('history')">
+                <Icon name="clock" :size="14" />
+                Riwayat Generate
             </button>
             <button type="button" class="ns-btn ns-btn-primary"
                     :disabled="exporting || !canExport"
                     @click="emit('export')">
                 <Icon name="filePlus" :size="14" />
-                {{ exporting ? 'Exporting...' : `Export ${format.toUpperCase()}` }}
+                {{ exporting ? 'Mengekspor…' : `Export ${format.toUpperCase()}` }}
             </button>
         </div>
     </div>
@@ -119,7 +127,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
                  top: menuPos.top + 'px',
                  left: menuPos.right == null ? menuPos.left + 'px' : 'auto',
                  right: menuPos.right != null ? menuPos.right + 'px' : 'auto',
-                 zIndex: 9999
+                 zIndex: 'var(--z-dropdown, 1200)'
              }">
             <IndonesiaCalendar
                 :start-date="start"
@@ -133,9 +141,92 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
         <!-- Format popup -->
         <div v-if="openMenu === 'format'"
              class="ns-chip-menu ns-chip-teleport"
+             role="listbox"
              :style="{ position: 'fixed', top: menuPos.top + 'px', left: menuPos.left + 'px' }">
-            <div class="ns-chip-option" :class="{ 'is-selected': format === 'pdf' }" @click="selectFormat('pdf')">PDF</div>
-            <div class="ns-chip-option" :class="{ 'is-selected': format === 'docx' }" @click="selectFormat('docx')">DOCX (Word)</div>
+            <div class="ns-chip-option" role="option" tabindex="0" :aria-selected="format === 'pdf'" :class="{ 'is-selected': format === 'pdf' }" @click="selectFormat('pdf')">PDF</div>
+            <div class="ns-chip-option" role="option" tabindex="0" :aria-selected="format === 'docx'" :class="{ 'is-selected': format === 'docx' }" @click="selectFormat('docx')">DOCX (Word)</div>
         </div>
     </Teleport>
 </template>
+
+<style scoped>
+.ns-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.ns-toolbar-filters,
+.ns-report-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.ns-toolbar-filters {
+    flex: 1 1 420px;
+    flex-wrap: wrap;
+}
+
+.ns-report-toolbar-actions {
+    flex: 0 1 auto;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.ns-filter-chip {
+    min-width: 164px;
+}
+
+.ns-filter-chip:first-child {
+    min-width: min(320px, 100%);
+}
+
+.ns-chip-btn {
+    width: 100%;
+    min-height: 36px;
+    justify-content: space-between;
+}
+
+.ns-chip-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ns-cal-teleport {
+    max-width: calc(100vw - 24px);
+}
+
+.ns-chip-btn:focus-visible,
+.ns-btn:focus-visible,
+.ns-chip-option:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+    .ns-toolbar {
+        align-items: stretch;
+    }
+
+    .ns-toolbar-filters,
+    .ns-report-toolbar-actions,
+    .ns-filter-chip {
+        width: 100%;
+    }
+
+    .ns-report-toolbar-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .ns-report-toolbar-actions .ns-btn {
+        justify-content: center;
+        width: 100%;
+    }
+}
+</style>

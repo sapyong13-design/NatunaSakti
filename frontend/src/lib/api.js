@@ -159,6 +159,13 @@ export const getJadwalSidang = async (nomorPerkara) => {
     return response.json();
 };
 
+// Get putusan for a perkara
+export const getPutusanPerkara = async (nomorPerkara) => {
+    const encoded = encodeURIComponent(nomorPerkara);
+    const response = await fetchWithRetry(`${API_BASE}/perkara/sipp/putusan/${encoded}`);
+    return response.json();
+};
+
 // Subscribe to sync progress via SSE
 export const subscribeSyncProgress = (onProgress) => {
     const eventSource = new EventSource(`${API_BASE}/perkara/sipp/progress`);
@@ -214,8 +221,9 @@ export const getPerkaraTrendYearly = async () => {
 // ========================
 
 // Get perkara for monthly report (registered OR having sidang in the month)
-export const getPerkaraLaporanBulanan = async (jenis, bulan, tahun) => {
+export const getPerkaraLaporanBulanan = async (jenis, bulan, tahun, end = '') => {
     const params = new URLSearchParams({ bulan, tahun });
+    if (end) params.set('end', end);
     const response = await fetchWithRetry(`${API_BASE}/laporan/bulanan/${jenis}/data?${params}`);
     const result = await response.json();
     return result.data || result;
@@ -234,21 +242,22 @@ export const getPerkaraLaporanMingguan = async (jenis, start, end) => {
 // ========================
 
 // Download Laporan Bulanan as .docx or .pdf (generated from official template)
-export const downloadLaporanBulanan = async (jenis, bulan, tahun, format = 'docx', onProgress) => {
+export const downloadLaporanBulanan = async (jenis, bulan, tahun, format = 'docx', onProgress, end = '') => {
     const params = new URLSearchParams({ bulan, tahun, format });
+    if (end) params.set('end', end);
 
-    if (onProgress) onProgress({ step: 10, message: 'Mengambil data...' });
+    if (onProgress) onProgress({ step: 10, message: 'Mengambil data laporan…' });
 
     const response = await fetchWithRetry(`${API_BASE}/laporan/bulanan/${jenis}?${params}`);
 
-    if (onProgress) onProgress({ step: 50, message: 'Generating document...' });
+    if (onProgress) onProgress({ step: 50, message: 'Membuat dokumen…' });
 
     if (!response.ok) {
         const err = await response.json().catch(() => ({ error: 'Gagal membuat laporan' }));
         throw new Error(err.error || 'Gagal membuat laporan');
     }
 
-    if (onProgress) onProgress({ step: 90, message: 'Finalizing...' });
+    if (onProgress) onProgress({ step: 90, message: 'Menyelesaikan file…' });
 
     return response.blob();
 };
@@ -257,20 +266,36 @@ export const downloadLaporanBulanan = async (jenis, bulan, tahun, format = 'docx
 export const downloadLaporanMingguan = async (jenis, start, end, format = 'docx', onProgress) => {
     const params = new URLSearchParams({ start, end, format });
 
-    if (onProgress) onProgress({ step: 10, message: 'Mengambil data...' });
+    if (onProgress) onProgress({ step: 10, message: 'Mengambil data laporan…' });
 
     const response = await fetchWithRetry(`${API_BASE}/laporan/mingguan/${jenis}?${params}`);
 
-    if (onProgress) onProgress({ step: 50, message: 'Generating document...' });
+    if (onProgress) onProgress({ step: 50, message: 'Membuat dokumen…' });
 
     if (!response.ok) {
         const err = await response.json().catch(() => ({ error: 'Gagal membuat laporan' }));
         throw new Error(err.error || 'Gagal membuat laporan');
     }
 
-    if (onProgress) onProgress({ step: 90, message: 'Finalizing...' });
+    if (onProgress) onProgress({ step: 90, message: 'Menyelesaikan file…' });
 
     return response.blob();
+}
+
+export const getLaporanHistory = async (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.tipe) params.append('tipe', filters.tipe);
+    if (filters.jenis) params.append('jenis', filters.jenis);
+    const response = await fetchWithRetry(`${API_BASE}/laporan/history?${params}`);
+    const result = await response.json();
+    return result.data || result;
+}
+
+export const deleteLaporanHistory = async (id) => {
+    await fetchWithRetry(`${API_BASE}/laporan/history/${id}`, {
+        method: 'DELETE'
+    });
+    return true;
 }
 
 export const downloadKasirTemplate = async (type) => {
@@ -300,6 +325,16 @@ export const generatePenutupanRekapXlsx = async (payload) => {
 export const refreshJadwal = async (nomorPerkara) => {
     const encoded = encodeURIComponent(nomorPerkara);
     const response = await fetchWithRetry(`${API_BASE}/perkara/sipp/jadwal/${encoded}/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    });
+    return response.json();
+};
+
+// Force refresh putusan (bypass cache, re-scrape SIPP)
+export const refreshPutusan = async (nomorPerkara) => {
+    const encoded = encodeURIComponent(nomorPerkara);
+    const response = await fetchWithRetry(`${API_BASE}/perkara/sipp/putusan/${encoded}/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     });

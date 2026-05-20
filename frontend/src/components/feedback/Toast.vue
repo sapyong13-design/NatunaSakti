@@ -10,10 +10,10 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const iconMap = {
-    info: 'ℹ️',
-    success: '✓',
-    warning: '⚠',
-    error: '✕'
+    info: 'i',
+    success: 'OK',
+    warning: '!',
+    error: 'x'
 }
 
 let timer = null
@@ -42,7 +42,7 @@ const classes = computed(() => [
             class="ns-toast-close"
             @click="emit('close')"
             aria-label="Tutup notifikasi"
-        >✕</button>
+        >x</button>
     </div>
 </template>
 
@@ -51,20 +51,21 @@ const classes = computed(() => [
     display: flex;
     align-items: center;
     gap: 12px;
-    min-width: 320px;
-    max-width: 480px;
+    width: max-content;
+    min-width: min(320px, calc(100vw - 24px));
+    max-width: min(480px, calc(100vw - 24px));
     padding: 14px 16px;
     background: var(--bg-2);
     border: 1px solid var(--border);
     border-radius: 10px;
     box-shadow: 0 8px 24px -8px rgba(0,0,0,0.3);
     animation: ns-toast-in 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-    z-index: 9999;
+    z-index: var(--z-toast, 1500);
 }
 
 .nsToast-enter-active,
 .nsToast-leave-active {
-    transition: all 0.3s ease;
+    transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .nsToast-enter-from,
@@ -113,7 +114,7 @@ const classes = computed(() => [
     border-radius: 6px;
     cursor: pointer;
     font-size: 14px;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .ns-toast-close:hover {

@@ -23,6 +23,20 @@ const {
     completeSyncProgress,
     failSyncProgress
 } = require('./lib/sippProgress');
+const {
+    ensureReportHistorySchema,
+    createReportHistory,
+    listReportHistory,
+    deleteReportHistory
+} = require('./lib/reportHistory');
+const {
+    ensurePutusanSchema,
+    getPutusanCache
+} = require('./lib/putusanCache');
+const {
+    resolveMonthlyReportPeriod,
+    isDatePartsWithinPeriod
+} = require('./lib/monthlyReportPeriod');
 
 const app = express();
 const PORT = 3000;
@@ -135,6 +149,9 @@ function setupDatabase() {
         );
         CREATE INDEX IF NOT EXISTS idx_jadwal_nomor ON jadwal_sidang(nomor_perkara);
     `);
+
+    ensureReportHistorySchema(db);
+    ensurePutusanSchema(db);
 }
 
 setupDatabase();
@@ -190,6 +207,40 @@ app.get('/api/test', (req, res) => {
 app.get('/api/laporan-test', (req, res) => {
     console.log('[LAPORAN-TEST] Called!');
     res.json({ ok: true, message: 'Laporan test route works!' });
+});
+
+app.get('/api/laporan/history', (req, res) => {
+    try {
+        const items = listReportHistory(db, {
+            tipe: req.query.tipe,
+            jenis: req.query.jenis
+        });
+        res.json({ data: items });
+    } catch (error) {
+        console.error('[LAPORAN-HISTORY] Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/laporan/history', (req, res) => {
+    try {
+        const item = createReportHistory(db, req.body || {});
+        res.status(201).json(item);
+    } catch (error) {
+        console.error('[LAPORAN-HISTORY] Create error:', error.message);
+        res.status(400).json({ error: error.message });
+    }
+});
+
+app.delete('/api/laporan/history/:id', (req, res) => {
+    try {
+        const deleted = deleteReportHistory(db, req.params.id);
+        if (!deleted) return res.status(404).json({ error: 'Riwayat laporan tidak ditemukan' });
+        res.json({ message: 'Riwayat laporan dihapus' });
+    } catch (error) {
+        console.error('[LAPORAN-HISTORY] Delete error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 app.get('/api/kasir/templates/:type', (req, res) => {
@@ -268,11 +319,18 @@ app.get('/api/laporan/bulanan/:jenis/data', (req, res) => {
         const { jenis } = req.params;
         const bulan = parseInt(req.query.bulan);
         const tahun = parseInt(req.query.tahun);
+        const end = req.query.end || '';
 
         if (!bulan || bulan < 1 || bulan > 12)
             return res.status(400).json({ error: 'bulan harus 1-12' });
         if (!tahun || tahun < 2020 || tahun > 2100)
             return res.status(400).json({ error: 'tahun tidak valid' });
+        let period;
+        try {
+            period = resolveMonthlyReportPeriod(bulan, tahun, end);
+        } catch (err) {
+            return res.status(400).json({ error: err.message });
+        }
 
         const jenisCapital = jenis.charAt(0).toUpperCase() + jenis.slice(1).toLowerCase();
 
@@ -298,7 +356,7 @@ app.get('/api/laporan/bulanan/:jenis/data', (req, res) => {
             if (isoMatch) {
                 return {
                     day: parseInt(isoMatch[3]),
-                    mon: parseInt(isoMatch[2]) - 1,
+                    month: parseInt(isoMatch[2]),
                     year: parseInt(isoMatch[1])
                 };
             }
@@ -315,7 +373,7 @@ app.get('/api/laporan/bulanan/:jenis/data', (req, res) => {
             const mon = monthMap[monKey] ?? monthMap[monKey.slice(0, 3)];
             const year = parseInt(parts[2]);
             if (isNaN(day) || mon === undefined || isNaN(year)) return null;
-            return { day, mon, year };
+            return { day, month: mon + 1, year };
         }
 
         // 1. Perkara yang terdaftar di bulan ini (via sipp_tanggal_register)
@@ -329,7 +387,7 @@ app.get('/api/laporan/bulanan/:jenis/data', (req, res) => {
         const registeredInMonth = new Set();
         for (const row of registeredRows) {
             const parsed = parseAnySippDate(row.sipp_tanggal_register);
-            if (parsed && parsed.mon + 1 === bulan && parsed.year === tahun) {
+            if (isDatePartsWithinPeriod(parsed, period)) {
                 registeredInMonth.add(row.id);
             }
         }
@@ -347,7 +405,7 @@ app.get('/api/laporan/bulanan/:jenis/data', (req, res) => {
         const withSidangInMonth = new Set();
         for (const row of sidangRows) {
             const parsed = parseAnySippDate(row.sidang_tanggal);
-            if (parsed && parsed.mon + 1 === bulan && parsed.year === tahun) {
+            if (isDatePartsWithinPeriod(parsed, period)) {
                 withSidangInMonth.add(row.id);
             }
         }
@@ -705,6 +763,10 @@ app.post('/api/perkara/sipp/sync', async (req, res) => {
         const count = await sippService.saveToDatabase(data);
         console.log(`[SIPP-SYNC] Saved count: ${count}`);
 
+        console.log('[SIPP-SYNC] Refreshing jadwal and putusan cache (100 newest perkara)...');
+        const detailCacheResult = await sippService.cacheJadwalCurrentYear();
+        console.log('[SIPP-SYNC] Detail cache refreshed:', detailCacheResult);
+
         // Get actual DB count
         const dbCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get();
         console.log(`[SIPP-SYNC] Actual DB count: ${dbCount.c}`);
@@ -719,6 +781,7 @@ app.post('/api/perkara/sipp/sync', async (req, res) => {
             fetched: count,
             total_in_db: dbCount.c,
             new_items: dbCount.c - oldCount,
+            detail_cache: detailCacheResult,
             mode: isFirstSync ? 'full' : 'incremental',
             timestamp: new Date().toISOString(),
             message: isFirstSync
@@ -818,6 +881,71 @@ app.post('/api/perkara/sipp/jadwal/:nomor/refresh', async (req, res) => {
         });
     } catch (error) {
         console.error('[SIPP-JADWAL-REFRESH] error:', error.message);
+        res.status(500).json({ error: error.message });
+    } finally {
+        if (browser) await browser.close();
+    }
+});
+
+// Get putusan for a perkara
+app.get('/api/perkara/sipp/putusan/:nomor', async (req, res) => {
+    console.log('[SIPP-PUTUSAN] Called for:', req.params.nomor);
+    const nomorPerkara = decodeURIComponent(req.params.nomor);
+    const cached = getPutusanCache(db, nomorPerkara);
+
+    if (cached) {
+        return res.json({
+            nomor_perkara: nomorPerkara,
+            putusan: cached,
+            cached: true
+        });
+    }
+
+    const puppeteer = require('puppeteer');
+    let browser;
+    try {
+        browser = await puppeteer.launch({
+            headless: 'new',
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        });
+        const page = await browser.newPage();
+        await sippService.fetchAndCachePutusan(nomorPerkara, page);
+
+        res.json({
+            nomor_perkara: nomorPerkara,
+            putusan: getPutusanCache(db, nomorPerkara),
+            cached: false
+        });
+    } catch (error) {
+        console.error('[SIPP-PUTUSAN] error:', error.message);
+        res.status(500).json({ error: error.message });
+    } finally {
+        if (browser) await browser.close();
+    }
+});
+
+// Force refresh putusan for a perkara
+app.post('/api/perkara/sipp/putusan/:nomor/refresh', async (req, res) => {
+    const nomorPerkara = decodeURIComponent(req.params.nomor);
+    console.log('[SIPP-PUTUSAN-REFRESH] Called for:', nomorPerkara);
+    const puppeteer = require('puppeteer');
+    let browser;
+    try {
+        browser = await puppeteer.launch({
+            headless: 'new',
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        });
+        const page = await browser.newPage();
+        await sippService.fetchAndCachePutusan(nomorPerkara, page);
+
+        res.json({
+            nomor_perkara: nomorPerkara,
+            putusan: getPutusanCache(db, nomorPerkara),
+            cached: true,
+            refreshed: true
+        });
+    } catch (error) {
+        console.error('[SIPP-PUTUSAN-REFRESH] error:', error.message);
         res.status(500).json({ error: error.message });
     } finally {
         if (browser) await browser.close();
@@ -1065,28 +1193,53 @@ app.get('/api/laporan/bulanan/:jenis', (req, res) => {
         const bulan  = parseInt(req.query.bulan);
         const tahun  = parseInt(req.query.tahun);
         const format = (req.query.format || 'docx').toLowerCase();
+        const end = req.query.end || '';
 
         if (!bulan || bulan < 1 || bulan > 12)
             return res.status(400).json({ error: 'bulan harus 1-12' });
         if (!tahun || tahun < 2020 || tahun > 2100)
             return res.status(400).json({ error: 'tahun tidak valid' });
+        let period;
+        try {
+            period = resolveMonthlyReportPeriod(bulan, tahun, end);
+        } catch (err) {
+            return res.status(400).json({ error: err.message });
+        }
 
         const BULAN_NAMES = ['Januari','Februari','Maret','April','Mei','Juni',
                              'Juli','Agustus','September','Oktober','November','Desember'];
         const bulanNama    = BULAN_NAMES[bulan - 1];
         const jenisCapital = jenis.charAt(0).toUpperCase() + jenis.slice(1).toLowerCase();
 
-        const docxBuf = generateLaporanBulanan(db, jenisCapital, bulan, tahun);
+        const docxBuf = generateLaporanBulanan(db, jenisCapital, bulan, tahun, { end });
 
         if (format === 'pdf') {
             const pdfBuf  = convertDocxToPdf(docxBuf);
             const filename = `Akurasi_${jenisCapital}_${bulanNama}_${tahun}.pdf`;
+            createReportHistory(db, {
+                tipe: 'bulanan',
+                jenis: jenisCapital,
+                periode_label: end ? `${bulanNama} ${tahun} s.d. ${period.endIso}` : `${bulanNama} ${tahun}`,
+                bulan,
+                tahun,
+                format: 'pdf',
+                filename
+            });
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
             return res.send(pdfBuf);
         }
 
         const filename = `Akurasi_${jenisCapital}_${bulanNama}_${tahun}.docx`;
+        createReportHistory(db, {
+            tipe: 'bulanan',
+            jenis: jenisCapital,
+            periode_label: end ? `${bulanNama} ${tahun} s.d. ${period.endIso}` : `${bulanNama} ${tahun}`,
+            bulan,
+            tahun,
+            format: 'docx',
+            filename
+        });
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.send(docxBuf);
@@ -1114,14 +1267,33 @@ app.get('/api/laporan/mingguan/:jenis', (req, res) => {
 
         const docxBuf  = generateLaporanMingguan(db, jenisCapital, start, end)
         const filename = `Akurasi_${jenisCapital}_${bulanNama}_MingguKe${MINGGU_ROMAN[mingguKe-1]}_${tahun}`
+        const periodeLabel = `${start} s.d. ${end}`
 
         if (format === 'pdf') {
             const pdfBuf = convertDocxToPdf(docxBuf)
+            createReportHistory(db, {
+                tipe: 'mingguan',
+                jenis: jenisCapital,
+                periode_label: periodeLabel,
+                start_date: start,
+                end_date: end,
+                format: 'pdf',
+                filename: `${filename}.pdf`
+            })
             res.setHeader('Content-Type', 'application/pdf')
             res.setHeader('Content-Disposition', `attachment; filename="${filename}.pdf"`)
             return res.send(pdfBuf)
         }
 
+        createReportHistory(db, {
+            tipe: 'mingguan',
+            jenis: jenisCapital,
+            periode_label: periodeLabel,
+            start_date: start,
+            end_date: end,
+            format: 'docx',
+            filename: `${filename}.docx`
+        })
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
         res.setHeader('Content-Disposition', `attachment; filename="${filename}.docx"`)
         res.send(docxBuf)
@@ -1161,10 +1333,10 @@ const syncTask = cron.schedule('0 * * * *', async () => {
 
         console.log(`[CRON] Sync completed: ${count} perkara fetched, ${newCount - oldCount} new, ${newCount} total`);
 
-        // Refresh jadwal cache untuk 100 perkara terbaru
-        console.log('[CRON] Refreshing jadwal cache (100 newest perkara)...');
+        // Refresh jadwal dan putusan cache untuk 100 perkara terbaru
+        console.log('[CRON] Refreshing jadwal and putusan cache (100 newest perkara)...');
         const cacheResult = await sippService.cacheJadwalCurrentYear();
-        console.log('[CRON] Jadwal cache refreshed:', cacheResult);
+        console.log('[CRON] Detail cache refreshed:', cacheResult);
     } catch (error) {
         console.error('[CRON] Sync error:', error.message);
     }
@@ -1181,14 +1353,15 @@ app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Database: ${dbPath}`);
 
-    // Initial populate jadwal cache untuk 100 perkara terbaru (fire-and-forget, jangan blok startup)
+    // Initial populate jadwal/putusan cache untuk 100 perkara terbaru (fire-and-forget, jangan blok startup)
     const cachedCount = db.prepare('SELECT COUNT(*) AS n FROM jadwal_sidang').get().n;
-    if (cachedCount === 0) {
-        console.log('[CACHE] empty on startup, populating jadwal cache for 100 newest perkara...');
+    const putusanCount = db.prepare('SELECT COUNT(*) AS n FROM putusan_perkara').get().n;
+    if (cachedCount === 0 || putusanCount === 0) {
+        console.log('[CACHE] empty detail cache on startup, populating jadwal/putusan cache for 100 newest perkara...');
         sippService.cacheJadwalCurrentYear()
             .then(r => console.log('[CACHE] startup populate done:', r))
             .catch(e => console.error('[CACHE] startup populate error:', e.message));
     } else {
-        console.log(`[CACHE] ${cachedCount} jadwal rows already cached, skipping initial populate`);
+        console.log(`[CACHE] ${cachedCount} jadwal rows and ${putusanCount} putusan rows already cached, skipping initial populate`);
     }
 });

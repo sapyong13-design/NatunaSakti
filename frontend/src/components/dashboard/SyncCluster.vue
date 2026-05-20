@@ -11,7 +11,7 @@ const props = defineProps({
 const emit = defineEmits(['synced'])
 
 const syncing = ref(false)
-const progress = ref({ current: 0, total: 200, message: '' })
+const progress = ref({ current: 0, total: 10, fetchedCount: 0, unit: 'halaman', message: '' })
 const lastSync = ref('--')
 const syncComplete = ref(false)
 let eventSource = null
@@ -30,6 +30,26 @@ const strokeDashoffset = computed(() => {
 })
 
 const progressLabel = computed(() => `${Math.round(progressPercent.value)}%`)
+
+const progressUnit = computed(() => progress.value.unit || 'halaman')
+const fetchedInfo = computed(() => {
+    const count = Number(progress.value.fetchedCount || progress.value.savedCount || 0)
+    return count > 0 ? `${count} perkara` : ''
+})
+
+const syncDetail = computed(() => {
+    if (syncing.value) {
+        const detail = `${progress.value.current}/${progress.value.total} ${progressUnit.value} · ${progressLabel.value}`
+        return fetchedInfo.value ? `${detail} · ${fetchedInfo.value}` : detail
+    }
+
+    if (syncComplete.value) {
+        const pages = `${progress.value.current}/${progress.value.total} ${progressUnit.value}`
+        return fetchedInfo.value ? `${pages} · ${fetchedInfo.value}` : pages
+    }
+
+    return `Terakhir ${lastSync.value}`
+})
 
 function formatTime(iso) {
     if (!iso) return '--'
@@ -52,7 +72,7 @@ async function handleSync() {
     syncComplete.value = false
     syncStarted = false
     syncFinished = false
-    progress.value = { current: 0, total: 200, message: 'Memulai...' }
+    progress.value = { current: 0, total: 10, fetchedCount: 0, unit: 'halaman', message: 'Memulai…' }
 
     function finishSync(finalProgress = null) {
         if (syncFinished) return
@@ -96,17 +116,23 @@ async function handleSync() {
 
     try {
         const result = await syncSippData()
-        const total = Number(result?.fetched || result?.total_in_db || progress.value.total || 1)
         finishSync({
-            current: total,
-            total,
-            page: progress.value.page || 0,
-            message: result?.message || `Selesai! ${total} perkara di-sync`,
+            ...progress.value,
+            current: progress.value.total || progress.value.current || 1,
+            fetchedCount: Number(result?.fetched || progress.value.fetchedCount || 0),
+            savedCount: Number(result?.fetched || progress.value.savedCount || 0),
+            message: result?.message || progress.value.message || 'Selesai sinkronisasi SIPP',
             inProgress: false,
             error: null
         })
     } catch (err) {
         console.error('Sync failed:', err.message)
+        progress.value = {
+            ...progress.value,
+            inProgress: false,
+            error: err.message,
+            message: `Gagal sync SIPP: ${err.message}`
+        }
         syncing.value = false
         if (eventSource) {
             eventSource.close()
@@ -129,8 +155,11 @@ onUnmounted(() => {
         <!-- Status Card -->
         <div
             class="ns-sync-status"
-            :class="{ 'is-syncing': syncing, 'is-complete': syncComplete }"
+            :class="{ 'is-syncing': syncing, 'is-complete': syncComplete, 'is-error': progress.error }"
             :title="syncing ? progress.message : `Terakhir ${lastSync}`"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
         >
             <!-- Circular Progress -->
             <div class="ns-sync-circle">
@@ -157,7 +186,7 @@ onUnmounted(() => {
                 </svg>
                 <div class="ns-sync-icon">
                     <Icon
-                        :name="syncing ? 'sync' : syncComplete ? 'check' : 'activity'"
+                        :name="progress.error ? 'alert' : syncing ? 'sync' : syncComplete ? 'check' : 'activity'"
                         :size="syncing ? 14 : 16"
                         :class="{ 'is-spinning': syncing }"
                     />
@@ -167,18 +196,10 @@ onUnmounted(() => {
             <!-- Status Info -->
             <div class="ns-sync-info">
                 <div class="ns-sync-label">
-                    {{ syncing ? 'Sync...' : syncComplete ? 'Selesai' : 'SIPP' }}
+                    {{ progress.error ? 'Gagal' : syncing ? 'Sync…' : syncComplete ? 'Selesai' : 'SIPP' }}
                 </div>
                 <div class="ns-sync-detail">
-                    <template v-if="syncing">
-                        {{ progress.current }}/{{ progress.total }} perkara · {{ progressLabel }}
-                    </template>
-                    <template v-else-if="syncComplete">
-                        {{ progress.current }} perkara diproses
-                    </template>
-                    <template v-else>
-                        Terakhir {{ lastSync }}
-                    </template>
+                    {{ syncDetail }}
                 </div>
                 <div v-if="syncing || syncComplete" class="ns-sync-progress-bar" role="progressbar" :aria-valuenow="Math.round(progressPercent)" aria-valuemin="0" aria-valuemax="100">
                     <span :style="{ width: `${progressPercent}%` }"></span>
@@ -250,6 +271,12 @@ onUnmounted(() => {
     box-shadow: 0 0 0 1px var(--successSoft), 0 4px 20px rgba(74, 124, 89, 0.1);
 }
 
+.ns-sync-status.is-error {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--danger, #C75B4A) 12%, var(--surface)), var(--surface));
+    border-color: var(--danger, #C75B4A);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger, #C75B4A) 18%, transparent);
+}
+
 .ns-sync-circle {
     position: relative;
     width: 32px;
@@ -276,6 +303,10 @@ onUnmounted(() => {
     stroke: var(--success);
 }
 
+.ns-sync-status.is-error .ns-sync-ring-progress {
+    stroke: var(--danger, #C75B4A);
+}
+
 .ns-sync-ring-progress.is-animated {
     animation: syncPulse 1.5s ease-in-out infinite;
 }
@@ -299,6 +330,10 @@ onUnmounted(() => {
 
 .ns-sync-status.is-complete .ns-sync-icon {
     color: var(--success);
+}
+
+.ns-sync-status.is-error .ns-sync-icon {
+    color: var(--danger, #C75B4A);
 }
 
 .ns-sync-icon .is-spinning {

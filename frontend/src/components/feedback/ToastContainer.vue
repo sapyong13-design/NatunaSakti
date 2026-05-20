@@ -32,9 +32,10 @@ function remove(id) {
 <style scoped>
 .ns-toast-container {
     position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 9999;
+    top: max(12px, env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
+    left: auto;
+    z-index: var(--z-toast, 1500);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -43,5 +44,13 @@ function remove(id) {
 
 .ns-toast-container > * {
     pointer-events: auto;
+}
+
+@media (max-width: 520px) {
+    .ns-toast-container {
+        right: 12px;
+        left: 12px;
+        align-items: stretch;
+    }
 }
 </style>

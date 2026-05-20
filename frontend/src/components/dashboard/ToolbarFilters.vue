@@ -25,12 +25,21 @@ function toggleMenu(name, event) {
         openMenu.value = null
     } else {
         openMenu.value = name
-        // Capture position for teleport
         const rect = event.currentTarget.getBoundingClientRect()
-        menuPositions.value[name] = {
-            top: rect.bottom + 6,
-            left: rect.left
-        }
+        menuPositions.value[name] = getMenuPosition(rect)
+    }
+}
+
+function getMenuPosition(rect) {
+    const menuWidth = 260
+    const menuMaxHeight = 300
+    const gutter = 12
+    const top = rect.bottom + 6
+    const flippedTop = Math.max(gutter, rect.top - menuMaxHeight - 6)
+
+    return {
+        top: top + menuMaxHeight > window.innerHeight - gutter ? flippedTop : top,
+        left: Math.max(gutter, Math.min(rect.left, window.innerWidth - menuWidth - gutter))
     }
 }
 
@@ -46,10 +55,7 @@ function updateOpenMenuPosition() {
     const button = document.querySelector(`.ns-chip-btn[data-menu="${openMenu.value}"]`)
     if (!button) return
     const rect = button.getBoundingClientRect()
-    menuPositions.value[openMenu.value] = {
-        top: rect.bottom + 6,
-        left: Math.min(rect.left, window.innerWidth - 220)
-    }
+    menuPositions.value[openMenu.value] = getMenuPosition(rect)
 }
 
 // Close dropdown when clicking outside
@@ -83,9 +89,10 @@ onUnmounted(() => {
                 name="dashboard-search"
                 autocomplete="off"
                 aria-label="Cari perkara"
-                placeholder="Cari nomor / pihak..."
+                placeholder="Cari nomor / pihak…"
                 :value="search"
                 @input="emit('update:search', $event.target.value)"
+                @keydown.escape="emit('update:search', '')"
                 class="ns-search-input"
             />
         </div>
@@ -98,6 +105,7 @@ onUnmounted(() => {
                 :class="{ 'is-open': openMenu === 'jenis' }"
                 aria-haspopup="listbox"
                 :aria-expanded="openMenu === 'jenis'"
+                aria-controls="filter-menu-jenis"
                 @click.stop="toggleMenu('jenis', $event)"
                 @keydown.escape="openMenu = null"
             >
@@ -115,6 +123,7 @@ onUnmounted(() => {
                 :class="{ 'is-open': openMenu === 'tahun' }"
                 aria-haspopup="listbox"
                 :aria-expanded="openMenu === 'tahun'"
+                aria-controls="filter-menu-tahun"
                 @click.stop="toggleMenu('tahun', $event)"
                 @keydown.escape="openMenu = null"
             >
@@ -132,6 +141,7 @@ onUnmounted(() => {
                 :class="{ 'is-open': openMenu === 'status' }"
                 aria-haspopup="listbox"
                 :aria-expanded="openMenu === 'status'"
+                aria-controls="filter-menu-status"
                 @click.stop="toggleMenu('status', $event)"
                 @keydown.escape="openMenu = null"
             >
@@ -147,6 +157,7 @@ onUnmounted(() => {
         <!-- Jenis Dropdown -->
         <div
             v-if="openMenu === 'jenis'"
+            id="filter-menu-jenis"
             class="ns-chip-menu-teleported"
             role="listbox"
             :style="{ top: menuPositions.jenis?.top + 'px', left: menuPositions.jenis?.left + 'px', background: menuBgColor }"
@@ -171,6 +182,7 @@ onUnmounted(() => {
         <!-- Tahun Dropdown -->
         <div
             v-if="openMenu === 'tahun'"
+            id="filter-menu-tahun"
             class="ns-chip-menu-teleported"
             role="listbox"
             :style="{ top: menuPositions.tahun?.top + 'px', left: menuPositions.tahun?.left + 'px', background: menuBgColor }"
@@ -208,6 +220,7 @@ onUnmounted(() => {
         <!-- Status Dropdown -->
         <div
             v-if="openMenu === 'status'"
+            id="filter-menu-status"
             class="ns-chip-menu-teleported"
             role="listbox"
             :style="{ top: menuPositions.status?.top + 'px', left: menuPositions.status?.left + 'px', background: menuBgColor }"
@@ -293,6 +306,13 @@ onUnmounted(() => {
     color: var(--text);
     font-size: 13px;
     line-height: 1.2;
+    transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.ns-search-input:focus-visible {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accentSoft);
+    outline: 0;
 }
 
 .ns-filter-chip {
@@ -313,7 +333,7 @@ onUnmounted(() => {
     border-radius: 8px;
     background: var(--surface);
     cursor: pointer;
-    transition: all 150ms;
+    transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, color 150ms ease;
 }
 
 .ns-chip-btn:hover {
@@ -337,6 +357,7 @@ onUnmounted(() => {
     font-size: 13px;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .ns-chip-menu-teleported {
@@ -350,7 +371,7 @@ onUnmounted(() => {
     display: flex;
     flex-direction: column;
     gap: 1px;
-    z-index: 99999;
+    z-index: var(--z-dropdown, 1200);
     max-height: 300px;
     overflow-y: auto;
 }

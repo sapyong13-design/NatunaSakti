@@ -32,12 +32,34 @@
     border-radius: 2px;
 }
 
+button,
+[role="button"],
+input,
+select,
+textarea {
+    min-height: 36px;
+}
+
+.ns-mono,
+.ns-c-strip-value,
+.ns-c-avg-value,
+.ns-stat-value,
+.ns-row-count,
+.ns-table-count,
+.ns-pagination-info,
+.ns-pagination-btn,
+.ns-sync-detail,
+.ns-progress-value,
+.ns-lama-text {
+    font-variant-numeric: tabular-nums;
+}
+
 /* Skip to main content link */
 .sr-only-focusable:focus {
     position: fixed;
     top: 8px;
     left: 8px;
-    z-index: 99999;
+        z-index: var(--z-modal, 1600);
     width: auto;
     height: auto;
     padding: 8px 16px;
@@ -49,15 +71,49 @@
     font-weight: 500;
 }
 
+[aria-live] {
+    overflow-anchor: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.001ms !important;
+    }
+
+    .ns-sync-icon .is-spinning,
+    .ns-status-pulse,
+    .ns-pulse-ring,
+    .ns-blob,
+    .ns-logo-glow,
+    .ns-spinner {
+        animation: none !important;
+    }
+}
+
 @media (max-width: 768px) {
 
     /* Sidebar: narrow icon-only on mobile */
     .ns-sidebar:not(.is-collapsed) { width: 64px; }
-    .ns-sidebar .ns-brand-text,
-    .ns-sidebar .ns-nav-label,
-    .ns-sidebar .ns-nav-chevron,
-    .ns-sidebar .ns-nav-children {
+    .ns-sidebar:not(.is-mobile-open) .ns-brand-text,
+    .ns-sidebar:not(.is-mobile-open) .ns-nav-label,
+    .ns-sidebar:not(.is-mobile-open) .ns-nav-chevron,
+    .ns-sidebar:not(.is-mobile-open) .ns-nav-children {
         display: none;
+    }
+
+    .ns-sidebar.is-mobile-open .ns-brand-text,
+    .ns-sidebar.is-mobile-open .ns-nav-label,
+    .ns-sidebar.is-mobile-open .ns-nav-chevron {
+        display: flex;
+    }
+
+    .ns-sidebar.is-mobile-open .ns-nav-children {
+        display: flex;
     }
 
     /* Topbar */
@@ -82,6 +138,13 @@
     /* Tables horizontal scroll */
     .ns-table-card { overflow-x: auto; }
     .ns-table-head, .ns-tr { min-width: 720px; }
+    .ns-table-scroll,
+    .ns-table-wrap,
+    .ns-perkara-table-wrap,
+    .ns-report-table-wrap {
+        scrollbar-gutter: stable;
+        -webkit-overflow-scrolling: touch;
+    }
 
     /* PageHeader stacks */
     .ns-c-page-header { grid-template-columns: 1fr; gap: 12px; }

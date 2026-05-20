@@ -178,7 +178,7 @@ function getLamaProgress(days) {
                     <tr v-if="!rows.length">
                         <td colspan="8" class="ns-empty-cell">
                             <div class="ns-empty-state">
-                                <div class="ns-empty-icon">📋</div>
+                                <div class="ns-empty-icon">Data</div>
                                 <div class="ns-empty-text">Tidak ada perkara</div>
                                 <div class="ns-empty-hint">Coba sesuaikan filter atau sync data dari SIPP</div>
                             </div>
@@ -191,6 +191,7 @@ function getLamaProgress(days) {
                         class="ns-data-row"
                         :class="{ 'is-upcoming-row': isUpcoming(row) }"
                         tabindex="0"
+                        :aria-label="`Buka detail perkara ${row.nomor_perkara}`"
                         @click="emit('rowClick', row)"
                         @keydown.enter="emit('rowClick', row)"
                         @contextmenu="handleContextMenu($event, row)"
@@ -210,6 +211,7 @@ function getLamaProgress(days) {
                         <td class="ns-sticky ns-col-nomor">
                             <span
                                 class="ns-nomor-text"
+                                :title="row.nomor_perkara"
                                 @mouseenter="handleMouseEnter($event, row)"
                                 @mouseleave="handleMouseLeave"
                             >{{ row.nomor_perkara }}</span>
@@ -217,21 +219,22 @@ function getLamaProgress(days) {
                         <td class="ns-col-nama">
                             <span
                                 class="ns-nama-text"
+                                :title="pihakUtama(row.para_pihak)"
                                 @mouseenter="handleTooltipMouseEnter($event, row)"
                                 @mouseleave="handleTooltipMouseLeave"
                             >{{ pihakUtama(row.para_pihak) }}</span>
                         </td>
                         <td class="ns-col-klasifikasi">
-                            <span class="ns-klasifikasi-text">{{ row.sipp_klasifikasi || row.nama_perkara || '—' }}</span>
+                            <span class="ns-klasifikasi-text">{{ row.sipp_klasifikasi || row.nama_perkara || '-' }}</span>
                         </td>
                         <td class="ns-col-register">{{ formatDate(row.sipp_tanggal_register) }}</td>
                         <td class="ns-col-status">
                             <StatusBadge v-if="row.sipp_status" :status="row.sipp_status" size="sm" />
-                            <span v-else class="ns-status-text">—</span>
+                            <span v-else class="ns-status-text">-</span>
                         </td>
                         <td class="ns-col-lama">
                             <div class="ns-lama-cell">
-                                <span class="ns-lama-text">{{ row.sipp_lama_proses || '—' }}</span>
+                                <span class="ns-lama-text">{{ row.sipp_lama_proses || '-' }}</span>
                                 <div
                                     v-if="row.sipp_lama_proses"
                                     class="ns-lama-bar"
@@ -248,7 +251,7 @@ function getLamaProgress(days) {
         </div>
         <div class="ns-table-footer">
             <span class="ns-row-count">{{ rows.length }} perkara</span>
-            <span class="ns-scroll-hint">Semua kolom ditampilkan dalam lebar halaman</span>
+            <span class="ns-scroll-hint">Geser tabel untuk melihat kolom tambahan</span>
         </div>
 
         <ContextualActionMenu
@@ -289,6 +292,8 @@ function getLamaProgress(days) {
 .ns-table-scroll {
     overflow-x: auto;
     max-width: 100%;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
 }
 
 .ns-data-table {
@@ -383,6 +388,7 @@ function getLamaProgress(days) {
     background: var(--surface);
     transition: background 120ms ease;
     border-right: 1px solid var(--border);
+    box-shadow: 1px 0 0 var(--border), 8px 0 14px -14px rgba(0, 0, 0, 0.4);
 }
 
 [data-mode="light"] .ns-sticky {
@@ -414,7 +420,7 @@ function getLamaProgress(days) {
 }
 
 .ns-col-jenis {
-    width: 86px;
+    width: 96px;
 }
 
 .ns-col-nomor {
@@ -430,10 +436,14 @@ function getLamaProgress(days) {
 }
 
 .ns-klasifikasi-text {
-    display: block;
+    display: -webkit-box;
     font-size: 12px;
     color: var(--text-2);
     line-height: 1.4;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
 }
 
 .ns-col-register {
@@ -483,10 +493,10 @@ function getLamaProgress(days) {
     font-weight: 600;
     background: var(--jenis-bg);
     color: var(--jenis-color);
-    transition: all 180ms ease;
+    transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
     max-width: 100%;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow-wrap: normal;
 }
 
 .ns-jenis-badge:hover {
@@ -505,9 +515,12 @@ function getLamaProgress(days) {
 }
 
 .ns-nama-text {
-    display: block;
+    display: -webkit-box;
     font-weight: 500;
     line-height: 1.4;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
     overflow-wrap: anywhere;
 }
 
@@ -561,7 +574,10 @@ function getLamaProgress(days) {
 }
 
 .ns-empty-icon {
-    font-size: 40px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     margin-bottom: 12px;
     opacity: 0.5;
 }
@@ -617,8 +633,8 @@ function getLamaProgress(days) {
 }
 
 .ns-perkara-table-wrap.is-density-compact .ns-jenis-badge {
-    font-size: 9px;
-    padding: 2px 5px;
+    font-size: 10px;
+    padding: 3px 6px;
 }
 
 @media (max-width: 1280px) {
@@ -649,7 +665,7 @@ function getLamaProgress(days) {
 
 @media (max-width: 760px) {
     .ns-data-table {
-        min-width: 760px;
+        min-width: 620px;
     }
 
     .ns-col-klasifikasi,
@@ -681,8 +697,8 @@ function getLamaProgress(days) {
     }
 
     .ns-jenis-badge {
-        padding: 2px 3px;
-        font-size: 8px;
+        padding: 3px 5px;
+        font-size: 9px;
     }
 
     .ns-table-footer {

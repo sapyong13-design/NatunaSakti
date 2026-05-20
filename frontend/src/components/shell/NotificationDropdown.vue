@@ -74,7 +74,7 @@ function getTimeAgo(isoDate) {
                         <div class="ns-item-meta">
                             <span>{{ item.jenis_perkara }}</span>
                             <span v-if="item.para_pihak" class="ns-item-pihak">
-                                · {{ item.para_pihak.slice(0, 30) }}{{ item.para_pihak.length > 30 ? '...' : '' }}
+                                &middot; {{ item.para_pihak.slice(0, 30) }}{{ item.para_pihak.length > 30 ? '…' : '' }}
                             </span>
                         </div>
                     </div>
@@ -107,7 +107,7 @@ function getTimeAgo(isoDate) {
     background: var(--surface);
     color: var(--text2);
     cursor: pointer;
-    transition: all 150ms;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 
 .ns-bell-btn:hover {
@@ -145,13 +145,13 @@ function getTimeAgo(isoDate) {
     position: absolute;
     top: calc(100% + 8px);
     right: 0;
-    width: 320px;
+    width: min(320px, calc(100vw - 24px));
     max-height: 400px;
     background: var(--bg, #fff);
     border: 1px solid var(--border);
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    z-index: 1000;
+    z-index: var(--z-dropdown, 1200);
     overflow: hidden;
 }
 
@@ -209,7 +209,7 @@ function getTimeAgo(isoDate) {
     padding: 12px 16px;
     border-bottom: 1px solid var(--borderSoft);
     cursor: pointer;
-    transition: background 100ms;
+    transition: background-color 100ms ease;
 }
 
 .ns-item:hover {
@@ -265,6 +265,6 @@ function getTimeAgo(isoDate) {
 .ns-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 99;
+    z-index: calc(var(--z-dropdown, 1200) - 1);
 }
 </style>

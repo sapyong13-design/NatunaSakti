@@ -5,6 +5,9 @@ import { HOLIDAY_MAP } from '../lib/holidays.js'
 const props = defineProps({
     startDate: { type: String, default: '' },
     endDate:   { type: String, default: '' },
+    mode:      { type: String, default: 'range' },
+    minDate:   { type: String, default: '' },
+    maxDate:   { type: String, default: '' },
 })
 
 const emit = defineEmits(['update:startDate', 'update:endDate', 'done'])
@@ -35,7 +38,8 @@ const days = computed(() => {
     for (let d = 1; d <= lastDate; d++) {
         const dow = new Date(y, m, d).getDay()
         const iso = toIso(y, m, d)
-        out.push({ iso, day: d, dow, isWeekend: dow===0||dow===6, holiday: HOLIDAY_MAP[iso]||null, isToday: iso===todayIso })
+        const isDisabled = (props.minDate && iso < props.minDate) || (props.maxDate && iso > props.maxDate)
+        out.push({ iso, day: d, dow, isWeekend: dow===0||dow===6, holiday: HOLIDAY_MAP[iso]||null, isToday: iso===todayIso, isDisabled })
     }
     return out
 })
@@ -52,7 +56,14 @@ function nextMonth() {
 const hovered = ref('')
 
 function select(day) {
-    if (!day) return
+    if (!day || day.isDisabled) return
+
+    if (props.mode === 'single') {
+        emit('update:endDate', day.iso)
+        setTimeout(() => emit('done'), 80)
+        return
+    }
+
     const s = props.startDate
     const e = props.endDate
 
@@ -74,6 +85,7 @@ function cls(day) {
     const e = props.endDate
     const rangeEnd = e || hovered.value
     return {
+        'cal-disabled': day.isDisabled,
         'cal-weekend':  day.isWeekend,
         'cal-libur':    day.holiday?.tipe === 'libur',
         'cal-cuti':     day.holiday?.tipe === 'cuti',
@@ -103,7 +115,8 @@ function fmtDisplay(iso) {
 
         <!-- Selection hint -->
         <div class="ns-cal-hint">
-            <template v-if="!startDate">Klik tanggal awal</template>
+            <template v-if="mode === 'single'">Pilih tanggal akhir periode</template>
+            <template v-else-if="!startDate">Klik tanggal awal</template>
             <template v-else-if="!endDate">Klik tanggal akhir</template>
             <template v-else>
                 <span class="ns-cal-range-label">{{ fmtDisplay(startDate) }} – {{ fmtDisplay(endDate) }}</span>
@@ -288,11 +301,15 @@ function fmtDisplay(iso) {
     /* Staggered reveal animation for days */
     animation: dayFadeIn 0.3s ease-out backwards;
 }
-.ns-cal-cell:hover:not(.ns-cal-cell-empty) {
+.ns-cal-cell:hover:not(.ns-cal-cell-empty):not(.cal-disabled) {
     background: rgba(139, 69, 19, 0.08);
     transform: scale(1.02);
 }
 .ns-cal-cell-empty { pointer-events: none; }
+.cal-disabled {
+    cursor: not-allowed;
+    opacity: 0.34;
+}
 
 /* Staggered animation delays - applied via inline style in template */
 @keyframes dayFadeIn {
