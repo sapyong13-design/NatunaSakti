@@ -116,10 +116,10 @@ const illustrationType = computed(() => {
 
 .ns-empty-title {
     font-size: 15px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--text);
     margin: 0 0 6px 0;
-    font-family: 'Playfair Display', serif;
+    font-family: inherit;
 }
 
 .ns-empty-description {

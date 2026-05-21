@@ -20,6 +20,8 @@ const {
     createInitialSyncProgress,
     applyFetchProgress,
     startSaveProgress,
+    startDetailCacheProgress,
+    applyDetailCacheProgress,
     completeSyncProgress,
     failSyncProgress
 } = require('./lib/sippProgress');
@@ -37,6 +39,11 @@ const {
     resolveMonthlyReportPeriod,
     isDatePartsWithinPeriod
 } = require('./lib/monthlyReportPeriod');
+const { sortRowsByRegisterDate } = require('./lib/reportSort');
+const {
+    buildMonthlyReportFilename,
+    buildWeeklyReportFilename
+} = require('./lib/reportFilename');
 
 const app = express();
 const PORT = 3000;
@@ -431,15 +438,10 @@ app.get('/api/laporan/bulanan/:jenis/data', (req, res) => {
             }
         }
 
-        // Sort by sipp_tanggal_register
-        result.sort((a, b) => {
-            if (!a.sipp_tanggal_register) return 1;
-            if (!b.sipp_tanggal_register) return -1;
-            return a.sipp_tanggal_register.localeCompare(b.sipp_tanggal_register);
-        });
+        const sortedResult = sortRowsByRegisterDate(result);
 
-        console.log('[LAPORAN-DATA] Returning', result.length, 'perkara');
-        res.json({ data: result });
+        console.log('[LAPORAN-DATA] Returning', sortedResult.length, 'perkara');
+        res.json({ data: sortedResult });
     } catch (err) {
         console.error('[LAPORAN-DATA] Error:', err.message);
         res.status(500).json({ error: err.message });
@@ -562,17 +564,10 @@ app.get('/api/laporan/mingguan/:jenis/data', (req, res) => {
             });
         }
 
-        result.sort((a, b) => {
-            const da = parseAnySippDate(a.sipp_tanggal_register);
-            const db_ = parseAnySippDate(b.sipp_tanggal_register);
-            if (!da && !db_) return 0;
-            if (!da) return 1;
-            if (!db_) return -1;
-            return da - db_;
-        });
+        const sortedResult = sortRowsByRegisterDate(result);
 
-        console.log('[LAPORAN-MINGGUAN-DATA] Returning', result.length, 'perkara');
-        res.json({ data: result });
+        console.log('[LAPORAN-MINGGUAN-DATA] Returning', sortedResult.length, 'perkara');
+        res.json({ data: sortedResult });
     } catch (err) {
         console.error('[LAPORAN-MINGGUAN-DATA] Error:', err.message);
         res.status(500).json({ error: err.message });
@@ -764,7 +759,11 @@ app.post('/api/perkara/sipp/sync', async (req, res) => {
         console.log(`[SIPP-SYNC] Saved count: ${count}`);
 
         console.log('[SIPP-SYNC] Refreshing jadwal and putusan cache (100 newest perkara)...');
-        const detailCacheResult = await sippService.cacheJadwalCurrentYear();
+        syncProgress = startDetailCacheProgress(syncProgress, { total: 100 });
+        const detailCacheResult = await sippService.cacheJadwalCurrentYear((progress) => {
+            syncProgress = applyDetailCacheProgress(syncProgress, progress);
+            console.log(`[SIPP-SYNC] ${syncProgress.message}`);
+        });
         console.log('[SIPP-SYNC] Detail cache refreshed:', detailCacheResult);
 
         // Get actual DB count
@@ -1215,7 +1214,7 @@ app.get('/api/laporan/bulanan/:jenis', (req, res) => {
 
         if (format === 'pdf') {
             const pdfBuf  = convertDocxToPdf(docxBuf);
-            const filename = `Akurasi_${jenisCapital}_${bulanNama}_${tahun}.pdf`;
+            const filename = buildMonthlyReportFilename({ jenis: jenisCapital, bulan, tahun, extension: 'pdf' });
             createReportHistory(db, {
                 tipe: 'bulanan',
                 jenis: jenisCapital,
@@ -1230,7 +1229,7 @@ app.get('/api/laporan/bulanan/:jenis', (req, res) => {
             return res.send(pdfBuf);
         }
 
-        const filename = `Akurasi_${jenisCapital}_${bulanNama}_${tahun}.docx`;
+        const filename = buildMonthlyReportFilename({ jenis: jenisCapital, bulan, tahun, extension: 'docx' });
         createReportHistory(db, {
             tipe: 'bulanan',
             jenis: jenisCapital,
@@ -1262,15 +1261,13 @@ app.get('/api/laporan/mingguan/:jenis', (req, res) => {
         const startDate    = new Date(start)
         const bulanNama    = BULAN_NAMES[startDate.getMonth()]
         const tahun        = startDate.getFullYear()
-        const mingguKe     = Math.min(5, Math.ceil(startDate.getDate() / 7))
-        const MINGGU_ROMAN = ['I','II','III','IV','V']
 
         const docxBuf  = generateLaporanMingguan(db, jenisCapital, start, end)
-        const filename = `Akurasi_${jenisCapital}_${bulanNama}_MingguKe${MINGGU_ROMAN[mingguKe-1]}_${tahun}`
         const periodeLabel = `${start} s.d. ${end}`
 
         if (format === 'pdf') {
             const pdfBuf = convertDocxToPdf(docxBuf)
+            const filename = buildWeeklyReportFilename({ jenis: jenisCapital, start, tahun, extension: 'pdf' })
             createReportHistory(db, {
                 tipe: 'mingguan',
                 jenis: jenisCapital,
@@ -1278,13 +1275,14 @@ app.get('/api/laporan/mingguan/:jenis', (req, res) => {
                 start_date: start,
                 end_date: end,
                 format: 'pdf',
-                filename: `${filename}.pdf`
+                filename
             })
             res.setHeader('Content-Type', 'application/pdf')
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}.pdf"`)
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
             return res.send(pdfBuf)
         }
 
+        const filename = buildWeeklyReportFilename({ jenis: jenisCapital, start, tahun, extension: 'docx' })
         createReportHistory(db, {
             tipe: 'mingguan',
             jenis: jenisCapital,
@@ -1292,10 +1290,10 @@ app.get('/api/laporan/mingguan/:jenis', (req, res) => {
             start_date: start,
             end_date: end,
             format: 'docx',
-            filename: `${filename}.docx`
+            filename
         })
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}.docx"`)
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
         res.send(docxBuf)
     } catch (err) {
         console.error('[LAPORAN-MINGGUAN] Error:', err.message)

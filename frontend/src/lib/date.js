@@ -78,9 +78,19 @@ export function parseDateIndo(dateStr) {
     INDONESIAN_MONTHS.forEach((name, index) => {
         months[name.toLowerCase()] = index
     })
+    INDONESIAN_MONTHS_SHORT.forEach((name, index) => {
+        months[name.toLowerCase()] = index
+    })
 
     // Try format "DayName, dd MonthName yyyy" or "dd MonthName yyyy"
-    const match = dateStr.toLowerCase().match(/(\d+)\s+(\w+)\s+(\d{4})/)
+    const normalized = String(dateStr)
+        .replace(/\./g, '')
+        .replace(/,/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase()
+
+    const match = normalized.match(/(\d+)\s+([a-z]+)\s+(\d{4})/)
     if (match) {
         const day = parseInt(match[1])
         const monthName = match[2]

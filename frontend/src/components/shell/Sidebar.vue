@@ -1,8 +1,8 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
+import { useTheme } from '../../composables/useTheme'
 import Icon from '../Icon.vue'
-import LambangPN from '../LambangPN.vue'
 
 const props = defineProps({
     items: { type: Array, required: true },
@@ -14,6 +14,12 @@ const props = defineProps({
 const emit = defineEmits(['update:collapsed', 'toggleGroup', 'close-mobile'])
 
 const route = useRoute()
+const theme = useTheme()
+
+const brandLogoSrc = computed(() => {
+    const variant = theme.mode.value === 'dark' ? 'dark' : 'light'
+    return `/brand-logo-horizontal-${variant}.svg?v=brand-2026`
+})
 
 function isItemActive(item) {
     return route.path === item.to
@@ -40,11 +46,13 @@ function isGroupExpanded(group) {
 
     <aside class="ns-sidebar" :class="{ 'is-collapsed': collapsed, 'is-mobile-open': mobileOpen }">
         <div class="ns-brand">
-            <LambangPN :size="32" primary="#047857" />
-            <div v-if="!collapsed || mobileOpen" class="ns-brand-text">
-                <div class="ns-brand-title">Natuna Sakti</div>
-                <div class="ns-brand-sub">PN Natuna Kelas II</div>
-            </div>
+            <img
+                class="ns-brand-logo"
+                :src="brandLogoSrc"
+                alt="Natuna Sakti"
+                width="768"
+                height="256"
+            />
         </div>
 
         <nav class="ns-nav">
@@ -109,6 +117,25 @@ function isGroupExpanded(group) {
 </template>
 
 <style scoped>
+.ns-brand-logo {
+    width: 182px;
+    height: auto;
+    max-height: 56px;
+    flex: 0 1 182px;
+    object-fit: contain;
+    object-position: left center;
+    filter:
+        drop-shadow(0 0 2px rgba(255, 255, 255, 0.26))
+        drop-shadow(0 8px 12px rgba(0, 0, 0, 0.22));
+}
+
+.is-collapsed:not(.is-mobile-open) .ns-brand-logo {
+    width: 42px;
+    height: 42px;
+    object-fit: cover;
+    object-position: left center;
+}
+
 /* Mobile backdrop (outside template) */
 :deep(.ns-sidebar-backdrop) {
     position: fixed;
@@ -157,6 +184,12 @@ function isGroupExpanded(group) {
 
     .ns-sidebar.is-mobile-open .ns-collapse-btn {
         display: none;
+    }
+
+    .ns-sidebar.is-mobile-open .ns-brand-logo {
+        width: 190px;
+        height: auto;
+        object-fit: contain;
     }
 }
 </style>

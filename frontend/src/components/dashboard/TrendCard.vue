@@ -184,7 +184,7 @@ onMounted(() => {
 }
 
 .ns-trend-eyebrow {
-    font-size: 9px;
+    font-size: 10.5px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -297,7 +297,7 @@ onMounted(() => {
 }
 
 .ns-trend-stat-label {
-    font-size: 9px;
+    font-size: 10.5px;
     font-weight: 500;
     color: var(--text3);
     text-transform: uppercase;

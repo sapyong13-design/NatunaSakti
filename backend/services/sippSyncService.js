@@ -629,7 +629,7 @@ class SIPPSyncService {
    *
    * @returns {Promise<{ok: number, failed: number, total: number, skipped?: boolean}>}
    */
-  async cacheJadwalCurrentYear() {
+  async cacheJadwalCurrentYear(progressCallback = null) {
     if (this.cachePopulateInProgress) {
       console.log('[CACHE] populate already in progress, skipping');
       return { ok: 0, failed: 0, total: 0, skipped: true };
@@ -686,6 +686,19 @@ class SIPPSyncService {
           }
 
           await new Promise(r => setTimeout(r, 200)); // throttle SIPP
+
+          if (progressCallback) {
+            progressCallback({
+              current: i + 1,
+              total: perkara.length,
+              nomorPerkara: p.nomor_perkara,
+              jadwalOk,
+              jadwalFailed,
+              putusanOk,
+              putusanFailed,
+              failed: jadwalFailed + putusanFailed
+            });
+          }
         }
       } finally {
         await browser.close();

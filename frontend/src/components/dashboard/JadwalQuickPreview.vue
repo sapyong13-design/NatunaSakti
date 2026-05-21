@@ -345,7 +345,7 @@ function handleViewFullJadwal() {
 }
 
 .ns-wax-seal-text {
-    font-family: 'Playfair Display', Georgia, serif;
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
     font-size: 11px;
     font-weight: 700;
     color: #4a1c1b;
@@ -389,19 +389,19 @@ function handleViewFullJadwal() {
 }
 
 .ns-jadwal-preview-title {
-    font-family: 'Playfair Display', Georgia, serif;
-    font-size: 13px;
-    font-weight: 600;
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    font-size: 13.5px;
+    font-weight: 700;
     color: var(--text);
     flex: 1;
-    letter-spacing: 0.02em;
+    letter-spacing: 0;
 }
 
 .ns-jadwal-preview-status {
-    font-size: 9px;
+    font-size: 10.5px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.05em;
 }
 
 /* Body with asymmetrical layout */
@@ -443,8 +443,8 @@ function handleViewFullJadwal() {
 }
 
 .ns-calendar-day {
-    font-size: 7px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 700;
     color: var(--text3);
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -452,9 +452,9 @@ function handleViewFullJadwal() {
 }
 
 .ns-calendar-date {
-    font-family: 'Playfair Display', Georgia, serif;
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
     font-size: 20px;
-    font-weight: 700;
+    font-weight: 800;
     color: var(--accent);
     line-height: 1;
 }
@@ -469,10 +469,10 @@ function handleViewFullJadwal() {
 /* Case number with engraved treatment */
 .ns-jadwal-case-number {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
     color: var(--text);
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
     padding: 4px 8px;
     background: var(--surface2);
     border-radius: 4px;
@@ -516,11 +516,12 @@ function handleViewFullJadwal() {
 
 /* Agenda with italic serif */
 .ns-jadwal-agenda {
-    font-family: 'Playfair Display', Georgia, serif;
-    font-style: italic;
-    font-size: 12px;
+    font-family: inherit;
+    font-style: normal;
+    font-size: 13px;
+    font-weight: 600;
     color: var(--text2);
-    line-height: 1.4;
+    line-height: 1.45;
 }
 
 /* Countdown bar for urgency */
@@ -546,7 +547,7 @@ function handleViewFullJadwal() {
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--urgency-color, var(--accent));
     text-transform: uppercase;
@@ -561,7 +562,7 @@ function handleViewFullJadwal() {
     background: linear-gradient(135deg, rgba(199, 91, 74, 0.15) 0%, rgba(199, 91, 74, 0.08) 100%);
     border: 1px solid rgba(199, 91, 74, 0.3);
     border-radius: 6px;
-    font-size: 9px;
+    font-size: 10.5px;
     font-weight: 600;
     color: var(--danger, #C75B4A);
     align-self: flex-start;
@@ -569,7 +570,7 @@ function handleViewFullJadwal() {
 
 /* Para pihak preview */
 .ns-jadwal-pihak {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text3);
     font-style: italic;
     overflow: hidden;
@@ -594,7 +595,7 @@ function handleViewFullJadwal() {
     border: none;
     background: none;
     color: var(--text3);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
     cursor: pointer;
     border-bottom: 1px dotted var(--accent);
@@ -630,7 +631,7 @@ function handleViewFullJadwal() {
 }
 
 .ns-jadwal-preview-empty span {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text3);
 }
 

@@ -14,7 +14,7 @@
   opacity: 0.4;
 }
 
-.ns-skin-b .ns-h1 { font-family: "Bookman Old Style", "Bookman", Georgia, serif; font-weight: 600; }
+.ns-skin-b .ns-h1 { font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif; font-weight: 800; }
 
 .ns-skin-b .ns-cmd-banner {
   position: relative;
@@ -54,8 +54,8 @@
 
 .ns-h1-cmd {
   margin: 14px 0 4px;
-  font-family: "Bookman Old Style", "Bookman", Georgia, serif;
-  font-size: 32px; font-weight: 700; letter-spacing: -0.025em;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  font-size: 32px; font-weight: 800; letter-spacing: 0;
   color: var(--text);
 }
 .ns-h1-year {
@@ -137,7 +137,7 @@
 .ns-cmd-stat-value-row { display: flex; align-items: baseline; }
 .ns-cmd-stat-value {
   font-family: "JetBrains Mono", "SF Mono", monospace;
-  font-size: 44px; font-weight: 700; letter-spacing: -0.02em;
+  font-size: 44px; font-weight: 700; letter-spacing: 0;
   line-height: 1;
   text-shadow: 0 0 24px currentColor;
   filter: drop-shadow(0 0 12px currentColor);
@@ -209,8 +209,8 @@
 .ns-c-strip-item { display: flex; flex-direction: column; align-items: flex-start; min-width: 60px; }
 .ns-c-strip-label { font-size: 10.5px; color: var(--text-3); letter-spacing: 0.04em; text-transform: uppercase; }
 .ns-c-strip-value {
-  font-family: "Bookman Old Style", "Bookman", Georgia, serif;
-  font-size: 26px; font-weight: 400; line-height: 1;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  font-size: 25px; font-weight: 800; line-height: 1;
   color: var(--text); font-variant-numeric: tabular-nums;
 }
 .ns-c-strip-divider {
@@ -247,13 +247,13 @@
   display: flex; flex-direction: column; gap: 8px;
 }
 .ns-c-mini-value {
-  font-family: "Bookman Old Style", "Bookman", Georgia, serif;
-  font-size: 38px; font-weight: 400; letter-spacing: -0.02em; line-height: 1;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  font-size: 36px; font-weight: 800; letter-spacing: 0; line-height: 1;
   color: var(--text); font-variant-numeric: tabular-nums;
 }
 .ns-c-mini-unit {
   font-size: 14px; color: var(--text-3);
-  margin-left: 4px; font-family: "Bookman Old Style", "Bookman", Georgia, serif;
+  margin-left: 4px; font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
 }
 
 .ns-skin-c .ns-table-card { background: var(--bg-2); box-shadow: 0 1px 3px rgba(0,0,0,0.04); }

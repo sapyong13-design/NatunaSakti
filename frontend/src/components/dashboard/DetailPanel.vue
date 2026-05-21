@@ -30,15 +30,32 @@ function getMonthFromIndoDate(dateStr) {
     if (!dateStr) return null
     const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
                     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
-    for (const month of months) {
-        if (dateStr.includes(month)) return month
-    }
-    return null
+    const date = parseDateIndo(dateStr)
+    return date ? months[date.getMonth()] : null
 }
 
 // Format date to Indonesian
 function formatDate(date) {
     return formatDateIndo(date)
+}
+
+function getJadwalDateParts(dateStr) {
+    const date = parseDateIndo(dateStr)
+    if (!date) {
+        return {
+            day: '-',
+            month: 'TBD',
+            weekday: 'Tanggal',
+            year: ''
+        }
+    }
+
+    return {
+        day: String(date.getDate()).padStart(2, '0'),
+        month: date.toLocaleDateString('id-ID', { month: 'short' }).replace('.', '').toUpperCase(),
+        weekday: date.toLocaleDateString('id-ID', { weekday: 'long' }),
+        year: String(date.getFullYear())
+    }
 }
 
 // Group jadwal by month - hanya yang punya tanggal valid
@@ -376,6 +393,13 @@ watch(() => props.open, async (open) => {
                                         animationDelay: `${j.originalIndex * 50}ms`
                                     }"
                                 >
+                                    <div class="ns-jadwal-date-tile">
+                                        <span class="ns-jadwal-date-day">{{ getJadwalDateParts(j.tanggal).day }}</span>
+                                        <span class="ns-jadwal-date-month">{{ getJadwalDateParts(j.tanggal).month }}</span>
+                                        <span class="ns-jadwal-date-weekday">{{ getJadwalDateParts(j.tanggal).weekday }}</span>
+                                        <span class="ns-jadwal-date-year">{{ getJadwalDateParts(j.tanggal).year }}</span>
+                                    </div>
+
                                     <!-- Badges -->
                                     <div class="ns-jadwal-badges">
                                         <!-- Selesai Badge HANYA untuk jadwal terakhir saat Minutasi -->
@@ -441,6 +465,13 @@ watch(() => props.open, async (open) => {
                                         'is-postponed': j.alasanDitunda && j.alasanDitunda !== '0'
                                     }"
                                 >
+                                    <div class="ns-jadwal-date-tile is-empty">
+                                        <span class="ns-jadwal-date-day">{{ getJadwalDateParts(j.tanggal).day }}</span>
+                                        <span class="ns-jadwal-date-month">{{ getJadwalDateParts(j.tanggal).month }}</span>
+                                        <span class="ns-jadwal-date-weekday">{{ getJadwalDateParts(j.tanggal).weekday }}</span>
+                                        <span class="ns-jadwal-date-year">{{ getJadwalDateParts(j.tanggal).year }}</span>
+                                    </div>
+
                                     <!-- Badges -->
                                     <div class="ns-jadwal-badges">
                                         <!-- Postponed Badge (prioritas) -->
@@ -685,23 +716,23 @@ watch(() => props.open, async (open) => {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    margin: 8px 0 4px 0;
-    padding: 4px 12px;
-    font-size: 12px;
+    margin: 10px 0 2px 0;
+    padding: 3px 10px;
+    font-size: 11px;
     font-weight: 700;
-    color: #0891b2;
+    color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    background: var(--surface-2);
+    background: transparent;
     border-radius: 6px;
 }
 
 .ns-jadwal-month-header::before {
     content: '';
     position: absolute;
-    left: -10px;
-    width: 10px;
-    height: 10px;
+    left: -8px;
+    width: 8px;
+    height: 8px;
     background: #0891b2;
     border-radius: 50%;
     box-shadow: 0 0 0 4px var(--surface);
@@ -722,11 +753,11 @@ watch(() => props.open, async (open) => {
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 14px 16px 14px 40px;
+    gap: 9px;
+    padding: 12px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 10px;
     border-left: 3px solid var(--border);
     /* CSS containment - isolates repaints */
     contain: layout style paint;
@@ -746,20 +777,7 @@ watch(() => props.open, async (open) => {
 
 /* Timeline Dot - Optimized */
 .ns-jadwal-card::after {
-    content: '';
-    position: absolute;
-    left: 19px;
-    top: 18px;
-    width: 8px;
-    height: 8px;
-    background: var(--surface);
-    border: 2px solid var(--border);
-    border-radius: 50%;
-    /* GPU acceleration */
-    transform: translateZ(0);
-    will-change: transform, background-color, border-color;
-    transition: transform 150ms ease, background-color 150ms ease, border-color 150ms ease;
-    z-index: 1;
+    display: none;
 }
 
 [data-mode="light"] .ns-jadwal-card::after {
@@ -859,6 +877,86 @@ watch(() => props.open, async (open) => {
     background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), transparent);
 }
 
+.ns-jadwal-date-tile {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+        "day month year"
+        "day weekday weekday";
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 1px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.04), rgba(8, 145, 178, 0.08));
+    border: 1px solid rgba(8, 145, 178, 0.14);
+}
+
+[data-mode="dark"] .ns-jadwal-date-tile {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.46), rgba(8, 145, 178, 0.16));
+    border-color: rgba(34, 211, 238, 0.18);
+}
+
+.ns-jadwal-date-tile.is-empty {
+    background: var(--surface-2);
+    border-color: var(--border);
+}
+
+.ns-jadwal-date-day {
+    grid-area: day;
+    min-width: 42px;
+    font-size: 31px;
+    line-height: 0.95;
+    font-weight: 800;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+}
+
+[data-mode="dark"] .ns-jadwal-date-day {
+    color: #f8fafc;
+}
+
+.ns-jadwal-date-month {
+    grid-area: month;
+    align-self: end;
+    font-size: 13px;
+    line-height: 1;
+    font-weight: 800;
+    color: #0891b2;
+    letter-spacing: 0.04em;
+}
+
+[data-mode="dark"] .ns-jadwal-date-month {
+    color: #22d3ee;
+}
+
+.ns-jadwal-date-weekday {
+    grid-area: weekday;
+    font-size: 12.5px;
+    line-height: 1.2;
+    color: #64748b;
+    font-weight: 650;
+}
+
+[data-mode="dark"] .ns-jadwal-date-weekday {
+    color: #cbd5e1;
+}
+
+.ns-jadwal-date-year {
+    grid-area: year;
+    justify-self: end;
+    align-self: start;
+    font-size: 11.5px;
+    color: #64748b;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+[data-mode="dark"] .ns-jadwal-date-year {
+    color: #94a3b8;
+}
+
 /* Badges Container */
 .ns-jadwal-badges {
     display: flex;
@@ -876,9 +974,9 @@ watch(() => props.open, async (open) => {
     gap: 4px;
     padding: 4px 8px;
     border-radius: 6px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
     text-transform: uppercase;
 }
 
@@ -938,11 +1036,11 @@ watch(() => props.open, async (open) => {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     color: #1f2937;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
 }
 
 [data-mode="dark"] .ns-jadwal-date {
@@ -957,7 +1055,7 @@ watch(() => props.open, async (open) => {
     background: rgba(8, 145, 178, 0.12);
     color: #0891b2;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 600;
     letter-spacing: 0.02em;
 }
@@ -1307,8 +1405,8 @@ watch(() => props.open, async (open) => {
 }
 
 .ns-detail-title {
-    font-size: 18px;
-    font-weight: 700;
+    font-size: 18.5px;
+    font-weight: 800;
     color: #ffffff;
     margin: 0 0 8px;
 }
@@ -1499,7 +1597,7 @@ watch(() => props.open, async (open) => {
 }
 
 .ns-detail-section-title {
-    font-size: 13px;
+    font-size: 13.5px;
     font-weight: 700;
     color: #1f2937;
     text-transform: uppercase;
@@ -1532,11 +1630,11 @@ watch(() => props.open, async (open) => {
 }
 
 .ns-detail-field-label {
-    font-size: 10px;
+    font-size: 11.5px;
     font-weight: 600;
     color: #6b7280;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
     margin-bottom: 4px;
 }
 
@@ -1545,7 +1643,7 @@ watch(() => props.open, async (open) => {
 }
 
 .ns-detail-field-value {
-    font-size: 13px;
+    font-size: 13.5px;
     font-weight: 500;
     color: #1f2937;
 }
@@ -1574,7 +1672,7 @@ watch(() => props.open, async (open) => {
     border-radius: 8px;
     background: color-mix(in srgb, var(--danger, #C75B4A) 10%, var(--surface));
     color: var(--text);
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 600;
 }
 
@@ -1612,7 +1710,7 @@ watch(() => props.open, async (open) => {
     align-items: center;
     gap: 6px;
     padding: 8px 14px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     border-radius: 8px;
     border: none;

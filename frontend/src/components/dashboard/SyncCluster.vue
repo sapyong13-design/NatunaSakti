@@ -57,6 +57,10 @@ function formatTime(iso) {
     return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
 }
 
+function isSyncAlreadyInProgress(err) {
+    return /Sync already in progress/i.test(err?.message || '')
+}
+
 async function loadStatus() {
     try {
         const s = await getSippStatus()
@@ -126,6 +130,16 @@ async function handleSync() {
             error: null
         })
     } catch (err) {
+        if (isSyncAlreadyInProgress(err)) {
+            progress.value = {
+                ...progress.value,
+                inProgress: true,
+                error: null,
+                message: progress.value.message || 'Sync SIPP masih berjalan...'
+            }
+            return
+        }
+
         console.error('Sync failed:', err.message)
         progress.value = {
             ...progress.value,

@@ -12,6 +12,7 @@ const {
     resolveMonthlyReportPeriod,
     isDatePartsWithinPeriod
 } = require('../lib/monthlyReportPeriod')
+const { compareRowsByRegisterDate } = require('../lib/reportSort')
 
 const BULAN_NAMES = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
                      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
@@ -124,10 +125,61 @@ function isTilangPerkara(row) {
     return /tilang|lalu\s+lintas|pid\.?\s*c/i.test(text)
 }
 
+function isPerkaraDisamarkan(row) {
+    const text = [
+        row.nama_perkara,
+        row.para_pihak
+    ].filter(Boolean).join(' ')
+
+    return /\bdisamarkan\b/i.test(text)
+}
+
+function isPerdataEksekusi(row) {
+    const text = [
+        row.nomor_perkara,
+        row.nama_perkara,
+        row.sipp_klasifikasi
+    ].filter(Boolean).join(' ')
+
+    return /\beksekusi\b|pdt\.?\s*(eks|eksusi)|\/eks/i.test(text)
+}
+
+function isDispensasiIzinNikah(row) {
+    const text = [
+        row.nomor_perkara,
+        row.nama_perkara,
+        row.sipp_klasifikasi
+    ].filter(Boolean).join(' ')
+
+    return /\bdispensasi\b|\bijin\s+nikah\b|\bizin\s+nikah\b|\bizin\s+kawin\b|\bijin\s+kawin\b/i.test(text)
+}
+
 function sortByRegisterDate(a, b) {
-    const da = parseRegisterDate(a?.sipp_tanggal_register)
-    const db_ = parseRegisterDate(b?.sipp_tanggal_register)
-    return (da?.sort ?? 0) - (db_?.sort ?? 0)
+    return compareRowsByRegisterDate(a, b)
+}
+
+function mergeNomorListsByRegister(perkaraMap, ...lists) {
+    return [...new Set(lists.flat())]
+        .sort((a, b) => sortByRegisterDate(perkaraMap.get(a), perkaraMap.get(b)))
+}
+
+function normalizeReportLabel(text) {
+    return String(text || '').replace(/\s+/g, ' ').trim().toLowerCase()
+}
+
+function pickReportRowList(noText, labelText, lists) {
+    const label = normalizeReportLabel(labelText)
+    if (!label || label === '-') return null
+
+    if (noText === '1' && /perkara/.test(label)) return lists.register
+    if (/tilan\s*g|tilang/.test(label)) return lists.tilang
+    if (/berita acara sidang/.test(label)) return lists.sidang
+    if (/denda|uang\s+(pengganti|ganti)/.test(label)) return lists.denda
+    if (/anonimisasi/.test(label)) return lists.anonimisasi
+    if (/eksekusi/.test(label)) return lists.eksekusi
+    if (/dispensasi|\bijin\s+nikah\b|\bizin\s+nikah\b/.test(label)) return lists.dispensasiNikah
+
+    return null
 }
 
 const TEMPLATE_DIR = path.join(__dirname, '../templates')
@@ -363,6 +415,14 @@ function putusanSearchText(row) {
     ].filter(Boolean).join(' ')
 }
 
+function firstParsedDateParts(...values) {
+    for (const value of values) {
+        const parsed = parseSippDateParts(value)
+        if (parsed) return parsed
+    }
+    return null
+}
+
 function hasDenda(row) {
     return /\bdenda\b/i.test(putusanSearchText(row))
 }
@@ -394,16 +454,15 @@ function getPutusanReportLists(db, jenis, isInPeriod) {
     `).all(jenis)
 
     const isRowInPeriod = (row, primaryDate) => {
-        const value = primaryDate === 'minutasi'
-            ? (row.tanggal_minutasi || row.tanggal_putusan)
-            : (row.tanggal_putusan || row.tanggal_minutasi)
-        return isInPeriod(parseSippDateParts(value))
+        const searchText = putusanSearchText(row)
+        const parsed = primaryDate === 'minutasi'
+            ? firstParsedDateParts(row.tanggal_minutasi, row.tanggal_putusan, searchText)
+            : firstParsedDateParts(row.tanggal_putusan, row.tanggal_minutasi, searchText)
+        return isInPeriod(parsed)
     }
 
     const byRegisterDate = (a, b) => {
-        const da = parseRegisterDate(a.sipp_tanggal_register)
-        const db_ = parseRegisterDate(b.sipp_tanggal_register)
-        return (da?.sort ?? 0) - (db_?.sort ?? 0)
+        return compareRowsByRegisterDate(a, b)
     }
 
     return {
@@ -489,7 +548,7 @@ function generateLaporanBulanan(db, jenis, bulan, tahun, options = {}) {
 
     // Row 1: perkara yang register di bulan ini, sort by tanggal register asc
     const allPerkara = db.prepare(`
-        SELECT nomor_perkara, nama_perkara, sipp_tanggal_register, sipp_klasifikasi FROM perkara
+        SELECT nomor_perkara, nama_perkara, para_pihak, sipp_tanggal_register, sipp_klasifikasi FROM perkara
         WHERE jenis_perkara = ?
     `).all(jenis)
 
@@ -503,6 +562,16 @@ function generateLaporanBulanan(db, jenis, bulan, tahun, options = {}) {
 
     const nomorListTilang = allPerkara
         .filter(p => isTilangPerkara(p) && isDatePartsWithinPeriod(parseRegisterDate(p.sipp_tanggal_register), period))
+        .sort(sortByRegisterDate)
+        .map(p => p.nomor_perkara)
+
+    const nomorListEksekusi = allPerkara
+        .filter(p => isPerdataEksekusi(p) && isDatePartsWithinPeriod(parseRegisterDate(p.sipp_tanggal_register), period))
+        .sort(sortByRegisterDate)
+        .map(p => p.nomor_perkara)
+
+    const nomorListDispensasiNikah = allPerkara
+        .filter(p => isDispensasiIzinNikah(p) && isDatePartsWithinPeriod(parseRegisterDate(p.sipp_tanggal_register), period))
         .sort(sortByRegisterDate)
         .map(p => p.nomor_perkara)
 
@@ -527,6 +596,15 @@ function generateLaporanBulanan(db, jenis, bulan, tahun, options = {}) {
     nomorList2.sort((a, b) => sortByRegisterDate(perkaraMap.get(a), perkaraMap.get(b)))
 
     const putusanLists = getPutusanReportLists(db, jenis, d => isDatePartsWithinPeriod(d, period))
+    const nomorListAnonimisasi = mergeNomorListsByRegister(
+        perkaraMap,
+        putusanLists.anonimisasi,
+        nomorList1.filter(nomor => isPerkaraDisamarkan(perkaraMap.get(nomor))),
+        nomorList2.filter(nomor => isPerkaraDisamarkan(perkaraMap.get(nomor)))
+    )
+    const nomorListBeritaAcara = jenis === 'Perdata'
+        ? mergeNomorListsByRegister(perkaraMap, nomorList2, nomorListAnonimisasi)
+        : nomorList2
 
     // Load template
     const templateFile = TEMPLATE_MAP[jenis] || 'bulanan-perdata.docx'
@@ -552,12 +630,14 @@ function generateLaporanBulanan(db, jenis, bulan, tahun, options = {}) {
     // Update table data rows: NO=1 → perkara register bulan ini, NO=2 → punya sidang bulan ini
     const rows = getTableRows(xml)
     const modifications = []
-    const rowLists = {
-        '1': nomorList1,
-        '2': jenis === 'Pidana' ? nomorListTilang : nomorList2,
-        '3': putusanLists.denda,
-        '4': putusanLists.anonimisasi,
-        '5': jenis === 'Pidana' ? nomorList2 : []
+    const reportLists = {
+        register: nomorList1,
+        sidang: nomorListBeritaAcara,
+        tilang: nomorListTilang,
+        denda: putusanLists.denda,
+        anonimisasi: nomorListAnonimisasi,
+        eksekusi: nomorListEksekusi,
+        dispensasiNikah: nomorListDispensasiNikah
     }
 
     for (const row of rows) {
@@ -565,8 +645,9 @@ function generateLaporanBulanan(db, jenis, bulan, tahun, options = {}) {
         if (cells.length < 2) continue
 
         const noText = getCellText(cells[0].xml)
-        if (Object.prototype.hasOwnProperty.call(rowLists, noText)) {
-            const newRowXml = replaceMonitoringRow(row.xml, cells, rowLists[noText])
+        const mappedNomorList = pickReportRowList(noText, getCellText(cells[1].xml), reportLists)
+        if (mappedNomorList) {
+            const newRowXml = replaceMonitoringRow(row.xml, cells, mappedNomorList)
             modifications.push({ start: row.start, end: row.end, newXml: newRowXml })
             continue
         }
@@ -700,7 +781,7 @@ function generateLaporanMingguan(db, jenis, startDateStr, endDateStr) {
 
     // Row 1: perkara registered within the week
     const allPerkara = db.prepare(
-        'SELECT nomor_perkara, nama_perkara, sipp_tanggal_register, sipp_klasifikasi FROM perkara WHERE jenis_perkara = ?'
+        'SELECT nomor_perkara, nama_perkara, para_pihak, sipp_tanggal_register, sipp_klasifikasi FROM perkara WHERE jenis_perkara = ?'
     ).all(jenis)
 
     const nomorList1 = allPerkara
@@ -719,6 +800,26 @@ function generateLaporanMingguan(db, jenis, startDateStr, endDateStr) {
             if (!d) return false
             const dt = new Date(d.year, d.month - 1, d.day)
             return isTilangPerkara(p) && dt >= start && dt <= end
+        })
+        .sort(sortByRegisterDate)
+        .map(p => p.nomor_perkara)
+
+    const nomorListEksekusi = allPerkara
+        .filter(p => {
+            const d = parseRegisterDate(p.sipp_tanggal_register)
+            if (!d) return false
+            const dt = new Date(d.year, d.month - 1, d.day)
+            return isPerdataEksekusi(p) && dt >= start && dt <= end
+        })
+        .sort(sortByRegisterDate)
+        .map(p => p.nomor_perkara)
+
+    const nomorListDispensasiNikah = allPerkara
+        .filter(p => {
+            const d = parseRegisterDate(p.sipp_tanggal_register)
+            if (!d) return false
+            const dt = new Date(d.year, d.month - 1, d.day)
+            return isDispensasiIzinNikah(p) && dt >= start && dt <= end
         })
         .sort(sortByRegisterDate)
         .map(p => p.nomor_perkara)
@@ -746,6 +847,15 @@ function generateLaporanMingguan(db, jenis, startDateStr, endDateStr) {
         const date = datePartsToDate(parts)
         return date && date >= start && date <= end
     })
+    const nomorListAnonimisasi = mergeNomorListsByRegister(
+        perkaraMap,
+        putusanLists.anonimisasi,
+        nomorList1.filter(nomor => isPerkaraDisamarkan(perkaraMap.get(nomor))),
+        nomorList2.filter(nomor => isPerkaraDisamarkan(perkaraMap.get(nomor)))
+    )
+    const nomorListBeritaAcara = jenis === 'Perdata'
+        ? mergeNomorListsByRegister(perkaraMap, nomorList2, nomorListAnonimisasi)
+        : nomorList2
 
     // Load template
     const templateFile = TEMPLATE_MAP_MINGGUAN[jenis] || 'mingguan-perikanan.docx'
@@ -806,12 +916,14 @@ function generateLaporanMingguan(db, jenis, startDateStr, endDateStr) {
     // Update data rows (same logic as bulanan)
     const rows = getTableRows(xml)
     const modifications = []
-    const rowLists = {
-        '1': nomorList1,
-        '2': jenis === 'Pidana' ? nomorListTilang : nomorList2,
-        '3': putusanLists.denda,
-        '4': putusanLists.anonimisasi,
-        '5': jenis === 'Pidana' ? nomorList2 : []
+    const reportLists = {
+        register: nomorList1,
+        sidang: nomorListBeritaAcara,
+        tilang: nomorListTilang,
+        denda: putusanLists.denda,
+        anonimisasi: nomorListAnonimisasi,
+        eksekusi: nomorListEksekusi,
+        dispensasiNikah: nomorListDispensasiNikah
     }
 
     for (const row of rows) {
@@ -819,8 +931,9 @@ function generateLaporanMingguan(db, jenis, startDateStr, endDateStr) {
         if (cells.length < 2) continue
 
         const noText    = getCellText(cells[0].xml)
-        if (Object.prototype.hasOwnProperty.call(rowLists, noText)) {
-            const newRowXml = replaceMonitoringRow(row.xml, cells, rowLists[noText])
+        const mappedNomorList = pickReportRowList(noText, getCellText(cells[1].xml), reportLists)
+        if (mappedNomorList) {
+            const newRowXml = replaceMonitoringRow(row.xml, cells, mappedNomorList)
             modifications.push({ start: row.start, end: row.end, newXml: newRowXml })
             continue
         }

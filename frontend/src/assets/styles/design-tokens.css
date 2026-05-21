@@ -1,10 +1,10 @@
 /* ============================================================
    Natuna Sakti — Modern Legal Authority
-   Typography: Playfair Display (headings) + IBM Plex Sans (body/data)
+   Typography: IBM Plex Sans for UI, JetBrains Mono for numbers/case IDs
    Color: Mahogany & Gold
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;450;500;600;700;800&display=swap');
 
 * { box-sizing: border-box; }
 
@@ -19,12 +19,13 @@
   color: var(--text);
   background: var(--gradient-bg);
   overflow: hidden;
-  letter-spacing: -0.005em;
+  line-height: 1.45;
+  letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "ss01", "cv11";
 }
 
-/* Heading font - Playfair Display for authority */
+/* Keep the interface font consistent; data-heavy screens need scanability. */
 .ns-app h1,
 .ns-app h2,
 .ns-app h3,
@@ -34,7 +35,7 @@
 .ns-app .ns-page-title,
 .ns-app .ns-detail-title,
 .ns-app .ns-brand-title {
-  font-family: 'Playfair Display', 'Bookman Old Style', Georgia, serif;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
 }
 
 .ns-app[data-mode="light"] { color-scheme: light; }
@@ -85,8 +86,8 @@
 @keyframes ns-glow { 0%,100% { opacity: 0.5; } 50% { opacity: 0.85; } }
 
 .ns-brand-text { display: flex; flex-direction: column; gap: 0; min-width: 0; }
-.ns-brand-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
-.ns-brand-sub { font-size: 11px; color: var(--text-3); letter-spacing: 0.02em; text-transform: uppercase; }
+.ns-brand-title { font-size: 15px; font-weight: 700; letter-spacing: 0; }
+.ns-brand-sub { font-size: 11.5px; color: var(--text-3); letter-spacing: 0.02em; text-transform: uppercase; }
 
 .ns-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
 .ns-nav::-webkit-scrollbar { width: 4px; }
@@ -95,10 +96,10 @@
 .ns-nav-item {
   position: relative;
   display: flex; align-items: center; gap: 12px;
-  width: 100%; padding: 9px 12px;
+  width: 100%; min-height: 40px; padding: 9px 12px;
   background: transparent; border: 0; cursor: pointer;
   border-radius: 10px;
-  font: inherit; color: var(--text); font-size: 13.5px; font-weight: 500;
+  font: inherit; color: var(--text); font-size: 14px; font-weight: 600;
   text-align: left;
   transition: background 150ms, color 150ms;
 }
@@ -109,13 +110,13 @@
 }
 .ns-nav-item.is-active .ns-nav-icon { color: var(--accent); }
 .ns-nav-item.is-child-active { color: var(--text); }
-.ns-nav-item.is-child { padding-left: 38px; font-size: 12.5px; font-weight: 450; }
+.ns-nav-item.is-child { padding-left: 38px; font-size: 13px; font-weight: 500; }
 .ns-nav-item.is-child .ns-nav-icon { opacity: 1; }
 
 .ns-nav-icon { display: grid; place-items: center; flex-shrink: 0; color: var(--text); transition: color 150ms; }
 .ns-nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ns-nav-badge {
-  font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
   padding: 2px 6px; border-radius: 4px;
   background: var(--accent-soft); color: var(--accent);
 }
@@ -151,8 +152,8 @@
   letter-spacing: 0.02em;
 }
 .ns-user-info { flex: 1; min-width: 0; }
-.ns-user-name { font-size: 12.5px; font-weight: 600; }
-.ns-user-role { font-size: 10.5px; color: var(--text-3); }
+.ns-user-name { font-size: 13px; font-weight: 700; }
+.ns-user-role { font-size: 11.5px; color: var(--text-3); }
 .ns-collapse-btn { margin-left: auto; }
 .ns-expand-btn { width: 100%; }
 .is-collapsed .ns-user-card { padding: 4px; justify-content: center; }
@@ -200,7 +201,7 @@
   border-radius: 100px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  font-size: 11.5px; font-weight: 500;
+  font-size: 12px; font-weight: 600;
   letter-spacing: 0.01em;
 }
 .ns-live-pulse { position: relative; width: 8px; height: 8px; }
@@ -237,11 +238,12 @@
 
 .ns-page-header { display: flex; align-items: flex-end; justify-content: space-between; }
 .ns-h1 {
-  font-family: "Bookman Old Style", "Bookman", "URW Bookman L", Georgia, serif;
-  font-size: 32px; font-weight: 400; letter-spacing: -0.02em;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  font-size: 31px; font-weight: 800; letter-spacing: 0;
   margin: 0; line-height: 1.1;
+  text-wrap: balance;
 }
-.ns-h1-sub { margin: 6px 0 0; font-size: 13.5px; color: var(--text-3); }
+.ns-h1-sub { margin: 6px 0 0; font-size: 14px; color: var(--text-3); }
 
 /* ============ Stat Grid ============ */
 .ns-stat-grid {
@@ -282,8 +284,8 @@
 .ns-stat-delta.is-down { color: var(--danger); }
 .ns-stat-value-row { display: flex; align-items: baseline; gap: 8px; }
 .ns-stat-value {
-  font-family: "Bookman Old Style", "Bookman", Georgia, serif;
-  font-size: 38px; font-weight: 400; letter-spacing: -0.03em; line-height: 1;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  font-size: 36px; font-weight: 800; letter-spacing: 0; line-height: 1;
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
@@ -432,7 +434,7 @@
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
 }
-.ns-th { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.ns-th { font-size: 11.5px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
 
 .ns-table-body { display: flex; flex-direction: column; }
 .ns-tr {
@@ -449,9 +451,9 @@
   background: var(--accent);
 }
 
-.ns-td { font-size: 12.5px; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ns-th-no { font-variant-numeric: tabular-nums; color: var(--text-3); font-weight: 500; }
-.ns-nomor-mono { font-family: "JetBrains Mono", "SF Mono", monospace; font-size: 12px; letter-spacing: -0.01em; }
+.ns-td { font-size: 13px; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ns-th-no { font-variant-numeric: tabular-nums; color: var(--text-3); font-weight: 600; }
+.ns-nomor-mono { font-family: "JetBrains Mono", "SF Mono", monospace; font-size: 12.5px; letter-spacing: 0; }
 .ns-pihak { color: var(--text); font-weight: 450; }
 
 .ns-pill {
@@ -554,8 +556,8 @@
 .ns-detail-eyebrow { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .ns-detail-no-label { font-size: 11px; color: var(--text-3); letter-spacing: 0.04em; text-transform: uppercase; }
 .ns-detail-title {
-  font-family: "Bookman Old Style", "Bookman", Georgia, serif;
-  font-size: 22px; font-weight: 400; letter-spacing: -0.01em;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  font-size: 21px; font-weight: 800; letter-spacing: 0;
   margin: 0;
   font-feature-settings: "tnum";
 }
@@ -587,8 +589,8 @@
 
 .ns-detail-section { display: flex; flex-direction: column; gap: 10px; }
 .ns-detail-section-title {
-  font-size: 10.5px; color: var(--text-3); font-weight: 600;
-  letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: 11.5px; color: var(--text-3); font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase;
 }
 
 .ns-detail-status-card {
@@ -600,8 +602,8 @@
 }
 .ns-detail-status-pulse { position: relative; width: 10px; height: 10px; flex-shrink: 0; }
 .ns-detail-status-pulse .ns-pulse-dot { inset: 1px; }
-.ns-detail-agenda { font-size: 14px; font-weight: 600; color: var(--text); }
-.ns-detail-status-sub { font-size: 11.5px; color: var(--accent); margin-top: 2px; }
+.ns-detail-agenda { font-size: 14.5px; font-weight: 700; color: var(--text); line-height: 1.45; }
+.ns-detail-status-sub { font-size: 12px; color: var(--accent); margin-top: 2px; }
 
 .ns-timeline { position: relative; display: flex; flex-direction: column; gap: 12px; }
 .ns-timeline-step {
@@ -643,8 +645,8 @@
   border: 1px solid var(--border);
   border-radius: 10px;
 }
-.ns-detail-field-label { font-size: 10.5px; color: var(--text-3); letter-spacing: 0.04em; text-transform: uppercase; }
-.ns-detail-field-value { font-size: 12.5px; color: var(--text); margin-top: 3px; font-weight: 450; }
+.ns-detail-field-label { font-size: 11.5px; color: var(--text-3); letter-spacing: 0.03em; text-transform: uppercase; font-weight: 700; }
+.ns-detail-field-value { font-size: 13.5px; color: var(--text); margin-top: 3px; font-weight: 500; line-height: 1.45; }
 
 .ns-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
@@ -1016,7 +1018,7 @@
   padding: 0 5px;
   background: rgba(0, 0, 0, 0.1);
   border-radius: 10px;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
 }
 
@@ -1033,7 +1035,7 @@
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--surface2);
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 500;
   font-family: "JetBrains Mono", monospace;
   color: var(--text3);

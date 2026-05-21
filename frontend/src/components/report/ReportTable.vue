@@ -144,7 +144,7 @@ function getSidangDates(row) {
     min-width: 980px;
     border-collapse: collapse;
     table-layout: fixed;
-    font-size: 12px;
+    font-size: 12.5px;
 }
 
 .ns-report-table thead {
@@ -156,10 +156,10 @@ function getSidangDates(row) {
 .ns-report-table th {
     text-align: left;
     padding: 12px 10px;
-    font-size: 10px;
-    font-weight: 600;
+    font-size: 11px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
     color: var(--text-3);
     background: #f8fafc;
     border-bottom: 1px solid var(--border);
@@ -272,7 +272,7 @@ function getSidangDates(row) {
     min-width: 0;
     padding: 4px 8px;
     border-radius: 6px;
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 600;
     letter-spacing: 0.02em;
     background: var(--jenis-bg);
@@ -290,7 +290,7 @@ function getSidangDates(row) {
     border-radius: 6px;
     background: var(--surface-2);
     color: var(--text-2);
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -315,10 +315,10 @@ function getSidangDates(row) {
 .ns-nomor {
     display: block;
     font-family: "JetBrains Mono", monospace;
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 500;
     color: var(--text);
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -337,7 +337,7 @@ function getSidangDates(row) {
 
 .ns-jenis-detail {
     display: -webkit-box;
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--text-2);
     line-height: 1.4;
     -webkit-line-clamp: 2;
@@ -353,7 +353,7 @@ function getSidangDates(row) {
 .ns-col-putus,
 .ns-col-ket {
     font-family: "JetBrains Mono", monospace;
-    font-size: 11px;
+    font-size: 11.5px;
     color: var(--text-2);
 }
 
@@ -432,7 +432,7 @@ function getSidangDates(row) {
     }
 
     .ns-report-table {
-        font-size: 11px;
+        font-size: 11.5px;
     }
 
     .ns-nomor,
@@ -442,12 +442,12 @@ function getSidangDates(row) {
     .ns-col-putus,
     .ns-col-ket,
     .ns-jenis-detail {
-        font-size: 10.5px;
+        font-size: 11px;
     }
 
     .ns-jenis-pill,
     .ns-kategori-pill {
-        font-size: 10px;
+        font-size: 10.5px;
         padding: 3px 6px;
     }
 }
@@ -459,11 +459,11 @@ function getSidangDates(row) {
     }
 
     .ns-report-table {
-        font-size: 10.5px;
+        font-size: 11px;
     }
 
     .ns-report-table th {
-        font-size: 9px;
+        font-size: 10px;
     }
 
     .ns-table-footer {
@@ -481,7 +481,7 @@ function getSidangDates(row) {
 
     .ns-report-table {
         min-width: 760px;
-        font-size: 9px;
+        font-size: 10.5px;
     }
 
     .ns-col-jenis-detail,
@@ -490,7 +490,7 @@ function getSidangDates(row) {
     }
 
     .ns-report-table th {
-        font-size: 8px;
+        font-size: 10px;
         letter-spacing: 0;
     }
 
@@ -501,13 +501,13 @@ function getSidangDates(row) {
     .ns-col-putus,
     .ns-col-ket,
     .ns-jenis-detail {
-        font-size: 8.5px;
+        font-size: 10px;
     }
 
     .ns-jenis-pill,
     .ns-kategori-pill {
-        font-size: 8px;
-        padding: 2px 3px;
+        font-size: 10px;
+        padding: 3px 5px;
     }
 }
 </style>

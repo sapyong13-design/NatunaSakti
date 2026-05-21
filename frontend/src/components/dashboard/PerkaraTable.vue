@@ -313,10 +313,10 @@ function getLamaProgress(days) {
 .ns-data-table th {
     text-align: left;
     padding: 14px 16px;
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 11.5px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     color: var(--text-3);
     background: var(--bg-2);
     border-bottom: 1px solid var(--border);
@@ -437,7 +437,7 @@ function getLamaProgress(days) {
 
 .ns-klasifikasi-text {
     display: -webkit-box;
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--text-2);
     line-height: 1.4;
     -webkit-line-clamp: 2;
@@ -465,7 +465,7 @@ function getLamaProgress(days) {
 }
 
 .ns-lama-text {
-    font-size: 12px;
+    font-size: 12.5px;
     min-width: 0;
     overflow-wrap: anywhere;
 }
@@ -489,7 +489,7 @@ function getLamaProgress(days) {
     align-items: center;
     padding: 5px 11px;
     border-radius: 7px;
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 600;
     background: var(--jenis-bg);
     color: var(--jenis-color);
@@ -507,9 +507,9 @@ function getLamaProgress(days) {
 .ns-nomor-text {
     display: block;
     font-family: "JetBrains Mono", monospace;
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 500;
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
 }
@@ -528,7 +528,7 @@ function getLamaProgress(days) {
 .ns-col-status,
 .ns-col-lama {
     font-family: "JetBrains Mono", monospace;
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--text-2);
     font-variant-numeric: tabular-nums;
 }
@@ -557,7 +557,7 @@ function getLamaProgress(days) {
     padding: 2px 8px;
     border-radius: 4px;
     background: var(--surface-2);
-    font-size: 11px;
+    font-size: 11.5px;
 }
 
 /* Empty state */
@@ -602,7 +602,7 @@ function getLamaProgress(days) {
     padding: 10px 16px;
     background: var(--surface-2);
     border-top: 1px solid var(--border);
-    font-size: 11px;
+    font-size: 11.5px;
 }
 
 .ns-row-count {
@@ -629,11 +629,11 @@ function getLamaProgress(days) {
 .ns-perkara-table-wrap.is-density-compact .ns-col-status,
 .ns-perkara-table-wrap.is-density-compact .ns-col-lama,
 .ns-perkara-table-wrap.is-density-compact .ns-lama-text {
-    font-size: 11px;
+    font-size: 11.5px;
 }
 
 .ns-perkara-table-wrap.is-density-compact .ns-jenis-badge {
-    font-size: 10px;
+    font-size: 10.5px;
     padding: 3px 6px;
 }
 
@@ -653,12 +653,12 @@ function getLamaProgress(days) {
     .ns-col-status,
     .ns-col-lama,
     .ns-lama-text {
-        font-size: 11px;
+        font-size: 11.5px;
     }
 
     .ns-jenis-badge {
         padding: 4px 7px;
-        font-size: 10px;
+        font-size: 10.5px;
     }
 
 }
@@ -679,11 +679,11 @@ function getLamaProgress(days) {
     }
 
     .ns-data-table {
-        font-size: 10px;
+        font-size: 10.5px;
     }
 
     .ns-data-table th {
-        font-size: 9px;
+        font-size: 10px;
         letter-spacing: 0;
     }
 
@@ -693,12 +693,12 @@ function getLamaProgress(days) {
     .ns-col-status,
     .ns-col-lama,
     .ns-lama-text {
-        font-size: 9px;
+        font-size: 10px;
     }
 
     .ns-jenis-badge {
         padding: 3px 5px;
-        font-size: 9px;
+        font-size: 10px;
     }
 
     .ns-table-footer {

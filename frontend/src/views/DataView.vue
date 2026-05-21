@@ -24,6 +24,7 @@ import {
     getActiveFilterSummary,
     hasActiveFilters as hasFilters
 } from '../lib/dashboardFilters'
+import { sortDashboardRows } from '../lib/dashboardSort'
 import { dashboardStateFromQuery, dashboardStateToQuery } from '../lib/dashboardViewState'
 
 const rows = ref([])
@@ -96,17 +97,7 @@ const filtered = computed(() => {
         status: filterStatus.value
     })
 
-    // Sort by tanggal register (newest first)
-    result.sort((a, b) => {
-        const dateA = parseTanggal(a.sipp_tanggal_register)
-        const dateB = parseTanggal(b.sipp_tanggal_register)
-        if (!dateA && !dateB) return 0
-        if (!dateA) return 1
-        if (!dateB) return -1
-        return dateB - dateA // newest first
-    })
-
-    return result
+    return sortDashboardRows(result)
 })
 
 // Pagination
@@ -205,19 +196,6 @@ const upcomingPerkaraNumbers = computed(() => {
         })
         .map(r => r.nomor_perkara)
 })
-
-const monthMap = { jan:0, feb:1, mar:2, apr:3, mei:4, jun:5, jul:6, agu:7, sep:8, okt:9, nov:10, des:11, may:4, aug:7, oct:9, dec:11 }
-
-function parseTanggal(s) {
-    if (!s) return null
-    const parts = s.trim().split(/\s+/)
-    if (parts.length < 3) return null
-    const day = parseInt(parts[0])
-    const mon = monthMap[parts[1].toLowerCase().slice(0, 3)]
-    const year = parseInt(parts[2])
-    if (mon === undefined || isNaN(day) || isNaN(year)) return null
-    return new Date(year, mon, day)
-}
 
 const avgDaysByType = computed(() => {
     // Filter by sipp_status === 'Minutasi' dan 3 tahun terakhir
@@ -745,7 +723,7 @@ onMounted(() => {
 
 .ns-c-avg-sub {
     margin-top: 10px;
-    font-size: 9px;
+    font-size: 10.5px;
     color: var(--text3);
     font-weight: 500;
     text-align: center;

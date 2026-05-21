@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const {
   createInitialSyncProgress,
   applyFetchProgress,
+  startDetailCacheProgress,
+  applyDetailCacheProgress,
   completeSyncProgress
 } = require('./sippProgress');
 
@@ -58,4 +60,47 @@ test('complete progress reports all pages processed while preserving fetched cou
   assert.equal(complete.fetchedCount, 197);
   assert.equal(complete.savedCount, 197);
   assert.match(complete.message, /10 dari 10 halaman/i);
+});
+
+test('detail cache progress shows sync is still refreshing jadwal and putusan', () => {
+  const current = applyFetchProgress(createInitialSyncProgress({ isFirstSync: false }), {
+    page: 10,
+    maxPages: 10,
+    fetchedCount: 200,
+    status: 'page-complete'
+  });
+
+  const next = startDetailCacheProgress(current, { total: 100 });
+
+  assert.equal(next.inProgress, true);
+  assert.equal(next.phase, 'caching-details');
+  assert.equal(next.current, 0);
+  assert.equal(next.total, 100);
+  assert.equal(next.unit, 'perkara');
+  assert.equal(next.fetchedCount, 200);
+  assert.match(next.message, /jadwal dan putusan/i);
+  assert.match(next.message, /100 perkara/i);
+});
+
+test('detail cache progress advances by cached perkara count', () => {
+  const current = startDetailCacheProgress(createInitialSyncProgress({ isFirstSync: false }), { total: 100 });
+
+  const next = applyDetailCacheProgress(current, {
+    current: 12,
+    total: 100,
+    nomorPerkara: '12/Pid.B/2026/PN Ntn',
+    jadwalOk: 10,
+    putusanOk: 8,
+    failed: 2
+  });
+
+  assert.equal(next.phase, 'caching-details');
+  assert.equal(next.current, 12);
+  assert.equal(next.total, 100);
+  assert.equal(next.unit, 'perkara');
+  assert.match(next.message, /12 dari 100 perkara/i);
+  assert.match(next.message, /12\/Pid\.B\/2026\/PN Ntn/i);
+  assert.equal(next.detailCache.jadwalOk, 10);
+  assert.equal(next.detailCache.putusanOk, 8);
+  assert.equal(next.detailCache.failed, 2);
 });

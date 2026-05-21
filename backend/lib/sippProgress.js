@@ -56,6 +56,52 @@ function startSaveProgress(currentProgress) {
   };
 }
 
+function startDetailCacheProgress(currentProgress, { total = 0 } = {}) {
+  return {
+    ...currentProgress,
+    inProgress: true,
+    phase: 'caching-details',
+    current: 0,
+    total,
+    unit: 'perkara',
+    detailCache: {
+      jadwalOk: 0,
+      jadwalFailed: 0,
+      putusanOk: 0,
+      putusanFailed: 0,
+      failed: 0
+    },
+    message: total > 0
+      ? `Memperbarui cache jadwal dan putusan untuk ${total} perkara terbaru...`
+      : 'Memperbarui cache jadwal dan putusan...'
+  };
+}
+
+function applyDetailCacheProgress(currentProgress, progress = {}) {
+  const total = Number(progress.total ?? currentProgress.total ?? 0);
+  const current = Math.min(Number(progress.current ?? 0), total || Number(progress.current ?? 0));
+  const detailCache = {
+    jadwalOk: Number(progress.jadwalOk ?? currentProgress.detailCache?.jadwalOk ?? 0),
+    jadwalFailed: Number(progress.jadwalFailed ?? currentProgress.detailCache?.jadwalFailed ?? 0),
+    putusanOk: Number(progress.putusanOk ?? currentProgress.detailCache?.putusanOk ?? 0),
+    putusanFailed: Number(progress.putusanFailed ?? currentProgress.detailCache?.putusanFailed ?? 0),
+    failed: Number(progress.failed ?? currentProgress.detailCache?.failed ?? 0)
+  };
+  const suffix = progress.nomorPerkara ? `: ${progress.nomorPerkara}` : '';
+
+  return {
+    ...currentProgress,
+    inProgress: true,
+    phase: 'caching-details',
+    current,
+    total,
+    unit: 'perkara',
+    detailCache,
+    message: `Memperbarui cache jadwal dan putusan ${current} dari ${total} perkara${suffix}`,
+    error: null
+  };
+}
+
 function completeSyncProgress(currentProgress, { savedCount, dbCount }) {
   const total = currentProgress.total || currentProgress.maxPages || 1;
   const fetchedCount = currentProgress.fetchedCount ?? savedCount ?? 0;
@@ -92,6 +138,8 @@ module.exports = {
   createInitialSyncProgress,
   applyFetchProgress,
   startSaveProgress,
+  startDetailCacheProgress,
+  applyDetailCacheProgress,
   completeSyncProgress,
   failSyncProgress
 };
