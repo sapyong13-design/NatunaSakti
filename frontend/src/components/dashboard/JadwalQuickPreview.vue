@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { parseDateIndo } from '../../lib/date'
+import { getJadwalSidang } from '../../lib/api'
 import Icon from '../Icon.vue'
 
 const props = defineProps({
@@ -10,9 +11,16 @@ const props = defineProps({
     y: { type: Number, default: 0 }
 })
 
-const emit = defineEmits(['close'])
-
 const tooltipRef = ref(null)
+const fetchedJadwal = ref([])
+const loadingJadwal = ref(false)
+const jadwalError = ref('')
+let requestToken = 0
+
+const jadwalRows = computed(() => {
+    if (props.row?.jadwal?.length) return props.row.jadwal
+    return fetchedJadwal.value
+})
 
 // Check if today is a holiday (simplified - could be connected to API)
 const isHoliday = computed(() => {
@@ -42,12 +50,12 @@ const isHoliday = computed(() => {
 
 // Get next upcoming jadwal (today or future)
 const nextJadwal = computed(() => {
-    if (!props.row?.jadwal?.length) return null
+    if (!jadwalRows.value.length) return null
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    const upcoming = props.row.jadwal
+    const upcoming = jadwalRows.value
         .filter(j => {
             const jadwalDate = parseDateIndo(j.tanggal)
             return jadwalDate && jadwalDate >= today
@@ -60,6 +68,29 @@ const nextJadwal = computed(() => {
 
     return upcoming[0] || null
 })
+
+watch(
+    () => [props.show, props.row?.nomor_perkara],
+    async ([show, nomorPerkara]) => {
+        const token = ++requestToken
+        fetchedJadwal.value = []
+        jadwalError.value = ''
+
+        if (!show || !nomorPerkara || props.row?.jadwal?.length) return
+
+        loadingJadwal.value = true
+        try {
+            const result = await getJadwalSidang(nomorPerkara)
+            if (token !== requestToken) return
+            fetchedJadwal.value = Array.isArray(result?.jadwal) ? result.jadwal : []
+        } catch (err) {
+            if (token !== requestToken) return
+            jadwalError.value = err?.message || 'Gagal mengambil jadwal sidang'
+        } finally {
+            if (token === requestToken) loadingJadwal.value = false
+        }
+    }
+)
 
 // Check if jadwal is today
 const isToday = computed(() => {
@@ -132,6 +163,8 @@ const calendarData = computed(() => {
     }
 })
 
+const jadwalCount = computed(() => jadwalRows.value.length)
+
 // Position tooltip to stay within viewport
 const tooltipStyle = computed(() => {
     const style = { left: `${props.x}px`, top: `${props.y + 10}px` }
@@ -167,6 +200,14 @@ function formatWaktu(waktu) {
     return waktu.slice(0, 5) // HH:MM
 }
 
+function getWaktu(jadwal) {
+    return jadwal?.waktu || jadwal?.jam || ''
+}
+
+function getRuang(jadwal) {
+    return jadwal?.ruang || jadwal?.ruangan || ''
+}
+
 // Get para pihak truncated for preview
 const paraPihakPreview = computed(() => {
     if (!props.row?.para_pihak) return null
@@ -175,11 +216,6 @@ const paraPihakPreview = computed(() => {
     return text.substring(0, 40) + '…'
 })
 
-function handleViewFullJadwal() {
-    emit('close')
-    // Could emit an event to show full jadwal modal
-    console.log('View full jadwal for:', props.row?.nomor_perkara)
-}
 </script>
 
 <template>
@@ -200,58 +236,46 @@ function handleViewFullJadwal() {
                     '--urgency-color': urgencyColor
                 }"
             >
-                <!-- Gold Wax Seal Decoration -->
-                <div class="ns-jadwal-wax-seal">
-                    <span class="ns-wax-seal-text">PN</span>
-                </div>
-
-                <!-- Damask Pattern Overlay -->
-                <div class="ns-jadwal-pattern"></div>
-
                 <div v-if="nextJadwal" class="ns-jadwal-preview-content">
-                    <!-- Header with status -->
                     <div class="ns-jadwal-preview-header">
                         <div class="ns-jadwal-status-indicator">
                             <Icon :name="jadwalStatus?.icon || 'gavel'" :size="12" class="ns-status-icon" />
                         </div>
-                        <span class="ns-jadwal-preview-title">Jadwal Sidang</span>
-                        <span class="ns-jadwal-preview-status" :style="{ color: jadwalStatus?.color }">
-                            {{ jadwalStatus?.label }}
-                        </span>
+                        <div class="ns-jadwal-title-stack">
+                            <span class="ns-jadwal-preview-title">Jadwal Sidang</span>
+                            <span class="ns-jadwal-case-number">{{ row?.nomor_perkara || '' }}</span>
+                        </div>
+                        <div class="ns-jadwal-status-stack">
+                            <span class="ns-jadwal-preview-status" :style="{ color: jadwalStatus?.color }">
+                                {{ jadwalStatus?.label }}
+                            </span>
+                            <span class="ns-jadwal-count">{{ jadwalCount }} jadwal</span>
+                        </div>
                     </div>
 
-                    <!-- Body with asymmetrical layout -->
                     <div class="ns-jadwal-preview-body">
-                        <!-- Left column: Calendar icon with date -->
                         <div class="ns-jadwal-date-box">
                             <div v-if="calendarData" class="ns-calendar-icon">
                                 <span class="ns-calendar-day">{{ calendarData.day }}</span>
                                 <span class="ns-calendar-date">{{ calendarData.date }}</span>
+                                <span class="ns-calendar-month">{{ calendarData.month }}</span>
                             </div>
                         </div>
 
-                        <!-- Right column: Details -->
                         <div class="ns-jadwal-details">
-                            <!-- Case number with engraved treatment -->
-                            <div class="ns-jadwal-case-number">
-                                {{ row?.nomor_perkara || '' }}
-                            </div>
-
-                            <!-- Time and Room in monospace boxes -->
+                            <div class="ns-jadwal-full-date">{{ getJadwalDate(nextJadwal) }}</div>
                             <div class="ns-jadwal-meta-row">
-                                <span class="ns-jadwal-time-box">{{ formatWaktu(nextJadwal.waktu) }}</span>
-                                <span v-if="nextJadwal.ruang" class="ns-jadwal-room-box">
+                                <span class="ns-jadwal-time-box">{{ formatWaktu(getWaktu(nextJadwal)) }}</span>
+                                <span v-if="getRuang(nextJadwal)" class="ns-jadwal-room-box">
                                     <Icon name="location" :size="10" />
-                                    {{ nextJadwal.ruang }}
+                                    {{ getRuang(nextJadwal) }}
                                 </span>
                             </div>
 
-                            <!-- Agenda with italic serif -->
                             <div v-if="nextJadwal.agenda" class="ns-jadwal-agenda">
                                 {{ nextJadwal.agenda }}
                             </div>
 
-                            <!-- Countdown for urgent -->
                             <div v-if="isWithin24Hours && countdownHours" class="ns-jadwal-countdown">
                                 <div class="ns-countdown-bar" :style="{ background: `linear-gradient(90deg, ${urgencyColor}, ${urgencyColor}33)` }"></div>
                                 <span class="ns-countdown-text">
@@ -265,27 +289,23 @@ function handleViewFullJadwal() {
                                 <Icon name="alert" :size="10" />
                                 <span>Hari Libur</span>
                             </div>
-
-                            <!-- Para pihak preview -->
-                            <div v-if="paraPihakPreview" class="ns-jadwal-pihak" :title="row.para_pihak">
-                                {{ paraPihakPreview }}
-                            </div>
                         </div>
                     </div>
 
-                    <!-- Footer with detail link -->
-                    <div class="ns-jadwal-preview-footer">
-                        <button class="ns-jadwal-detail-link" @click="handleViewFullJadwal">
-                            <span>Lihat jadwal lengkap</span>
-                            <Icon name="arrowRight" :size="11" />
-                        </button>
+                    <div v-if="paraPihakPreview" class="ns-jadwal-pihak" :title="row.para_pihak">
+                        {{ paraPihakPreview }}
                     </div>
                 </div>
 
                 <!-- Empty state -->
+                <div v-else-if="loadingJadwal" class="ns-jadwal-preview-empty">
+                    <Icon name="sync" :size="20" />
+                    <span>Mengambil jadwal sidang...</span>
+                </div>
+
                 <div v-else class="ns-jadwal-preview-empty">
                     <Icon name="calendar" :size="20" />
-                    <span>Tidak ada jadwal sidang</span>
+                    <span>{{ jadwalError || 'Tidak ada jadwal sidang' }}</span>
                 </div>
             </div>
         </Transition>
@@ -293,85 +313,40 @@ function handleViewFullJadwal() {
 </template>
 
 <style scoped>
-/* Main container with embossed paper texture */
 .ns-jadwal-preview {
     position: fixed;
-    width: min(360px, calc(100vw - 24px));
-    min-width: min(300px, calc(100vw - 24px));
+    width: min(380px, calc(100vw - 24px));
+    min-width: min(320px, calc(100vw - 24px));
     max-width: calc(100vw - 24px);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 10px;
     border-left: 4px solid var(--status-border, var(--accent));
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.7),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.05),
-        0 12px 48px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18);
     z-index: var(--z-dropdown, 1200);
     overflow: hidden;
-    pointer-events: auto;
-    cursor: pointer;
-    transition: transform 200ms cubic-bezier(0.32, 0.72, 0, 1), box-shadow 200ms ease;
-}
-
-/* Damask pattern overlay - very subtle legal motif */
-.ns-jadwal-pattern {
-    position: absolute;
-    inset: 0;
-    opacity: 0.025;
-    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0c-2 8-8 14-16 16 8 2 14 8 16 16 2-8 8-14 16-16-8-2-14-8-16-16zm0 60c2-8 8-14 16-16-8-2-14-8-16-16-2 8-8 14-16 16 8 2 14 8 16 16z' fill='%234a1c1b' fill-opacity='1'/%3E%3C/svg%3E");
     pointer-events: none;
-    z-index: 0;
-}
-
-[data-mode="dark"] .ns-jadwal-pattern {
-    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0c-2 8-8 14-16 16 8 2 14 8 16 16 2-8 8-14 16-16-8-2-14-8-16-16zm0 60c2-8 8-14 16-16-8-2-14-8-16-16-2 8-8 14-16 16 8 2 14 8 16 16z' fill='%23d4b896' fill-opacity='1'/%3E%3C/svg%3E");
-}
-
-/* Gold wax seal decoration */
-.ns-jadwal-wax-seal {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #e5c07b, #b8943f, #8b6f3e);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    display: grid;
-    place-items: center;
-    z-index: 10;
-    border: 2px solid rgba(184, 148, 63, 0.3);
-}
-
-.ns-wax-seal-text {
-    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
-    font-size: 11px;
-    font-weight: 700;
-    color: #4a1c1b;
-    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3);
 }
 
 .ns-jadwal-preview-content {
-    padding: 16px;
+    padding: 14px;
     position: relative;
-    z-index: 1;
 }
 
-/* Header with status indicator */
 .ns-jadwal-preview-header {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    padding-bottom: 12px;
+    align-items: flex-start;
+    gap: 9px;
+    padding-bottom: 10px;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .ns-jadwal-status-indicator {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    flex: 0 0 26px;
     display: grid;
     place-items: center;
     background: var(--accentSoft);
@@ -379,49 +354,64 @@ function handleViewFullJadwal() {
 }
 
 .ns-status-icon {
-    animation: gavelTap 2s ease-in-out infinite;
+    animation: none;
 }
 
-@keyframes gavelTap {
-    0%, 100% { transform: rotate(0deg); }
-    10% { transform: rotate(-15deg); }
-    20% { transform: rotate(0deg); }
+.ns-jadwal-title-stack,
+.ns-jadwal-status-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.ns-jadwal-title-stack {
+    flex: 1;
+}
+
+.ns-jadwal-status-stack {
+    align-items: flex-end;
+    text-align: right;
+    flex: 0 0 auto;
 }
 
 .ns-jadwal-preview-title {
-    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 700;
     color: var(--text);
-    flex: 1;
     letter-spacing: 0;
 }
 
 .ns-jadwal-preview-status {
-    font-size: 10.5px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
 }
 
-/* Body with asymmetrical layout */
+.ns-jadwal-count {
+    font-size: 10.5px;
+    color: var(--text3);
+    white-space: nowrap;
+}
+
 .ns-jadwal-preview-body {
     display: grid;
-    grid-template-columns: 70px 1fr;
-    gap: 14px;
+    grid-template-columns: 58px 1fr;
+    gap: 12px;
+    align-items: start;
 }
 
-/* Calendar icon with highlighted date */
 .ns-jadwal-date-box {
     display: flex;
     align-items: flex-start;
 }
 
 .ns-calendar-icon {
-    width: 56px;
-    height: 62px;
+    width: 54px;
+    height: 68px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 9px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -437,55 +427,64 @@ function handleViewFullJadwal() {
     top: 0;
     left: 0;
     right: 0;
-    height: 18px;
+    height: 17px;
     background: var(--accent);
-    border-radius: 8px 8px 0 0;
+    border-radius: 9px 9px 0 0;
 }
 
 .ns-calendar-day {
     font-size: 10px;
     font-weight: 700;
-    color: var(--text3);
+    color: var(--surface);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-top: 4px;
+    letter-spacing: 0;
+    position: relative;
+    z-index: 1;
+    margin-bottom: 7px;
 }
 
 .ns-calendar-date {
-    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
-    font-size: 20px;
+    font-size: 22px;
     font-weight: 800;
     color: var(--accent);
     line-height: 1;
 }
 
-/* Details column */
+.ns-calendar-month {
+    margin-top: 3px;
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--text3);
+    letter-spacing: 0;
+}
+
 .ns-jadwal-details {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 7px;
+    min-width: 0;
 }
 
-/* Case number with engraved treatment */
 .ns-jadwal-case-number {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text);
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--text2);
     letter-spacing: 0;
-    padding: 4px 8px;
-    background: var(--surface2);
-    border-radius: 4px;
-    border: 1px solid var(--border);
-    text-shadow:
-        0 1px 1px rgba(74, 28, 27, 0.15),
-        0 0 0 1px rgba(74, 28, 27, 0.05);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-/* Meta row with time and room */
+.ns-jadwal-full-date {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+}
+
 .ns-jadwal-meta-row {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
 }
 
@@ -494,9 +493,9 @@ function handleViewFullJadwal() {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 4px 8px;
+    padding: 4px 7px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 600;
     border-radius: 6px;
     border: 1px solid var(--border);
@@ -509,19 +508,26 @@ function handleViewFullJadwal() {
 }
 
 .ns-jadwal-room-box {
-    background: var(--warnSoft);
-    border-color: var(--warn);
-    color: var(--warn);
+    max-width: 190px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: var(--surface2);
+    border-color: var(--border);
+    color: var(--text2);
 }
 
-/* Agenda with italic serif */
 .ns-jadwal-agenda {
     font-family: inherit;
     font-style: normal;
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 600;
     color: var(--text2);
-    line-height: 1.45;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 /* Countdown bar for urgency */
@@ -570,6 +576,9 @@ function handleViewFullJadwal() {
 
 /* Para pihak preview */
 .ns-jadwal-pihak {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
     font-size: 11px;
     color: var(--text3);
     font-style: italic;
@@ -578,45 +587,6 @@ function handleViewFullJadwal() {
     white-space: nowrap;
 }
 
-/* Footer with detail link */
-.ns-jadwal-preview-footer {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border);
-}
-
-.ns-jadwal-detail-link {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    width: 100%;
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--text3);
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    border-bottom: 1px dotted var(--accent);
-    padding-bottom: 2px;
-    transition: all 180ms ease;
-}
-
-.ns-jadwal-detail-link:hover {
-    color: var(--accent);
-    border-bottom-style: solid;
-}
-
-.ns-jadwal-detail-link svg {
-    transition: transform 180ms ease;
-}
-
-.ns-jadwal-detail-link:hover svg {
-    transform: translateX(3px);
-}
-
-/* Empty state */
 .ns-jadwal-preview-empty {
     display: flex;
     flex-direction: column;
@@ -637,12 +607,12 @@ function handleViewFullJadwal() {
 
 /* Mode-specific styles */
 [data-mode="light"] .ns-jadwal-preview {
-    background: linear-gradient(135deg, #ffffff 0%, #faf8f5 100%);
+    background: #ffffff;
     border-color: rgba(74, 28, 27, 0.15);
 }
 
 [data-mode="dark"] .ns-jadwal-preview {
-    background: linear-gradient(135deg, #242020 0%, #1a1816 100%);
+    background: #242020;
     border-color: rgba(212, 184, 150, 0.15);
 }
 
@@ -653,43 +623,16 @@ function handleViewFullJadwal() {
 
 @keyframes todayPulse {
     0%, 100% {
-        box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.7),
-            inset 0 -1px 0 rgba(0, 0, 0, 0.05),
-            0 12px 48px rgba(0, 0, 0, 0.15),
-            0 0 0 0 rgba(245, 158, 11, 0.3);
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18), 0 0 0 0 rgba(245, 158, 11, 0.3);
     }
     50% {
-        box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.7),
-            inset 0 -1px 0 rgba(0, 0, 0, 0.05),
-            0 12px 48px rgba(0, 0, 0, 0.15),
-            0 0 0 8px rgba(245, 158, 11, 0);
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18), 0 0 0 8px rgba(245, 158, 11, 0);
     }
 }
 
-/* Hover lift effect */
 .ns-jadwal-preview:hover {
-    transform: translateY(-4px);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.7),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.05),
-        0 16px 56px rgba(0, 0, 0, 0.2);
-}
-
-/* Ripple effect on click */
-.ns-jadwal-preview:active::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: radial-gradient(circle at var(--click-x, 50%) var(--click-y, 50%), rgba(74, 28, 27, 0.1), transparent 60%);
-    animation: rippleEffect 600ms ease-out forwards;
-}
-
-@keyframes rippleEffect {
-    from { opacity: 1; transform: scale(0.8); }
-    to { opacity: 0; transform: scale(1.5); }
+    transform: translateY(-2px);
+    box-shadow: 0 22px 52px rgba(0, 0, 0, 0.22);
 }
 
 /* Status variant colors */

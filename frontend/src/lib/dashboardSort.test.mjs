@@ -35,6 +35,20 @@ test('sortDashboardRows sorts same-register-date rows by numeric case number des
     ])
 })
 
+test('sortDashboardRows treats case number as a number, not text', () => {
+    const rows = [
+        { nomor_perkara: '9/Pid.Sus/2026/PN Ntn', sipp_tanggal_register: '05 Mei 2026' },
+        { nomor_perkara: '100/Pid.Sus/2026/PN Ntn', sipp_tanggal_register: '05 Mei 2026' },
+        { nomor_perkara: '28/Pid.Sus/2026/PN Ntn', sipp_tanggal_register: '05 Mei 2026' }
+    ]
+
+    assert.deepEqual(sortDashboardRows(rows).map(row => row.nomor_perkara), [
+        '100/Pid.Sus/2026/PN Ntn',
+        '28/Pid.Sus/2026/PN Ntn',
+        '9/Pid.Sus/2026/PN Ntn'
+    ])
+})
+
 test('sortDashboardRows does not mutate the input rows', () => {
     const rows = [
         { nomor_perkara: '30/Pid.Sus/2026/PN Ntn', sipp_tanggal_register: '05 Mei 2026' },
