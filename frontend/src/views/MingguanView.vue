@@ -25,15 +25,6 @@ const historyOpen = ref(false)
 const historyLoading = ref(false)
 const historyItems = ref([])
 
-function formatDateForFilename(s) {
-    if (!s) return ''
-    const d = new Date(s)
-    if (isNaN(d.getTime())) return s
-    const dd = String(d.getDate()).padStart(2, '0')
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    return `${dd}-${mm}-${d.getFullYear()}`
-}
-
 async function fetchData() {
     if (!start.value || !end.value) {
         errorMessage.value = 'Pilih rentang tanggal terlebih dahulu'
@@ -62,15 +53,11 @@ async function handleExport() {
     exporting.value = true
     errorMessage.value = ''
     try {
-        const startStr = formatDateForFilename(start.value)
-        const endStr   = formatDateForFilename(end.value)
-        const ext      = format.value === 'pdf' ? 'pdf' : 'docx'
-        const filename = `Akurasi_${jenisCanonical.value}_${startStr}_sd_${endStr}.${ext}`
-        const blob     = await downloadLaporanMingguan(jenisCanonical.value, start.value, end.value, format.value)
-        const url      = URL.createObjectURL(blob)
+        const download = await downloadLaporanMingguan(jenisCanonical.value, start.value, end.value, format.value)
+        const url      = URL.createObjectURL(download.blob)
         const a        = document.createElement('a')
         a.href         = url
-        a.download     = filename
+        a.download     = download.filename
         a.click()
         URL.revokeObjectURL(url)
         await loadHistory()

@@ -2,7 +2,11 @@ const assert = require('assert');
 const test = require('node:test');
 const Database = require('better-sqlite3');
 const PizZip = require('pizzip');
-const { generateLaporanBulanan, generateLaporanMingguan } = require('./laporanService');
+const {
+    generateLaporanBulanan,
+    generateLaporanMingguan,
+    generateLaporanMingguanGabungan
+} = require('./laporanService');
 
 function createDb() {
     const db = new Database(':memory:');
@@ -177,7 +181,7 @@ test('laporan bulanan mengisi row 3 denda dan row 4 anonimisasi dari putusan', (
     assert.match(row3, /✓/);
     assert.doesNotMatch(row3, /âœ“/);
     assert.match(row4, /11\/Pid\.B\/2026\/PN Ntn/);
-    assert.doesNotMatch(row4, /12\/Pid\.B\/2026\/PN Ntn/);
+    assert.match(row4, /12\/Pid\.B\/2026\/PN Ntn/);
 });
 
 test('laporan mingguan membatasi row 3 dan row 4 ke periode laporan', () => {
@@ -208,6 +212,38 @@ test('laporan mingguan membatasi row 3 dan row 4 ke periode laporan', () => {
     assert.doesNotMatch(row3, /22\/Pid\.B\/2026\/PN Ntn/);
     assert.match(row4, /21\/Pid\.B\/2026\/PN Ntn/);
     assert.doesNotMatch(row4, /22\/Pid\.B\/2026\/PN Ntn/);
+});
+
+test('laporan mingguan pidana tidak memasukkan perkara anonimisasi yang hanya bersidang', () => {
+    const db = createDb();
+    insertPerkara(db, '18/Pid.Sus/2026/PN Ntn', 'Persidangan', {
+        sipp_tanggal_register: '19 Feb 2026',
+        para_pihak: 'Penuntut Umum:KARYA SO IMMANUEL GORT, S.H., M.H.Terdakwa:Disamarkan'
+    });
+    db.prepare(`
+        INSERT INTO jadwal_sidang (nomor_perkara, nomor, tanggal)
+        VALUES ('18/Pid.Sus/2026/PN Ntn', 1, 'Rabu, 20 Mei 2026')
+    `).run();
+
+    const rows = docRows(generateLaporanMingguan(db, 'Pidana', '2026-05-18', '2026-05-24'));
+    const row4 = rows.find(row => row.no === '4').text;
+
+    assert.doesNotMatch(row4, /18\/Pid\.Sus\/2026\/PN Ntn/);
+});
+
+test('laporan mingguan gabungan memecah range panjang per minggu kerja', () => {
+    const db = createDb();
+    const buffer = generateLaporanMingguanGabungan(db, 'Pidana', '2026-05-04', '2026-05-29');
+    const xml = docXml(buffer);
+    const text = cellText(xml);
+
+    assert.match(text, /MINGGU KE I/);
+    assert.match(text, /MINGGU KE II/);
+    assert.match(text, /MINGGU KE III/);
+    assert.match(text, /MINGGU KE IV/);
+    assert.match(xml, /<w:t>13<\/w:t>/);
+    assert.doesNotMatch(xml, /<w:t>15<\/w:t>/);
+    assert.equal((xml.match(/w:type="page"/g) || []).length, 3);
 });
 
 test('laporan bulanan membaca tanggal putusan dari teks jika kolom tanggal berisi placeholder', () => {
@@ -258,7 +294,7 @@ test('laporan bulanan memasukkan perkara register yang pihaknya disamarkan', () 
     assert.match(row4, /24\/Pid\.Sus\/2026\/PN Ntn/);
 });
 
-test('laporan bulanan memasukkan perkara bersidang yang pihaknya disamarkan', () => {
+test('laporan bulanan pidana tidak memasukkan perkara anonimisasi yang hanya bersidang', () => {
     const db = createDb();
     insertPerkara(db, '17/Pid.Sus/2026/PN Ntn', 'Persidangan', {
         sipp_tanggal_register: '19 Feb 2026',
@@ -272,7 +308,7 @@ test('laporan bulanan memasukkan perkara bersidang yang pihaknya disamarkan', ()
     const rows = docRows(generateLaporanBulanan(db, 'Pidana', 4, 2026, { end: '2026-04-30' }));
     const row4 = rows.find(row => row.no === '4').text;
 
-    assert.match(row4, /17\/Pid\.Sus\/2026\/PN Ntn/);
+    assert.doesNotMatch(row4, /17\/Pid\.Sus\/2026\/PN Ntn/);
 });
 
 test('row 2 pidana kosong jika hanya ada sidang perkara non-tilang', () => {
@@ -570,6 +606,14 @@ test('laporan bulanan perikanan tidak mengisi row kosong dengan data pidana', ()
         assert.doesNotMatch(row, /1\/Pid\.Sus-PRK\/2026\/PN Ntn/);
         assert.match(row, new RegExp(`^${no}(?: -)+$`));
     }
+});
+
+test('laporan bulanan perikanan memakai format tanda tangan wakil ketua', () => {
+    const db = createDb();
+    const xml = docXml(generateLaporanBulanan(db, 'Perikanan', 5, 2026, { end: '2026-05-29' }));
+    const text = cellText(xml);
+
+    assert.match(text, /Wakil Ketua Pengadilan Negeri Natuna/i);
 });
 
 test('row 5 kosong tidak mempertahankan tinggi besar bawaan template', () => {

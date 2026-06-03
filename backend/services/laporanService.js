@@ -13,6 +13,7 @@ const {
     isDatePartsWithinPeriod
 } = require('../lib/monthlyReportPeriod')
 const { compareRowsByRegisterDate } = require('../lib/reportSort')
+const { isHoliday } = require('../lib/holidays')
 
 const BULAN_NAMES = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
                      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
@@ -61,6 +62,76 @@ function parseJadwalDateFull(dateStr) {
     const year = parseInt(parts[2])
     if (isNaN(day) || monIdx === undefined || isNaN(year)) return null
     return new Date(year, monIdx, day)
+}
+
+function parseIsoDateLocal(dateStr) {
+    const match = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (!match) return null
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+}
+
+function formatIsoDateLocal(date) {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+}
+
+function addDays(date, days) {
+    const next = new Date(date)
+    next.setDate(next.getDate() + days)
+    return next
+}
+
+function isWeekend(date) {
+    const day = date.getDay()
+    return day === 0 || day === 6
+}
+
+function isNonWorkingDay(date) {
+    return isWeekend(date) || isHoliday(formatIsoDateLocal(date))
+}
+
+function nextWorkday(date) {
+    let next = new Date(date)
+    while (isNonWorkingDay(next)) next = addDays(next, 1)
+    return next
+}
+
+function previousWorkday(date) {
+    let prev = new Date(date)
+    while (isNonWorkingDay(prev)) prev = addDays(prev, -1)
+    return prev
+}
+
+function workWeekEnd(date) {
+    return previousWorkday(addDays(date, 5 - date.getDay()))
+}
+
+function splitIntoWorkWeeks(startDateStr, endDateStr) {
+    const rawStart = parseIsoDateLocal(startDateStr)
+    const rawEnd = parseIsoDateLocal(endDateStr)
+    if (!rawStart || !rawEnd || rawStart > rawEnd) return []
+
+    const end = previousWorkday(rawEnd)
+    let cursor = nextWorkday(rawStart)
+    const periods = []
+
+    while (cursor <= end) {
+        const weekEnd = workWeekEnd(cursor)
+        if (weekEnd < cursor) {
+            cursor = nextWorkday(addDays(addDays(cursor, 5 - cursor.getDay()), 1))
+            continue
+        }
+        const periodEnd = weekEnd < end ? weekEnd : end
+        periods.push({
+            start: formatIsoDateLocal(cursor),
+            end: formatIsoDateLocal(periodEnd)
+        })
+        cursor = nextWorkday(addDays(periodEnd, 1))
+    }
+
+    return periods
 }
 
 // Parse "Selasa, 27 Jan. 2026" → { month: 1, year: 2026 }
@@ -471,7 +542,7 @@ function getPutusanReportLists(db, jenis, isInPeriod) {
             .sort(byRegisterDate)
             .map(row => row.nomor_perkara),
         anonimisasi: rows
-            .filter(row => isRowInPeriod(row, 'minutasi') && row.sipp_status === 'Minutasi' && isDisamarkan(row))
+            .filter(row => isRowInPeriod(row, 'minutasi') && (jenis === 'Pidana' || row.sipp_status === 'Minutasi') && isDisamarkan(row))
             .sort(byRegisterDate)
             .map(row => row.nomor_perkara)
     }
@@ -600,7 +671,7 @@ function generateLaporanBulanan(db, jenis, bulan, tahun, options = {}) {
         perkaraMap,
         putusanLists.anonimisasi,
         nomorList1.filter(nomor => isPerkaraDisamarkan(perkaraMap.get(nomor))),
-        nomorList2.filter(nomor => isPerkaraDisamarkan(perkaraMap.get(nomor)))
+        ...(jenis === 'Pidana' ? [] : [nomorList2.filter(nomor => isPerkaraDisamarkan(perkaraMap.get(nomor)))])
     )
     const nomorListBeritaAcara = jenis === 'Perdata'
         ? mergeNomorListsByRegister(perkaraMap, nomorList2, nomorListAnonimisasi)
@@ -851,7 +922,7 @@ function generateLaporanMingguan(db, jenis, startDateStr, endDateStr) {
         perkaraMap,
         putusanLists.anonimisasi,
         nomorList1.filter(nomor => isPerkaraDisamarkan(perkaraMap.get(nomor))),
-        nomorList2.filter(nomor => isPerkaraDisamarkan(perkaraMap.get(nomor)))
+        ...(jenis === 'Pidana' ? [] : [nomorList2.filter(nomor => isPerkaraDisamarkan(perkaraMap.get(nomor)))])
     )
     const nomorListBeritaAcara = jenis === 'Perdata'
         ? mergeNomorListsByRegister(perkaraMap, nomorList2, nomorListAnonimisasi)
@@ -965,4 +1036,65 @@ function generateLaporanMingguan(db, jenis, startDateStr, endDateStr) {
     return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' })
 }
 
-module.exports = { generateLaporanBulanan, generateLaporanMingguan, convertDocxToPdf }
+function splitDocumentBody(xml) {
+    const bodyStartTag = '<w:body>'
+    const bodyEndTag = '</w:body>'
+    const bodyStart = xml.indexOf(bodyStartTag)
+    const bodyEnd = xml.lastIndexOf(bodyEndTag)
+    if (bodyStart === -1 || bodyEnd === -1) {
+        throw new Error('Struktur DOCX tidak valid: body tidak ditemukan')
+    }
+
+    const prefix = xml.slice(0, bodyStart + bodyStartTag.length)
+    const body = xml.slice(bodyStart + bodyStartTag.length, bodyEnd)
+    const suffix = xml.slice(bodyEnd)
+    const sectStart = body.lastIndexOf('<w:sectPr')
+
+    if (sectStart === -1) {
+        return { prefix, content: body, sectPr: '', suffix }
+    }
+
+    return {
+        prefix,
+        content: body.slice(0, sectStart),
+        sectPr: body.slice(sectStart),
+        suffix
+    }
+}
+
+function pageBreakXml() {
+    return '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
+}
+
+function mergeWeeklyDocxBuffers(buffers) {
+    if (buffers.length === 0) {
+        throw new Error('Tidak ada periode minggu kerja dalam rentang yang dipilih')
+    }
+    if (buffers.length === 1) return buffers[0]
+
+    const baseZip = new PizZip(buffers[0])
+    const first = splitDocumentBody(baseZip.files['word/document.xml'].asText())
+    const contents = [first.content]
+
+    for (const buffer of buffers.slice(1)) {
+        const zip = new PizZip(buffer)
+        const body = splitDocumentBody(zip.files['word/document.xml'].asText())
+        contents.push(pageBreakXml(), body.content)
+    }
+
+    baseZip.file('word/document.xml', `${first.prefix}${contents.join('')}${first.sectPr}${first.suffix}`)
+    return baseZip.generate({ type: 'nodebuffer', compression: 'DEFLATE' })
+}
+
+function generateLaporanMingguanGabungan(db, jenis, startDateStr, endDateStr) {
+    const periods = splitIntoWorkWeeks(startDateStr, endDateStr)
+    const buffers = periods.map(period => generateLaporanMingguan(db, jenis, period.start, period.end))
+    return mergeWeeklyDocxBuffers(buffers)
+}
+
+module.exports = {
+    generateLaporanBulanan,
+    generateLaporanMingguan,
+    generateLaporanMingguanGabungan,
+    convertDocxToPdf
+}

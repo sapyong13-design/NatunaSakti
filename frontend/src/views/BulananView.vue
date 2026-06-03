@@ -7,9 +7,6 @@ import ReportTable from '../components/report/ReportTable.vue'
 import ReportHistoryModal from '../components/report/ReportHistoryModal.vue'
 import { getPerkaraLaporanBulanan, downloadLaporanBulanan, getLaporanHistory, deleteLaporanHistory } from '../lib/api'
 
-const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-                    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
-
 const route = useRoute()
 
 const jenisCanonical = computed(() => {
@@ -63,13 +60,11 @@ async function handleExport() {
     exporting.value = true
     errorMessage.value = ''
     try {
-        const filenameBase = `Akurasi_${jenisCanonical.value}_${BULAN_NAMA[bulan.value - 1]}_${tahun.value}`
-        const ext  = format.value === 'pdf' ? 'pdf' : 'docx'
-        const blob = await downloadLaporanBulanan(jenisCanonical.value, bulan.value, tahun.value, format.value, undefined, end.value)
-        const url  = URL.createObjectURL(blob)
+        const download = await downloadLaporanBulanan(jenisCanonical.value, bulan.value, tahun.value, format.value, undefined, end.value)
+        const url  = URL.createObjectURL(download.blob)
         const a    = document.createElement('a')
         a.href     = url
-        a.download = `${filenameBase}.${ext}`
+        a.download = download.filename
         a.click()
         URL.revokeObjectURL(url)
         await loadHistory()

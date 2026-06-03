@@ -19,6 +19,19 @@ test('format nama file laporan mingguan memakai nomor bulan dan minggu roman', (
     );
 });
 
+test('format nama file laporan mingguan range gabungan memakai roman awal dan akhir', () => {
+    assert.strictEqual(
+        buildWeeklyReportFilename({
+            jenis: 'Perikanan',
+            start: '2026-05-04',
+            end: '2026-05-29',
+            tahun: 2026,
+            extension: 'docx'
+        }),
+        '5. AKURASI PERIKANAN MEI 2026 MINGGU I-IV.docx'
+    );
+});
+
 test('format nama file berlaku untuk semua jenis perkara', () => {
     assert.strictEqual(
         buildMonthlyReportFilename({ jenis: 'Pidana', bulan: 4, tahun: 2026, extension: 'docx' }),

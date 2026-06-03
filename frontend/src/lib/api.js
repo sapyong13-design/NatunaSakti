@@ -54,6 +54,15 @@ async function fetchWithRetry(url, options = {}, maxRetries = DEFAULT_MAX_RETRIE
     throw lastError;
 }
 
+export function getFilenameFromContentDisposition(header, fallback) {
+    const value = String(header || '')
+    const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i)
+    if (utf8Match) return decodeURIComponent(utf8Match[1].trim().replace(/^"|"$/g, ''))
+
+    const match = value.match(/filename="?([^";]+)"?/i)
+    return match ? match[1].trim() : fallback
+}
+
 // ========================
 // CORE API FUNCTIONS
 // ========================
@@ -259,7 +268,10 @@ export const downloadLaporanBulanan = async (jenis, bulan, tahun, format = 'docx
 
     if (onProgress) onProgress({ step: 90, message: 'Menyelesaikan file…' });
 
-    return response.blob();
+    const fallback = `${bulan}. AKURASI ${String(jenis).toUpperCase()} ${new Date(tahun, bulan - 1, 1).toLocaleDateString('id-ID', { month: 'long' }).toUpperCase()} ${tahun}.${format === 'pdf' ? 'pdf' : 'docx'}`;
+    const filename = getFilenameFromContentDisposition(response.headers.get('Content-Disposition'), fallback);
+    const blob = await response.blob();
+    return { blob, filename };
 };
 
 // Download Laporan Mingguan as .docx or .pdf
@@ -279,7 +291,10 @@ export const downloadLaporanMingguan = async (jenis, start, end, format = 'docx'
 
     if (onProgress) onProgress({ step: 90, message: 'Menyelesaikan file…' });
 
-    return response.blob();
+    const fallback = `AKURASI_${jenis}_${start}_sd_${end}.${format === 'pdf' ? 'pdf' : 'docx'}`;
+    const filename = getFilenameFromContentDisposition(response.headers.get('Content-Disposition'), fallback);
+    const blob = await response.blob();
+    return { blob, filename };
 }
 
 export const getLaporanHistory = async (filters = {}) => {

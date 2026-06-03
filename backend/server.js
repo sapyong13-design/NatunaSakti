@@ -13,7 +13,11 @@ const path = require('path');
 const fs = require('fs');
 const SIPPSyncService = require('./services/sippSyncService');
 const sippRoutes = require('./routes/sipp');
-const { generateLaporanBulanan, generateLaporanMingguan, convertDocxToPdf } = require('./services/laporanService');
+const {
+    generateLaporanBulanan,
+    generateLaporanMingguanGabungan,
+    convertDocxToPdf
+} = require('./services/laporanService');
 const { generatePenutupanKasRtf } = require('./services/kasirRtfService');
 const { generateRekapExcelXlsx } = require('./services/kasirExcelService');
 const {
@@ -49,7 +53,7 @@ const app = express();
 const PORT = 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({ exposedHeaders: ['Content-Disposition'] }));
 app.use(express.json());
 
 // Request logging middleware
@@ -1262,12 +1266,12 @@ app.get('/api/laporan/mingguan/:jenis', (req, res) => {
         const bulanNama    = BULAN_NAMES[startDate.getMonth()]
         const tahun        = startDate.getFullYear()
 
-        const docxBuf  = generateLaporanMingguan(db, jenisCapital, start, end)
+        const docxBuf  = generateLaporanMingguanGabungan(db, jenisCapital, start, end)
         const periodeLabel = `${start} s.d. ${end}`
 
         if (format === 'pdf') {
             const pdfBuf = convertDocxToPdf(docxBuf)
-            const filename = buildWeeklyReportFilename({ jenis: jenisCapital, start, tahun, extension: 'pdf' })
+            const filename = buildWeeklyReportFilename({ jenis: jenisCapital, start, end, tahun, extension: 'pdf' })
             createReportHistory(db, {
                 tipe: 'mingguan',
                 jenis: jenisCapital,
@@ -1282,7 +1286,7 @@ app.get('/api/laporan/mingguan/:jenis', (req, res) => {
             return res.send(pdfBuf)
         }
 
-        const filename = buildWeeklyReportFilename({ jenis: jenisCapital, start, tahun, extension: 'docx' })
+        const filename = buildWeeklyReportFilename({ jenis: jenisCapital, start, end, tahun, extension: 'docx' })
         createReportHistory(db, {
             tipe: 'mingguan',
             jenis: jenisCapital,
