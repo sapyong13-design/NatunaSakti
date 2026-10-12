@@ -6,9 +6,11 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Database
-backend/data/akurasi.db
-backend/data/akurasi.db-shm
-backend/data/akurasi.db-wal
+backend/**/*.db
+backend/**/*.db-*
+backend/**/*.sqlite
+backend/**/*.sqlite-*
+__pycache__/
 
 # Environment
 .env

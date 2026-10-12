@@ -1,48 +1,30 @@
-const SYNC_PAGE_TOTALS = {
-  full: 150,
-  incremental: 10
-};
-
-function getPageTotal(isFirstSync) {
-  return isFirstSync ? SYNC_PAGE_TOTALS.full : SYNC_PAGE_TOTALS.incremental;
-}
-
-function createInitialSyncProgress({ isFirstSync }) {
-  const maxPages = getPageTotal(isFirstSync);
-
+function createInitialSyncProgress() {
   return {
     inProgress: true,
     phase: 'fetching',
     current: 0,
-    total: maxPages,
-    page: 0,
-    maxPages,
+    total: 0,
     fetchedCount: 0,
-    unit: 'halaman',
-    message: `Memproses halaman 1 dari ${maxPages}`,
-    error: null,
-    isFirstSync
+    unit: 'perkara',
+    message: 'Membaca seluruh perkara, jadwal, dan putusan dari database SIPP...',
+    error: null
   };
 }
 
 function applyFetchProgress(currentProgress, progress) {
-  const maxPages = progress.maxPages || currentProgress.maxPages || currentProgress.total || getPageTotal(currentProgress.isFirstSync);
-  const page = Math.min(Number(progress.page || 0), maxPages);
-  const fetchedCount = Number(progress.fetchedCount ?? progress.current ?? currentProgress.fetchedCount ?? 0);
-  const isStarting = progress.status === 'page-start';
-  const verb = isStarting ? 'Memproses' : 'Selesai memproses';
+  const total = Number(progress.total ?? currentProgress.total ?? 0);
+  const current = Math.min(Number(progress.current ?? 0), total);
+  const fetchedCount = Number(progress.fetchedCount ?? current);
 
   return {
     ...currentProgress,
     inProgress: true,
     phase: 'fetching',
-    current: page,
-    total: maxPages,
-    page,
-    maxPages,
+    current,
+    total,
     fetchedCount,
-    unit: 'halaman',
-    message: `${verb} halaman ${page} dari ${maxPages} (${fetchedCount} perkara terbaca)`,
+    unit: 'perkara',
+    message: `Membaca database SIPP: ${current} dari ${total} perkara`,
     error: null
   };
 }
@@ -52,73 +34,24 @@ function startSaveProgress(currentProgress) {
     ...currentProgress,
     inProgress: true,
     phase: 'saving',
-    message: `Menyimpan ${currentProgress.fetchedCount || 0} perkara ke database...`
-  };
-}
-
-function startDetailCacheProgress(currentProgress, { total = 0 } = {}) {
-  return {
-    ...currentProgress,
-    inProgress: true,
-    phase: 'caching-details',
-    current: 0,
-    total,
-    unit: 'perkara',
-    detailCache: {
-      jadwalOk: 0,
-      jadwalFailed: 0,
-      putusanOk: 0,
-      putusanFailed: 0,
-      failed: 0
-    },
-    message: total > 0
-      ? `Memperbarui cache jadwal dan putusan untuk ${total} perkara terbaru...`
-      : 'Memperbarui cache jadwal dan putusan...'
-  };
-}
-
-function applyDetailCacheProgress(currentProgress, progress = {}) {
-  const total = Number(progress.total ?? currentProgress.total ?? 0);
-  const current = Math.min(Number(progress.current ?? 0), total || Number(progress.current ?? 0));
-  const detailCache = {
-    jadwalOk: Number(progress.jadwalOk ?? currentProgress.detailCache?.jadwalOk ?? 0),
-    jadwalFailed: Number(progress.jadwalFailed ?? currentProgress.detailCache?.jadwalFailed ?? 0),
-    putusanOk: Number(progress.putusanOk ?? currentProgress.detailCache?.putusanOk ?? 0),
-    putusanFailed: Number(progress.putusanFailed ?? currentProgress.detailCache?.putusanFailed ?? 0),
-    failed: Number(progress.failed ?? currentProgress.detailCache?.failed ?? 0)
-  };
-  const suffix = progress.nomorPerkara ? `: ${progress.nomorPerkara}` : '';
-
-  return {
-    ...currentProgress,
-    inProgress: true,
-    phase: 'caching-details',
-    current,
-    total,
-    unit: 'perkara',
-    detailCache,
-    message: `Memperbarui cache jadwal dan putusan ${current} dari ${total} perkara${suffix}`,
-    error: null
+    message: `Menyimpan ${currentProgress.fetchedCount} perkara beserta seluruh jadwal dan putusan...`
   };
 }
 
 function completeSyncProgress(currentProgress, { savedCount, dbCount }) {
-  const total = currentProgress.total || currentProgress.maxPages || 1;
-  const fetchedCount = currentProgress.fetchedCount ?? savedCount ?? 0;
+  const fetchedCount = currentProgress.fetchedCount;
 
   return {
     ...currentProgress,
     inProgress: false,
     phase: 'complete',
-    current: total,
-    total,
-    page: total,
-    maxPages: total,
+    current: fetchedCount,
+    total: fetchedCount,
     fetchedCount,
     savedCount,
     dbCount,
-    unit: 'halaman',
-    message: `Selesai memproses ${total} dari ${total} halaman SIPP (${savedCount} perkara disimpan)`,
+    unit: 'perkara',
+    message: `Sinkronisasi penuh database SIPP selesai (${savedCount} perkara beserta jadwal dan putusan disimpan)`,
     error: null
   };
 }
@@ -134,12 +67,9 @@ function failSyncProgress(currentProgress, error) {
 }
 
 module.exports = {
-  SYNC_PAGE_TOTALS,
   createInitialSyncProgress,
   applyFetchProgress,
   startSaveProgress,
-  startDetailCacheProgress,
-  applyDetailCacheProgress,
   completeSyncProgress,
   failSyncProgress
 };

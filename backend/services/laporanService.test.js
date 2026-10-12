@@ -18,7 +18,8 @@ function createDb() {
             jenis_perkara TEXT,
             sipp_tanggal_register TEXT,
             sipp_klasifikasi TEXT,
-            sipp_status TEXT
+            sipp_status TEXT,
+            sipp_pihak_dipublikasikan TEXT
         );
         CREATE TABLE jadwal_sidang (
             nomor_perkara TEXT,
@@ -43,8 +44,8 @@ function createDb() {
 
 function insertPerkara(db, nomor, status = 'Minutasi', values = {}) {
     db.prepare(`
-        INSERT INTO perkara (nomor_perkara, nama_perkara, para_pihak, jenis_perkara, sipp_tanggal_register, sipp_klasifikasi, sipp_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO perkara (nomor_perkara, nama_perkara, para_pihak, jenis_perkara, sipp_tanggal_register, sipp_klasifikasi, sipp_status, sipp_pihak_dipublikasikan)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
         nomor,
         values.nama_perkara || values.sipp_klasifikasi || 'Pidana Biasa',
@@ -52,7 +53,8 @@ function insertPerkara(db, nomor, status = 'Minutasi', values = {}) {
         values.jenis_perkara || 'Pidana',
         values.sipp_tanggal_register || '02 Mei 2026',
         values.sipp_klasifikasi || values.nama_perkara || 'Pidana Biasa',
-        status
+        status,
+        values.sipp_pihak_dipublikasikan || null
     );
 }
 
@@ -85,6 +87,26 @@ function docRows(buffer) {
         }))
     }));
 }
+
+test('nama asli tetap masuk anonimisasi bulanan dan mingguan berdasarkan flag DB', () => {
+    const db = createDb();
+    try {
+        insertPerkara(db, '11/Pdt.G/2026/PN Ntn', 'Persidangan', {
+            jenis_perkara: 'Perdata', para_pihak: 'Penggugat: Nama asli',
+            sipp_tanggal_register: '2026-05-02', sipp_pihak_dipublikasikan: 'T'
+        });
+        insertPerkara(db, '12/Pdt.G/2026/PN Ntn', 'Persidangan', {
+            jenis_perkara: 'Perdata', para_pihak: 'Penggugat: Nama publik',
+            sipp_tanggal_register: '2026-05-02', sipp_pihak_dipublikasikan: 'Y'
+        });
+        for (const buffer of [generateLaporanBulanan(db, 'Perdata', 5, 2026),
+            generateLaporanMingguan(db, 'Perdata', '2026-05-01', '2026-05-07')]) {
+            const row = docRows(buffer).find(row => /Anonimisasi/.test(row.text));
+            assert.ok(row.text.includes('11/Pdt.G/2026/PN Ntn'));
+            assert.ok(!row.text.includes('12/Pdt.G/2026/PN Ntn'));
+        }
+    } finally { db.close(); }
+});
 
 function docXml(buffer) {
     return new PizZip(buffer).files['word/document.xml'].asText();

@@ -4,103 +4,99 @@ const assert = require('node:assert/strict');
 const {
   createInitialSyncProgress,
   applyFetchProgress,
-  startDetailCacheProgress,
-  applyDetailCacheProgress,
-  completeSyncProgress
+  startSaveProgress,
+  completeSyncProgress,
+  failSyncProgress
 } = require('./sippProgress');
 
-test('initial incremental progress uses page total as measured work', () => {
-  const progress = createInitialSyncProgress({ isFirstSync: false });
+test('initial progress waits for database perkara count', () => {
+  const progress = createInitialSyncProgress();
 
   assert.equal(progress.inProgress, true);
   assert.equal(progress.phase, 'fetching');
   assert.equal(progress.current, 0);
-  assert.equal(progress.total, 10);
-  assert.equal(progress.page, 0);
-  assert.equal(progress.maxPages, 10);
-  assert.equal(progress.unit, 'halaman');
-  assert.match(progress.message, /halaman 1 dari 10/i);
+  assert.equal(progress.total, 0);
+  assert.equal(progress.fetchedCount, 0);
+  assert.equal(progress.unit, 'perkara');
+  assert.equal(progress.error, null);
 });
 
-test('fetch progress advances by processed SIPP page and keeps perkara count as metadata', () => {
-  const current = createInitialSyncProgress({ isFirstSync: false });
-  const next = applyFetchProgress(current, {
-    page: 3,
-    maxPages: 10,
+test('database read progress advances by perkara', () => {
+  const next = applyFetchProgress(createInitialSyncProgress(), {
+    current: 58,
+    total: 1200,
     fetchedCount: 58,
-    status: 'page-complete'
+    status: 'db-read'
   });
 
-  assert.equal(next.current, 3);
-  assert.equal(next.total, 10);
-  assert.equal(next.page, 3);
-  assert.equal(next.maxPages, 10);
+  assert.equal(next.inProgress, true);
+  assert.equal(next.phase, 'fetching');
+  assert.equal(next.current, 58);
+  assert.equal(next.total, 1200);
   assert.equal(next.fetchedCount, 58);
-  assert.match(next.message, /halaman 3 dari 10/i);
-  assert.match(next.message, /58 perkara/i);
+  assert.equal(next.unit, 'perkara');
 });
 
-test('complete progress reports all pages processed while preserving fetched count', () => {
-  const current = applyFetchProgress(createInitialSyncProgress({ isFirstSync: false }), {
-    page: 10,
-    maxPages: 10,
-    fetchedCount: 197,
-    status: 'page-complete'
+test('saving stays in progress until snapshot and detail caches are saved', () => {
+  const fetched = applyFetchProgress(createInitialSyncProgress(), {
+    current: 1200,
+    total: 1200,
+    fetchedCount: 1200,
+    status: 'db-read'
   });
+  const saving = startSaveProgress(fetched);
 
-  const complete = completeSyncProgress(current, {
-    savedCount: 197,
-    dbCount: 1200
+  assert.equal(saving.inProgress, true);
+  assert.equal(saving.phase, 'saving');
+  assert.equal(saving.current, 1200);
+  assert.equal(saving.total, 1200);
+  assert.equal(saving.fetchedCount, 1200);
+  assert.equal(saving.unit, 'perkara');
+
+  const complete = completeSyncProgress(saving, {
+    savedCount: 1200,
+    dbCount: 1250
   });
 
   assert.equal(complete.inProgress, false);
   assert.equal(complete.phase, 'complete');
-  assert.equal(complete.current, 10);
-  assert.equal(complete.total, 10);
-  assert.equal(complete.fetchedCount, 197);
-  assert.equal(complete.savedCount, 197);
-  assert.match(complete.message, /10 dari 10 halaman/i);
+  assert.equal(complete.current, 1200);
+  assert.equal(complete.total, 1200);
+  assert.equal(complete.fetchedCount, 1200);
+  assert.equal(complete.savedCount, 1200);
+  assert.equal(complete.dbCount, 1250);
+  assert.equal(complete.unit, 'perkara');
+  assert.equal(complete.error, null);
 });
 
-test('detail cache progress shows sync is still refreshing jadwal and putusan', () => {
-  const current = applyFetchProgress(createInitialSyncProgress({ isFirstSync: false }), {
-    page: 10,
-    maxPages: 10,
-    fetchedCount: 200,
-    status: 'page-complete'
+test('empty database snapshot completes with zero perkara', () => {
+  const complete = completeSyncProgress(startSaveProgress(createInitialSyncProgress()), {
+    savedCount: 0,
+    dbCount: 0
   });
 
-  const next = startDetailCacheProgress(current, { total: 100 });
-
-  assert.equal(next.inProgress, true);
-  assert.equal(next.phase, 'caching-details');
-  assert.equal(next.current, 0);
-  assert.equal(next.total, 100);
-  assert.equal(next.unit, 'perkara');
-  assert.equal(next.fetchedCount, 200);
-  assert.match(next.message, /jadwal dan putusan/i);
-  assert.match(next.message, /100 perkara/i);
+  assert.equal(complete.inProgress, false);
+  assert.equal(complete.phase, 'complete');
+  assert.equal(complete.current, 0);
+  assert.equal(complete.total, 0);
+  assert.equal(complete.fetchedCount, 0);
+  assert.equal(complete.savedCount, 0);
 });
 
-test('detail cache progress advances by cached perkara count', () => {
-  const current = startDetailCacheProgress(createInitialSyncProgress({ isFirstSync: false }), { total: 100 });
-
-  const next = applyDetailCacheProgress(current, {
-    current: 12,
-    total: 100,
-    nomorPerkara: '12/Pid.B/2026/PN Ntn',
-    jadwalOk: 10,
-    putusanOk: 8,
-    failed: 2
+test('failed database read retains progress and exposes error without claiming completion', () => {
+  const current = applyFetchProgress(createInitialSyncProgress(), {
+    current: 58,
+    total: 1200,
+    fetchedCount: 58,
+    status: 'db-read'
   });
+  const failed = failSyncProgress(current, new Error('SSH tunnel unavailable'));
 
-  assert.equal(next.phase, 'caching-details');
-  assert.equal(next.current, 12);
-  assert.equal(next.total, 100);
-  assert.equal(next.unit, 'perkara');
-  assert.match(next.message, /12 dari 100 perkara/i);
-  assert.match(next.message, /12\/Pid\.B\/2026\/PN Ntn/i);
-  assert.equal(next.detailCache.jadwalOk, 10);
-  assert.equal(next.detailCache.putusanOk, 8);
-  assert.equal(next.detailCache.failed, 2);
+  assert.equal(failed.inProgress, false);
+  assert.equal(failed.phase, 'error');
+  assert.equal(failed.current, 58);
+  assert.equal(failed.total, 1200);
+  assert.equal(failed.fetchedCount, 58);
+  assert.equal(failed.error, 'SSH tunnel unavailable');
+  assert.equal(failed.savedCount, undefined);
 });

@@ -39,29 +39,13 @@ const MINGGU_ROMAN = ['I', 'II', 'III', 'IV', 'V']
 
 // Parse "08 May 2026" → { day: 8, month: 5, year: 2026, sort: 20260508 }
 function parseRegisterDate(dateStr) {
-    if (!dateStr) return null
-    const parts = dateStr.replace(/\./g, '').trim().split(/\s+/)
-    if (parts.length < 3) return null
-    const day = parseInt(parts[0])
-    const monKey = parts[1].toLowerCase()
-    const monIdx = MONTH_INDEX[monKey] ?? MONTH_INDEX[monKey.slice(0, 3)]
-    const year = parseInt(parts[2])
-    if (isNaN(day) || monIdx === undefined || isNaN(year)) return null
-    return { day, month: monIdx + 1, year, sort: year * 10000 + (monIdx + 1) * 100 + day }
+    const parts = parseSippDateParts(dateStr)
+    return parts ? { ...parts, sort: parts.year * 10000 + parts.month * 100 + parts.day } : null
 }
 
 // Parse "Selasa, 27 Jan. 2026" → Date object
 function parseJadwalDateFull(dateStr) {
-    if (!dateStr) return null
-    const cleaned = dateStr.replace(/^[^,]+,\s*/, '').replace(/\./g, '').trim()
-    const parts = cleaned.split(/\s+/)
-    if (parts.length < 3) return null
-    const day = parseInt(parts[0])
-    const monKey = parts[1].toLowerCase()
-    const monIdx = MONTH_INDEX[monKey] ?? MONTH_INDEX[monKey.slice(0, 3)]
-    const year = parseInt(parts[2])
-    if (isNaN(day) || monIdx === undefined || isNaN(year)) return null
-    return new Date(year, monIdx, day)
+    return datePartsToDate(parseSippDateParts(dateStr))
 }
 
 function parseIsoDateLocal(dateStr) {
@@ -136,18 +120,7 @@ function splitIntoWorkWeeks(startDateStr, endDateStr) {
 
 // Parse "Selasa, 27 Jan. 2026" → { month: 1, year: 2026 }
 function parseJadwalDate(dateStr) {
-    if (!dateStr) return null
-    // Strip day name and comma, strip trailing dot from month abbreviation
-    const cleaned = dateStr.replace(/^[^,]+,\s*/, '').replace(/\./g, '').trim()
-    // Now: "27 Jan 2026"
-    const parts = cleaned.split(/\s+/)
-    if (parts.length < 3) return null
-    const day = parseInt(parts[0])
-    const monKey = parts[1].toLowerCase()
-    const monIdx = MONTH_INDEX[monKey] ?? MONTH_INDEX[monKey.slice(0, 3)]
-    const year = parseInt(parts[2])
-    if (isNaN(day) || monIdx === undefined || isNaN(year)) return null
-    return { day, month: monIdx + 1, year }
+    return parseSippDateParts(dateStr)
 }
 
 function parseSippDateParts(dateStr) {
@@ -197,6 +170,8 @@ function isTilangPerkara(row) {
 }
 
 function isPerkaraDisamarkan(row) {
+    if (row.sipp_pihak_dipublikasikan === 'T') return true
+    if (row.sipp_pihak_dipublikasikan === 'Y') return false
     const text = [
         row.nama_perkara,
         row.para_pihak
@@ -619,7 +594,7 @@ function generateLaporanBulanan(db, jenis, bulan, tahun, options = {}) {
 
     // Row 1: perkara yang register di bulan ini, sort by tanggal register asc
     const allPerkara = db.prepare(`
-        SELECT nomor_perkara, nama_perkara, para_pihak, sipp_tanggal_register, sipp_klasifikasi FROM perkara
+        SELECT nomor_perkara, nama_perkara, para_pihak, sipp_tanggal_register, sipp_klasifikasi, sipp_pihak_dipublikasikan FROM perkara
         WHERE jenis_perkara = ?
     `).all(jenis)
 
@@ -852,7 +827,7 @@ function generateLaporanMingguan(db, jenis, startDateStr, endDateStr) {
 
     // Row 1: perkara registered within the week
     const allPerkara = db.prepare(
-        'SELECT nomor_perkara, nama_perkara, para_pihak, sipp_tanggal_register, sipp_klasifikasi FROM perkara WHERE jenis_perkara = ?'
+        'SELECT nomor_perkara, nama_perkara, para_pihak, sipp_tanggal_register, sipp_klasifikasi, sipp_pihak_dipublikasikan FROM perkara WHERE jenis_perkara = ?'
     ).all(jenis)
 
     const nomorList1 = allPerkara

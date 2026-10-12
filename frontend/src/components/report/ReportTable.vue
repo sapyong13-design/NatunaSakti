@@ -1,5 +1,4 @@
 <script setup>
-import { pihakUtama } from '../../lib/pihak'
 import { formatDateIndo } from '../../lib/date'
 
 defineProps({
@@ -61,6 +60,7 @@ function getSidangDates(row) {
                         <th class="ns-sticky-col ns-col-jenis">Jenis</th>
                         <th class="ns-sticky-col ns-col-nomor">Nomor Perkara</th>
                         <th class="ns-col-nama">Nama</th>
+                        <th>Anonimisasi</th>
                         <th class="ns-col-jenis-detail">Jenis Perkara</th>
                         <th class="ns-col-tahun">Tahun</th>
                         <th class="ns-col-register">Tgl Register</th>
@@ -71,13 +71,13 @@ function getSidangDates(row) {
                 </thead>
                 <tbody>
                     <tr v-if="loading" aria-live="polite">
-                        <td colspan="10" class="ns-loading">
+                        <td colspan="11" class="ns-loading">
                             <span class="ns-spinner"></span>
                             <span>Memuat data laporan…</span>
                         </td>
                     </tr>
                     <tr v-else-if="!rows.length">
-                        <td colspan="10" class="ns-empty">
+                        <td colspan="11" class="ns-empty">
                             <div class="ns-empty-icon">Data</div>
                             <div>Tidak ada perkara di periode ini</div>
                         </td>
@@ -99,7 +99,17 @@ function getSidangDates(row) {
                             <span class="ns-nomor" :title="row.nomor_perkara">{{ row.nomor_perkara }}</span>
                         </td>
                         <td class="ns-col-nama">
-                            <span class="ns-nama" :title="pihakUtama(row.para_pihak)">{{ pihakUtama(row.para_pihak) }}</span>
+                            <span class="ns-nama" :title="row.para_pihak">{{ row.para_pihak || '—' }}</span>
+                        </td>
+                        <td>
+                            <input
+                                v-if="row.sipp_pihak_dipublikasikan === 'T' || row.sipp_pihak_dipublikasikan === 'Y'"
+                                type="checkbox"
+                                :checked="row.sipp_pihak_dipublikasikan === 'T'"
+                                :aria-label="`Anonimisasi perkara ${row.nomor_perkara}`"
+                                disabled
+                            />
+                            <span v-else>Belum diketahui</span>
                         </td>
                         <td class="ns-col-jenis-detail">
                             <span class="ns-jenis-detail" :title="row.nama_perkara">{{ row.nama_perkara }}</span>

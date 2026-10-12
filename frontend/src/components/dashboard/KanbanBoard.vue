@@ -1,7 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
 import Icon from '../Icon.vue'
-import { pihakUtama } from '../../lib/pihak'
 
 const props = defineProps({
     rows: { type: Array, required: true }
@@ -64,7 +63,18 @@ function jenisColor(jenis) {
                         <span class="ns-kanban-lama">{{ row.sipp_lama_proses || '—' }}</span>
                     </div>
                     <div class="ns-kanban-nomor">{{ row.nomor_perkara }}</div>
-                    <div class="ns-kanban-nama">{{ pihakUtama(row.para_pihak) }}</div>
+                    <div class="ns-kanban-nama" :title="row.para_pihak">{{ row.para_pihak || '—' }}</div>
+                    <div class="ns-kanban-anonimisasi">
+                        <span>Anonimisasi</span>
+                        <input
+                            v-if="row.sipp_pihak_dipublikasikan === 'T' || row.sipp_pihak_dipublikasikan === 'Y'"
+                            type="checkbox"
+                            :checked="row.sipp_pihak_dipublikasikan === 'T'"
+                            :aria-label="`Anonimisasi perkara ${row.nomor_perkara}`"
+                            disabled
+                        />
+                        <span v-else>Belum diketahui</span>
+                    </div>
                 </div>
                 <div v-if="!getRowsByStatus(column.key).length" class="ns-kanban-empty">
                     <Icon name="folder" :size="24" />
@@ -183,6 +193,15 @@ function jenisColor(jenis) {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+}
+
+.ns-kanban-anonimisasi {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-2);
 }
 
 .ns-kanban-empty {

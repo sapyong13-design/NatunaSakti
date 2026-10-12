@@ -24,8 +24,6 @@ const {
     createInitialSyncProgress,
     applyFetchProgress,
     startSaveProgress,
-    startDetailCacheProgress,
-    applyDetailCacheProgress,
     completeSyncProgress,
     failSyncProgress
 } = require('./lib/sippProgress');
@@ -52,8 +50,28 @@ const {
 const app = express();
 const PORT = 3000;
 
-// Middleware
-app.use(cors({ exposedHeaders: ['Content-Disposition'] }));
+// Only the local Vite app and local CLI clients may access this API.
+const allowedOrigins = new Set(['http://127.0.0.1:5173', 'http://localhost:5173']);
+const allowedHosts = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
+app.use((req, res, next) => {
+    if (!allowedHosts.has((req.get('host') || '').toLowerCase())) {
+        return res.status(403).json({ error: 'Host not allowed' });
+    }
+    const origin = req.get('origin');
+    if (origin && !allowedOrigins.has(origin)) {
+        return res.status(403).json({ error: 'Origin not allowed' });
+    }
+    const fetchSite = req.get('sec-fetch-site');
+    const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+    if (unsafe && !origin && fetchSite && !['same-origin', 'none'].includes(fetchSite)) {
+        return res.status(403).json({ error: 'Cross-origin request not allowed' });
+    }
+    next();
+});
+app.use(cors({
+    origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)),
+    exposedHeaders: ['Content-Disposition']
+}));
 app.use(express.json());
 
 // Request logging middleware
@@ -74,7 +92,7 @@ const seedDbPath = path.join(dataDir, 'akurasi-seed.db');
 if (!fs.existsSync(dbPath) && fs.existsSync(seedDbPath)) {
     console.log('[Database] No database found, copying from seed...');
     fs.copyFileSync(seedDbPath, dbPath);
-    console.log('[Database] Seed database copied. Ready for incremental sync (200 newest).');
+    console.log('[Database] Seed database copied. Ready for full SIPP database sync.');
 }
 const db = new Database(dbPath);
 
@@ -181,13 +199,52 @@ let syncProgress = {
     phase: 'idle',
     current: 0,
     total: 0,
-    page: 0,
-    maxPages: 0,
     fetchedCount: 0,
-    unit: 'halaman',
+    unit: 'perkara',
     message: '',
     error: null
 };
+
+async function runFullSync() {
+    if (syncProgress.inProgress) return null;
+    syncProgress = createInitialSyncProgress();
+
+    try {
+        const oldCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get().c;
+        console.log('[SIPP-SYNC] Starting full SIPP database snapshot over SSH...');
+        const snapshot = await sippService.fetchSIPPData((progress) => {
+            syncProgress = applyFetchProgress(syncProgress, progress);
+        });
+        const fetchedCount = snapshot.perkara.length;
+        syncProgress = applyFetchProgress(syncProgress, {
+            current: fetchedCount,
+            total: fetchedCount,
+            fetchedCount,
+            status: 'db-read'
+        });
+        syncProgress = startSaveProgress(syncProgress);
+        const savedCount = await sippService.saveToDatabase(snapshot);
+        const dbCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get().c;
+        syncProgress = completeSyncProgress(syncProgress, { savedCount, dbCount });
+        console.log(`[SIPP-SYNC] Full database sync complete: ${savedCount} perkara and all detail caches saved, ${dbCount} total`);
+
+        return {
+            success: true,
+            fetched: fetchedCount,
+            total: dbCount,
+            total_in_db: dbCount,
+            new_items: dbCount - oldCount,
+            ...(snapshot.detail_cache ? { detail_cache: snapshot.detail_cache } : {}),
+            mode: 'full',
+            source: 'sipp-db-ssh',
+            timestamp: new Date().toISOString(),
+            message: `Sinkronisasi penuh database SIPP selesai: ${savedCount} perkara beserta jadwal dan putusan disimpan (${dbCount} total)`
+        };
+    } catch (error) {
+        syncProgress = failSyncProgress(syncProgress, error);
+        throw error;
+    }
+}
 
 console.log('Database connected:', dbPath);
 
@@ -728,76 +785,20 @@ app.get('/api/perkara/sipp/progress', (req, res) => {
 
 // Manual sync endpoint
 app.post('/api/perkara/sipp/sync', async (req, res) => {
-    console.log('[SIPP-SYNC] Called!');
-
-    // Prevent multiple syncs running simultaneously
-    if (syncProgress.inProgress) {
-        console.log('[SIPP-SYNC] Sync already in progress, rejecting request');
-        return res.status(429).json({
-            success: false,
-            error: 'Sync already in progress',
-            current: syncProgress.current,
-            message: syncProgress.message
-        });
-    }
-
     try {
-        // Check if first sync
-        const oldCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get().c;
-        const isFirstSync = oldCount === 0;
-
-        syncProgress = createInitialSyncProgress({ isFirstSync });
-
-        console.log(`[SIPP-SYNC] ${isFirstSync ? 'FIRST SYNC' : 'INCREMENTAL SYNC'} - Starting fetch...`);
-
-        const data = await sippService.fetchSIPPData((progress) => {
-            syncProgress = applyFetchProgress(syncProgress, progress);
-            console.log(`[SIPP-SYNC] ${syncProgress.message}`);
-        });
-
-        console.log(`[SIPP-SYNC] Fetched ${data.length} items`);
-        syncProgress = startSaveProgress(syncProgress);
-
-        console.log('[SIPP-SYNC] Starting save...');
-        const count = await sippService.saveToDatabase(data);
-        console.log(`[SIPP-SYNC] Saved count: ${count}`);
-
-        console.log('[SIPP-SYNC] Refreshing jadwal and putusan cache (100 newest perkara)...');
-        syncProgress = startDetailCacheProgress(syncProgress, { total: 100 });
-        const detailCacheResult = await sippService.cacheJadwalCurrentYear((progress) => {
-            syncProgress = applyDetailCacheProgress(syncProgress, progress);
-            console.log(`[SIPP-SYNC] ${syncProgress.message}`);
-        });
-        console.log('[SIPP-SYNC] Detail cache refreshed:', detailCacheResult);
-
-        // Get actual DB count
-        const dbCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get();
-        console.log(`[SIPP-SYNC] Actual DB count: ${dbCount.c}`);
-
-        syncProgress = completeSyncProgress(syncProgress, {
-            savedCount: count,
-            dbCount: dbCount.c
-        });
-
-        res.json({
-            success: true,
-            fetched: count,
-            total_in_db: dbCount.c,
-            new_items: dbCount.c - oldCount,
-            detail_cache: detailCacheResult,
-            mode: isFirstSync ? 'full' : 'incremental',
-            timestamp: new Date().toISOString(),
-            message: isFirstSync
-                ? `First sync complete: ${dbCount.c} total perkara di database`
-                : `Synced ${count} perkara from SIPP (${dbCount.c} total in DB)`
-        });
+        const result = await runFullSync();
+        if (!result) {
+            return res.status(429).json({
+                success: false,
+                error: 'Sync already in progress',
+                current: syncProgress.current,
+                message: syncProgress.message
+            });
+        }
+        res.json(result);
     } catch (error) {
-        console.error('[SIPP] Sync error:', error.message);
-        syncProgress = failSyncProgress(syncProgress, error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        console.error('[SIPP] Full database sync error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -806,40 +807,27 @@ app.get('/api/perkara/sipp/jadwal/:nomor', async (req, res) => {
     console.log('[SIPP-JADWAL] Called for:', req.params.nomor);
     try {
         const nomorPerkara = decodeURIComponent(req.params.nomor);
-        const currentYear = new Date().getFullYear();
-
-        // Cek tahun perkara
-        const row = db.prepare(
-            'SELECT tahun_masuk FROM perkara WHERE nomor_perkara = ?'
+        // Real rows and empty-result sentinels both mark a cached snapshot.
+        const hasCacheEntry = db.prepare(
+            'SELECT 1 FROM jadwal_sidang WHERE nomor_perkara = ? LIMIT 1'
         ).get(nomorPerkara);
 
-        if (row?.tahun_masuk === currentYear) {
-            // Cache existence check: any row (real or sentinel) means we
-            // already fetched this perkara. Real entries have nomor IS NOT NULL;
-            // sentinel rows have all-null data and just mark "fetched, was empty".
-            const hasCacheEntry = db.prepare(
-                'SELECT 1 FROM jadwal_sidang WHERE nomor_perkara = ? LIMIT 1'
-            ).get(nomorPerkara);
+        if (hasCacheEntry) {
+            const cached = db.prepare(`
+                SELECT nomor, tanggal, jam, agenda, ruangan,
+                       alasan_ditunda AS alasanDitunda
+                FROM jadwal_sidang
+                WHERE nomor_perkara = ? AND nomor IS NOT NULL
+                ORDER BY id
+            `).all(nomorPerkara);
 
-            if (hasCacheEntry) {
-                const cached = db.prepare(`
-                    SELECT nomor, tanggal, jam, agenda, ruangan,
-                           alasan_ditunda AS alasanDitunda
-                    FROM jadwal_sidang
-                    WHERE nomor_perkara = ? AND nomor IS NOT NULL
-                    ORDER BY id
-                `).all(nomorPerkara);
-
-                return res.json({
-                    nomor_perkara: nomorPerkara,
-                    jadwal: cached,
-                    cached: true
-                });
-            }
-            // 2026 tapi belum pernah ke-cache (populasi awal belum selesai) → fall through ke live
+            return res.json({
+                nomor_perkara: nomorPerkara,
+                jadwal: cached,
+                cached: true
+            });
         }
 
-        // Non-current-year atau cache miss → live scrape
         const jadwal = await sippService.fetchJadwalSidang(nomorPerkara);
         res.json({
             nomor_perkara: nomorPerkara,
@@ -854,19 +842,12 @@ app.get('/api/perkara/sipp/jadwal/:nomor', async (req, res) => {
     }
 });
 
-// Force refresh jadwal sidang for a perkara (bypass cache, re-fetch from SIPP)
+// Force refresh jadwal sidang from the live SIPP database.
 app.post('/api/perkara/sipp/jadwal/:nomor/refresh', async (req, res) => {
     const nomorPerkara = decodeURIComponent(req.params.nomor);
     console.log('[SIPP-JADWAL-REFRESH] Called for:', nomorPerkara);
-    const puppeteer = require('puppeteer');
-    let browser;
     try {
-        browser = await puppeteer.launch({
-            headless: 'new',
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-        });
-        const page = await browser.newPage();
-        await sippService.fetchAndCacheJadwal(nomorPerkara, page);
+        await sippService.fetchAndCacheJadwal(nomorPerkara);
 
         const cached = db.prepare(`
             SELECT nomor, tanggal, jam, agenda, ruangan,
@@ -885,8 +866,6 @@ app.post('/api/perkara/sipp/jadwal/:nomor/refresh', async (req, res) => {
     } catch (error) {
         console.error('[SIPP-JADWAL-REFRESH] error:', error.message);
         res.status(500).json({ error: error.message });
-    } finally {
-        if (browser) await browser.close();
     }
 });
 
@@ -904,15 +883,8 @@ app.get('/api/perkara/sipp/putusan/:nomor', async (req, res) => {
         });
     }
 
-    const puppeteer = require('puppeteer');
-    let browser;
     try {
-        browser = await puppeteer.launch({
-            headless: 'new',
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-        });
-        const page = await browser.newPage();
-        await sippService.fetchAndCachePutusan(nomorPerkara, page);
+        await sippService.fetchAndCachePutusan(nomorPerkara);
 
         res.json({
             nomor_perkara: nomorPerkara,
@@ -922,24 +894,15 @@ app.get('/api/perkara/sipp/putusan/:nomor', async (req, res) => {
     } catch (error) {
         console.error('[SIPP-PUTUSAN] error:', error.message);
         res.status(500).json({ error: error.message });
-    } finally {
-        if (browser) await browser.close();
     }
 });
 
-// Force refresh putusan for a perkara
+// Force refresh putusan from the live SIPP database.
 app.post('/api/perkara/sipp/putusan/:nomor/refresh', async (req, res) => {
     const nomorPerkara = decodeURIComponent(req.params.nomor);
     console.log('[SIPP-PUTUSAN-REFRESH] Called for:', nomorPerkara);
-    const puppeteer = require('puppeteer');
-    let browser;
     try {
-        browser = await puppeteer.launch({
-            headless: 'new',
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-        });
-        const page = await browser.newPage();
-        await sippService.fetchAndCachePutusan(nomorPerkara, page);
+        await sippService.fetchAndCachePutusan(nomorPerkara);
 
         res.json({
             nomor_perkara: nomorPerkara,
@@ -950,8 +913,6 @@ app.post('/api/perkara/sipp/putusan/:nomor/refresh', async (req, res) => {
     } catch (error) {
         console.error('[SIPP-PUTUSAN-REFRESH] error:', error.message);
         res.status(500).json({ error: error.message });
-    } finally {
-        if (browser) await browser.close();
     }
 });
 
@@ -1325,22 +1286,12 @@ console.log('[CRON] Setting up SIPP sync schedule (every hour)');
 
 const syncTask = cron.schedule('0 * * * *', async () => {
     try {
-        const oldCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get().c;
-        const isFirstSync = oldCount === 0;
-        console.log(`[CRON] Starting ${isFirstSync ? 'FIRST' : 'INCREMENTAL'} SIPP sync...`);
-
-        const data = await sippService.fetchSIPPData();
-        const count = await sippService.saveToDatabase(data);
-        const newCount = db.prepare('SELECT COUNT(*) as c FROM perkara').get().c;
-
-        console.log(`[CRON] Sync completed: ${count} perkara fetched, ${newCount - oldCount} new, ${newCount} total`);
-
-        // Refresh jadwal dan putusan cache untuk 100 perkara terbaru
-        console.log('[CRON] Refreshing jadwal and putusan cache (100 newest perkara)...');
-        const cacheResult = await sippService.cacheJadwalCurrentYear();
-        console.log('[CRON] Detail cache refreshed:', cacheResult);
+        const result = await runFullSync();
+        if (!result) {
+            console.log('[CRON] Skipping full SIPP database sync: sync already in progress');
+        }
     } catch (error) {
-        console.error('[CRON] Sync error:', error.message);
+        console.error('[CRON] Full database sync error:', error.message);
     }
 }, {
     scheduled: false // Don't start immediately
@@ -1351,19 +1302,7 @@ syncTask.start();
 console.log('[CRON] Auto-sync enabled (runs every hour at minute 0)');
 
 // Start server
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+app.listen(PORT, '127.0.0.1', () => {
+    console.log(`Server running on http://127.0.0.1:${PORT}`);
     console.log(`Database: ${dbPath}`);
-
-    // Initial populate jadwal/putusan cache untuk 100 perkara terbaru (fire-and-forget, jangan blok startup)
-    const cachedCount = db.prepare('SELECT COUNT(*) AS n FROM jadwal_sidang').get().n;
-    const putusanCount = db.prepare('SELECT COUNT(*) AS n FROM putusan_perkara').get().n;
-    if (cachedCount === 0 || putusanCount === 0) {
-        console.log('[CACHE] empty detail cache on startup, populating jadwal/putusan cache for 100 newest perkara...');
-        sippService.cacheJadwalCurrentYear()
-            .then(r => console.log('[CACHE] startup populate done:', r))
-            .catch(e => console.error('[CACHE] startup populate error:', e.message));
-    } else {
-        console.log(`[CACHE] ${cachedCount} jadwal rows and ${putusanCount} putusan rows already cached, skipping initial populate`);
-    }
 });

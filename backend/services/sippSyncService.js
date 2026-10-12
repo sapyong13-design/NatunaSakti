@@ -1,782 +1,206 @@
-// ============================================
-// SIPP SYNC SERVICE
-// Fetch dan sync data perkara dari SIPP PN Natuna
-// ============================================
-
-const axios = require('axios');
+const { execFile } = require('node:child_process');
+const path = require('node:path');
 const cheerio = require('cheerio');
-const puppeteer = require('puppeteer');
 const { savePutusanCache } = require('../lib/putusanCache');
+
+function plain(value) {
+  if (!value) return '';
+  return cheerio.load(String(value).replace(/<br\s*\/?\s*>/gi, '\n'), null, false).text().trim();
+}
+
+function jenisPerkara(nomor) {
+  const upper = nomor.toUpperCase();
+  if (upper.includes('PRK')) return 'Perikanan';
+  if (upper.includes('/PDT')) return 'Perdata';
+  if (upper.includes('/PID')) return 'Pidana';
+  return 'Lainnya';
+}
+
+function mapPerkara(row, fetchedAt) {
+  const nomor = String(row.nomor_perkara || '').trim();
+  if (!nomor || nomor.length > 250) throw new Error('Nomor perkara sumber DB tidak valid');
+  const jenis = jenisPerkara(nomor);
+  const labels = jenis === 'Perdata'
+    ? ['Penggugat/Pemohon', 'Tergugat/Termohon', 'Pihak ketiga', 'Pihak keempat']
+    : ['Penuntut Umum', 'Terdakwa', 'Pihak ketiga', 'Pihak keempat'];
+  const parties = [1, 2, 3, 4].map((n, i) => {
+    const name = plain(row[`pihak${n}_text`]);
+    return name ? `${labels[i]}: ${name}` : '';
+  }).filter(Boolean).join('\n') || plain(row.para_pihak);
+  const register = row.tanggal_pendaftaran || null;
+  const year = nomor.match(/\/(\d{4})\//)?.[1] || register?.slice(0, 4);
+  if (!/^\d{4}$/.test(year || '')) throw new Error('Tahun perkara sumber DB tidak valid');
+  return {
+    nomor_perkara: nomor,
+    nama_perkara: plain(row.jenis_perkara_nama),
+    para_pihak: parties,
+    tahun_masuk: Number(year),
+    jenis_perkara: jenis,
+    sipp_tanggal_register: register,
+    sipp_klasifikasi: plain(row.jenis_perkara_nama),
+    sipp_status: plain(row.proses_terakhir_text || row.tahapan_terakhir_text),
+    sipp_lama_proses: null,
+    sipp_pihak_dipublikasikan: ['Y', 'T'].includes(row.pihak_dipublikasikan) ? row.pihak_dipublikasikan : null,
+    sipp_synced: 1,
+    sipp_last_sync: fetchedAt
+  };
+}
+
+function groupByPerkara(rows) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const key = String(row.perkara_id);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
+  }
+  return grouped;
+}
+
+function mapPutusan(perkara, putusan, terdakwa = []) {
+  const raw = [];
+  const add = (label, value) => { if (value) raw.push({ label, value: plain(value) }); };
+  add('Tanggal Putusan', putusan?.tanggal_putusan);
+  add('Tanggal Minutasi', putusan?.tanggal_minutasi);
+  add('Tanggal BHT', putusan?.tanggal_bht);
+  add('Amar Putusan', putusan?.amar_putusan);
+  add('Status Putusan', putusan?.status_putusan_nama || putusan?.status_putusan_text);
+  for (const row of terdakwa) {
+    add('Putusan Terdakwa', row.status_putusan_text);
+    add('Keterangan Putusan Terdakwa', row.keterangan_putusan);
+  }
+  if (perkara.pihak_dipublikasikan === 'Y') add('Pihak dipublikasikan', 'Ya');
+  if (perkara.pihak_dipublikasikan === 'T') add('Pihak dipublikasikan', 'Tidak');
+  return {
+    tanggal_putusan: putusan?.tanggal_putusan || null,
+    tanggal_minutasi: putusan?.tanggal_minutasi || null,
+    amar_putusan: plain(putusan?.amar_putusan) || null,
+    status_putusan: plain(putusan?.status_putusan_nama || putusan?.status_putusan_text) || null,
+    raw,
+    raw_text: raw.map(row => `${row.label}: ${row.value}`).join('\n')
+  };
+}
 
 class SIPPSyncService {
   constructor(db) {
     this.db = db;
-    this.sippUrl = 'https://sipp.pn-natuna.go.id/';
+    const columns = db.prepare('PRAGMA table_info(perkara)').all();
+    if (!columns.some(column => column.name === 'sipp_pihak_dipublikasikan')) {
+      db.exec('ALTER TABLE perkara ADD COLUMN sipp_pihak_dipublikasikan TEXT');
+    }
   }
 
-  /**
-   * Cek apakah ini sync pertama kali (database kosong)
-   */
   isFirstSync() {
-    const count = this.db.prepare('SELECT COUNT(*) as c FROM perkara').get().c;
-    return count === 0;
+    return this.db.prepare('SELECT COUNT(*) AS c FROM perkara').get().c === 0;
   }
 
-  /**
-   * Fetch HTML dari website SIPP menggunakan Puppeteer (untuk pagination JavaScript)
-   * - First sync: sync SEMUA perkara (~4557 total)
-   * - Subsequent sync: hanya 200 perkara terbaru (10 halaman)
-   */
+  readSource(nomor = null) {
+    return new Promise((resolve, reject) => {
+      const child = execFile('python', [path.join(__dirname, '../scripts/read-sipp-db.py')], {
+        encoding: 'utf8', windowsHide: true, timeout: 120000, maxBuffer: 64 * 1024 * 1024
+      }, (error, stdout, stderr) => {
+        if (error) return reject(new Error(stderr.trim() || 'Koneksi DB SIPP gagal; cache lokal tidak diubah'));
+        try {
+          const snapshot = JSON.parse(stdout);
+          for (const key of ['perkara', 'jadwal', 'putusan', 'terdakwa']) {
+            if (!Array.isArray(snapshot[key])) throw new Error('Respons DB SIPP tidak valid');
+          }
+          resolve(snapshot);
+        } catch (parseError) { reject(parseError); }
+      });
+      child.stdin.on('error', () => {}); // Process failure is reported by execFile callback.
+      child.stdin.end(JSON.stringify({ nomor }));
+    });
+  }
+
   async fetchSIPPData(progressCallback = null) {
-    const firstSync = this.isFirstSync();
-    const maxPages = firstSync ? 150 : 10; // First sync: 150 pages (avoid context destroy), subsequent: 10 pages
-
-    console.log(`[SIPP] Fetching data from ${this.sippUrl} (${firstSync ? 'FIRST SYNC - ALL DATA' : 'incremental - 200 newest'})...`);
-
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu'
-      ]
-    });
-
-    try {
-      const page = await browser.newPage();
-      await page.goto(this.sippUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-
-      // Wait for table to load
-      await page.waitForSelector('table', { timeout: 10000 });
-
-      const perkaraList = [];
-      const seenNomor = new Set(); // Track unique perkara to avoid duplicates
-      let currentPage = 1;
-      let consecutiveEmptyPages = 0;
-      const maxEmptyPages = 3; // Stop after 3 consecutive empty pages
-
-      while (currentPage <= maxPages && consecutiveEmptyPages < maxEmptyPages) {
-        console.log(`[SIPP] Scraping page ${currentPage}...`);
-        if (progressCallback) {
-          progressCallback({
-            page: currentPage,
-            maxPages,
-            fetchedCount: perkaraList.length,
-            status: 'page-start'
-          });
-        }
-
-        // Navigate to specific page by clicking the page number link
-        if (currentPage > 1) {
-          try {
-            const navigated = await page.evaluate((pageNum) => {
-              const pagesDiv = document.getElementById('pages');
-              if (!pagesDiv) return false;
-
-              // Find the link with the page number
-              const pageLink = Array.from(pagesDiv.querySelectorAll('a')).find(a =>
-                a.textContent.trim() === pageNum.toString()
-              );
-
-              if (!pageLink) return false;
-
-              pageLink.click();
-              return true;
-            }, currentPage);
-
-            if (!navigated) {
-              console.log(`[SIPP] Page ${currentPage} link not found, stopping`);
-              break;
-            }
-
-            // Wait for table to reload
-            await new Promise(r => setTimeout(r, 2000));
-          } catch (e) {
-            console.log(`[SIPP] Navigation error: ${e.message}, stopping`);
-            break;
-          }
-        }
-
-        // Get data from current page
-        const pageData = await page.evaluate(() => {
-          const data = [];
-          const rows = document.querySelectorAll('table tr');
-
-          rows.forEach((row, i) => {
-            if (i === 0) return; // Skip header
-
-            const cols = row.querySelectorAll('td');
-            if (cols.length < 7) return;
-
-            const nomorPerkara = cols[1]?.textContent?.trim();
-            // Must be valid nomor perkara (starts with digit)
-            if (!nomorPerkara || !/^\d/.test(nomorPerkara)) return;
-
-            data.push({
-              nomor_perkara: nomorPerkara,
-              sipp_tanggal_register: cols[2]?.textContent?.trim() || '',
-              sipp_klasifikasi: cols[3]?.textContent?.trim() || '',
-              para_pihak: cols[4]?.textContent?.trim() || '',
-              sipp_status: cols[5]?.textContent?.trim() || '',
-              sipp_lama_proses: cols[6]?.textContent?.trim() || ''
-            });
-          });
-
-          return data;
-        });
-
-        if (pageData.length === 0) {
-          consecutiveEmptyPages++;
-          console.log(`[SIPP] No data on page ${currentPage} (${consecutiveEmptyPages}/${maxEmptyPages} empty)`);
-          currentPage++;
-          continue;
-        }
-
-        consecutiveEmptyPages = 0; // Reset empty page counter
-
-        // Process each perkara and track unique ones
-        let newInPage = 0;
-        for (const item of pageData) {
-          if (seenNomor.has(item.nomor_perkara)) {
-            continue; // Skip duplicates
-          }
-          seenNomor.add(item.nomor_perkara);
-          newInPage++;
-
-          const jenis = this.detectJenisPerkara(item.nomor_perkara);
-          perkaraList.push({
-            ...item,
-            jenis_perkara: jenis,
-            nama_perkara: item.sipp_klasifikasi,
-            tahun_masuk: this.extractTahun(item.nomor_perkara),
-            sipp_synced: 1,
-            sipp_last_sync: new Date().toISOString()
-          });
-        }
-
-        console.log(`[SIPP] Page ${currentPage}: ${pageData.length} rows, ${newInPage} new, ${perkaraList.length} unique total`);
-
-        // Report progress
-        if (progressCallback) {
-          progressCallback({
-            page: currentPage,
-            maxPages,
-            fetchedCount: perkaraList.length,
-            status: 'page-complete'
-          });
-        }
-
-        // Save batch every 50 pages to prevent data loss on error
-        if (currentPage % 50 === 0) {
-          console.log(`[SIPP] Saving batch at page ${currentPage} (${perkaraList.length} perkara)...`);
-          // Create a temporary callback to save current batch
-          if (progressCallback) {
-            progressCallback({
-              page: currentPage,
-              maxPages,
-              fetchedCount: perkaraList.length,
-              status: 'batch-save',
-              saveBatch: true  // Signal to save current batch
-            });
-          }
-        }
-
-        // For first sync, stop if we've collected ~4500+ (SIPP has ~4557 total)
-        if (firstSync && perkaraList.length >= 4600) {
-          console.log(`[SIPP] First sync collected ${perkaraList.length} perkara (expected ~4557), stopping`);
-          break;
-        }
-
-        // Stop if we're getting all duplicates
-        if (newInPage === 0 && consecutiveEmptyPages === 0) {
-          console.log(`[SIPP] All duplicates on page ${currentPage}, stopping`);
-          break;
-        }
-
-        currentPage++;
-      }
-
-      await page.close();
-      console.log(`[SIPP] Total fetched: ${perkaraList.length} unique perkara`);
-      return perkaraList;
-
-    } finally {
-      await browser.close();
-    }
-  }
-
-  /**
-   * Fetch dengan retry logic
-   */
-  async fetchWithRetry(url, maxRetries = 3) {
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        const response = await axios.get(url, {
-          timeout: 30000,
-          responseType: 'text'
-        });
-
-        // Return object with text() method for compatibility
-        return {
-          text: () => Promise.resolve(response.data),
-          ok: true
-        };
-      } catch (error) {
-        if (i < maxRetries - 1) {
-          const backoff = 5000 * (i + 1);
-          console.log(`[SIPP] Retry ${i + 1}/${maxRetries} in ${backoff}ms:`, error.message);
-          await new Promise(r => setTimeout(r, backoff));
-        } else {
-          throw new Error(`SIPP fetch failed after ${maxRetries} retries: ${error.message}`);
-        }
-      }
-    }
-    throw new Error('Max retries exceeded');
-  }
-
-  /**
-   * Parse tabel perkara dari HTML SIPP
-   */
-  parsePerkaraTable(html) {
-    const $ = cheerio.load(html);
-    const perkaraList = [];
-
-    $('table tr').each((i, row) => {
-      // Skip header row
-      if (i === 0) return;
-
-      const cols = $(row).find('td');
-      if (cols.length < 7) return;
-
-      const nomorPerkara = $(cols[1]).text().trim();
-      if (!nomorPerkara || nomorPerkara === '') return;
-
-      const jenis = this.detectJenisPerkara(nomorPerkara);
-
-      perkaraList.push({
-        nomor_perkara: nomorPerkara,
-        sipp_tanggal_register: $(cols[2]).text().trim(),
-        sipp_klasifikasi: $(cols[3]).text().trim(),
-        para_pihak: $(cols[4]).text().trim(),
-        sipp_status: $(cols[5]).text().trim(),
-        sipp_lama_proses: $(cols[6]).text().trim(),
-        jenis_perkara: jenis,
-        nama_perkara: $(cols[3]).text().trim(), // fallback from klasifikasi
-        tahun_masuk: this.extractTahun(nomorPerkara),
-        sipp_synced: 1,
-        sipp_last_sync: new Date().toISOString()
-      });
-    });
-
-    console.log(`[SIPP] Parsed ${perkaraList.length} perkara`);
-    return perkaraList;
-  }
-
-  /**
-   * Fetch jadwal sidang untuk satu perkara (single-call: launch browser sendiri).
-   */
-  async fetchJadwalSidang(nomorPerkara) {
-    console.log('[SIPP] Fetching jadwal for:', nomorPerkara);
-
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-    });
-
-    try {
-      const page = await browser.newPage();
-      return await this._fetchJadwalFromPage(page, nomorPerkara);
-    } catch (error) {
-      console.error('[SIPP] Error fetching jadwal:', error.message);
-      return [];
-    } finally {
-      await browser.close();
-    }
-  }
-
-  /**
-   * Fetch tanggal minutasi dari detail page perkara
-   */
-  async _fetchTanggalMinutasi(page, nomorPerkara) {
-    await page.goto(this.sippUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForSelector('#search-box', { timeout: 10000 });
-    await page.click('#search-box');
-    await page.$eval('#search-box', (el) => { el.value = ''; });
-    await page.type('#search-box', nomorPerkara, { delay: 25 });
-
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }),
-      page.evaluate(() => {
-        const form = document.querySelector('form[action*="search"]');
-        if (form) form.submit();
-      })
-    ]);
-
-    const detilUrl = await page.evaluate((nomor) => {
-      const rows = document.querySelectorAll('table tr');
-      for (const row of rows) {
-        const cols = row.querySelectorAll('td');
-        if (cols.length >= 2 && cols[1].textContent.trim() === nomor) {
-          const a = row.querySelector('a[href*="show_detil"]');
-          return a ? a.href : null;
-        }
-      }
-      return null;
-    }, nomorPerkara);
-
-    if (!detilUrl) return null;
-
-    await page.goto(detilUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-
-    // Scrap tanggal minutasi dari tab atau detail
-    const minutasi = await page.evaluate(() => {
-      // Cari di tabs - biasanya di "Putusan" atau tab lain
-      const tabs = document.querySelectorAll('[id^="tabs"]');
-      for (const tab of tabs) {
-        const text = tab.textContent;
-        // Cari pola tanggal minutasi/putusan
-        const match = text.match(/minutasi|putus(?:an)?|tanggal.*:\s*(\d{1,2}\/\d{1,2}\/\d{4}|\d{1,2}\s+\w+\s+\d{4})/i);
-        if (match) {
-          // Coba extract tanggal yang valid
-          const dateMatch = text.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
-          if (dateMatch) return dateMatch[1];
-        }
-      }
-
-      // Cari di seluruh halaman
-      const pageText = document.body.textContent;
-      const minutasiMatch = pageText.match(/tanggal\s+minutasi\s*[:=]\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
-      if (minutasiMatch) return minutasiMatch[1];
-
-      const putusanMatch = pageText.match(/tanggal\s+putus\s*[:=]\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
-      if (putusanMatch) return putusanMatch[1];
-
-      return null;
-    });
-
-    return minutasi;
-  }
-
-  /**
-   * Core scrape logic — terima Page yang sudah ready. Dipanggil oleh
-   * fetchJadwalSidang (single) dan cacheJadwalCurrentYear (batch).
-   *
-   * Flow:
-   *   1. Submit SIPP search form for the nomor perkara
-   *   2. Grab the `show_detil` URL from the matching row
-   *   3. Open detail page, click the Jadwal Sidang tab (#tabs4)
-   *   4. Wait for the AJAX-loaded table inside #tabs4 and scrape it
-   */
-  async _fetchJadwalFromPage(page, nomorPerkara) {
-    // 1. Open SIPP and submit the search form
-    await page.goto(this.sippUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForSelector('#search-box', { timeout: 10000 });
-    await page.click('#search-box');
-    // Clear input first (in case batch reuses page after a previous search)
-    await page.$eval('#search-box', (el) => { el.value = ''; });
-    await page.type('#search-box', nomorPerkara, { delay: 25 });
-
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }),
-      page.evaluate(() => {
-        const form = document.querySelector('form[action*="search"]');
-        if (form) form.submit();
-      })
-    ]);
-
-    // 2. Find the detail URL for the matching row
-    const detilUrl = await page.evaluate((nomor) => {
-      const rows = document.querySelectorAll('table tr');
-      for (const row of rows) {
-        const cols = row.querySelectorAll('td');
-        if (cols.length >= 2 && cols[1].textContent.trim() === nomor) {
-          const a = row.querySelector('a[href*="show_detil"]');
-          return a ? a.href : null;
-        }
-      }
-      return null;
-    }, nomorPerkara);
-
-    if (!detilUrl) {
-      console.log('[SIPP] Perkara not found in search results:', nomorPerkara);
-      return [];
-    }
-
-    // 3. Open detail page and click the Jadwal Sidang tab
-    await page.goto(detilUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForSelector('a[href*="#tabs4"]', { timeout: 10000 });
-    await page.evaluate(() => {
-      const tab = document.querySelector('a[href*="#tabs4"]');
-      if (tab) tab.click();
-    });
-
-    // 4. Wait for AJAX content inside #tabs4, then scrape
-    await page.waitForFunction(
-      () => {
-        const t = document.getElementById('tabs4');
-        return t && t.querySelector('table tr td');
-      },
-      { timeout: 15000 }
-    ).catch(() => null);
-
-    const jadwal = await page.evaluate(() => {
-      const t = document.getElementById('tabs4');
-      if (!t) return [];
-      const out = [];
-      t.querySelectorAll('table tr').forEach((row, i) => {
-        if (i === 0) return; // header
-        const cols = row.querySelectorAll('td');
-        if (cols.length < 5) return;
-        out.push({
-          nomor: cols[0]?.textContent?.trim() || '',
-          tanggal: cols[1]?.textContent?.trim() || '',
-          jam: cols[2]?.textContent?.trim() || '',
-          agenda: cols[3]?.textContent?.trim() || '',
-          ruangan: cols[4]?.textContent?.trim().replace(/\s+/g, ' ') || '',
-          alasanDitunda: cols[5]?.textContent?.trim() || ''
-        });
-      });
-      return out;
-    });
-
-    console.log('[SIPP] Found', jadwal.length, 'sidang schedules for', nomorPerkara);
-    return jadwal;
-  }
-
-  /**
-   * Fetch jadwal sidang dan persist ke tabel jadwal_sidang.
-   * Strategi: DELETE existing + INSERT new dalam satu transaction.
-   *
-   * @param {string} nomorPerkara
-   * @param {import('puppeteer').Page} page - reused page instance
-   * @returns {Promise<number>} jumlah jadwal yang ke-cache
-   */
-  async fetchAndCacheJadwal(nomorPerkara, page) {
-    const jadwal = await this._fetchJadwalFromPage(page, nomorPerkara);
+    progressCallback?.({ current: 0, total: 0, fetchedCount: 0, status: 'db-read' });
+    const source = await this.readSource();
+    if (!source.perkara.length) throw new Error('DB SIPP mengembalikan snapshot kosong; cache lokal dipertahankan');
     const fetchedAt = new Date().toISOString();
+    const decisions = groupByPerkara(source.putusan);
+    const snapshot = { ...source, sourcePerkara: source.perkara, perkara: source.perkara.map(row => mapPerkara(row, fetchedAt)) };
+    for (let i = 0; i < snapshot.perkara.length; i++) {
+      const row = snapshot.perkara[i];
+      const decision = decisions.get(String(source.perkara[i].perkara_id))?.[0];
+      row.tanggal_putus = decision?.tanggal_putusan || null;
+      const end = decision?.tanggal_minutasi || row.tanggal_putus || fetchedAt.slice(0, 10);
+      const days = Math.floor((Date.parse(end) - Date.parse(row.sipp_tanggal_register)) / 86400000);
+      row.sipp_lama_proses = Number.isFinite(days) && days >= 0 ? `${days} Hari` : null;
+    }
+    if (new Set(snapshot.perkara.map(row => row.nomor_perkara)).size !== snapshot.perkara.length) {
+      throw new Error('Nomor perkara duplikat pada sumber DB SIPP');
+    }
+    snapshot.detail_cache = { ok: snapshot.perkara.length * 2, failed: 0, jadwalOk: snapshot.perkara.length,
+      putusanOk: snapshot.perkara.length, jadwalFailed: 0, putusanFailed: 0, total: snapshot.perkara.length };
+    progressCallback?.({ current: snapshot.perkara.length, total: snapshot.perkara.length,
+      fetchedCount: snapshot.perkara.length, status: 'db-read' });
+    return snapshot;
+  }
 
-    const del = this.db.prepare('DELETE FROM jadwal_sidang WHERE nomor_perkara = ?');
-    const ins = this.db.prepare(`
-      INSERT INTO jadwal_sidang
+  cacheJadwal(nomor, rows, fetchedAt = new Date().toISOString()) {
+    this.db.prepare('DELETE FROM jadwal_sidang WHERE nomor_perkara = ?').run(nomor);
+    const insert = this.db.prepare(`INSERT INTO jadwal_sidang
       (nomor_perkara, nomor, tanggal, jam, agenda, ruangan, alasan_ditunda, fetched_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const tx = this.db.transaction((entries) => {
-      del.run(nomorPerkara);
-      if (entries.length === 0) {
-        // Sentinel: marks "we fetched, found 0 jadwal". Distinguishes
-        // "no cache yet" from "cached and confirmed empty" — keeps the
-        // endpoint from thrashing puppeteer for perkara not yet sched.
-        ins.run(nomorPerkara, null, null, null, null, null, null, fetchedAt);
-      } else {
-        for (const e of entries) {
-          ins.run(
-            nomorPerkara,
-            parseInt(e.nomor) || null,
-            e.tanggal || null,
-            e.jam || null,
-            e.agenda || null,
-            e.ruangan || null,
-            e.alasanDitunda || null,
-            fetchedAt
-          );
-        }
-      }
-    });
-
-    tx(jadwal);
-    return jadwal.length;
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+    if (!rows.length) insert.run(nomor, null, null, null, null, null, null, fetchedAt);
+    rows.forEach((row, i) => insert.run(nomor, i + 1, row.tanggal_sidang || null,
+      row.jam_sidang || null, plain(row.agenda) || null, plain(row.ruangan) || null,
+      plain(row.alasan_ditunda) || null, fetchedAt));
   }
 
-  async fetchPutusan(nomorPerkara) {
-    console.log('[SIPP] Fetching putusan for:', nomorPerkara);
-
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-    });
-
-    try {
-      const page = await browser.newPage();
-      return await this._fetchPutusanFromPage(page, nomorPerkara);
-    } catch (error) {
-      console.error('[SIPP] Error fetching putusan:', error.message);
-      return null;
-    } finally {
-      await browser.close();
-    }
-  }
-
-  async _fetchPutusanFromPage(page, nomorPerkara) {
-    await page.goto(this.sippUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForSelector('#search-box', { timeout: 10000 });
-    await page.click('#search-box');
-    await page.$eval('#search-box', (el) => { el.value = ''; });
-    await page.type('#search-box', nomorPerkara, { delay: 25 });
-
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }),
-      page.evaluate(() => {
-        const form = document.querySelector('form[action*="search"]');
-        if (form) form.submit();
-      })
-    ]);
-
-    const detilUrl = await page.evaluate((nomor) => {
-      const rows = document.querySelectorAll('table tr');
-      for (const row of rows) {
-        const cols = row.querySelectorAll('td');
-        if (cols.length >= 2 && cols[1].textContent.trim() === nomor) {
-          const a = row.querySelector('a[href*="show_detil"]');
-          return a ? a.href : null;
-        }
-      }
-      return null;
-    }, nomorPerkara);
-
-    if (!detilUrl) {
-      console.log('[SIPP] Perkara not found in search results:', nomorPerkara);
-      return null;
-    }
-
-    await page.goto(detilUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-
-    const clicked = await page.evaluate(() => {
-      const links = Array.from(document.querySelectorAll('a[href^="#tabs"], a[href*="#tabs"]'));
-      const putusanLink = links.find(a => /putusan/i.test(a.textContent || ''));
-      const fallback = document.querySelector('a[href*="#tabs5"]');
-      const link = putusanLink || fallback;
-      if (!link) return false;
-      link.click();
-      return true;
-    });
-
-    if (clicked) {
-      await new Promise(r => setTimeout(r, 1000));
-    }
-
-    const putusan = await page.evaluate(() => {
-      function clean(text) {
-        return (text || '').replace(/\s+/g, ' ').trim();
-      }
-
-      const tabLinks = Array.from(document.querySelectorAll('a[href^="#tabs"], a[href*="#tabs"]'));
-      const putusanHref = tabLinks.find(a => /putusan/i.test(a.textContent || ''))?.getAttribute('href') || '#tabs5';
-      const container = document.querySelector(putusanHref) || document.getElementById('tabs5') || document.body;
-      const raw = [];
-
-      container.querySelectorAll('table tr').forEach(row => {
-        const cols = Array.from(row.querySelectorAll('td, th')).map(col => clean(col.textContent));
-        const values = cols.filter(Boolean);
-        if (values.length >= 2) {
-          raw.push({ label: values[0].replace(/:$/, ''), value: values.slice(1).join(' ') });
-        } else if (values.length === 1) {
-          raw.push({ label: '', value: values[0] });
-        }
+  async saveToDatabase(snapshot) {
+    const jadwal = groupByPerkara(snapshot.jadwal);
+    const putusan = groupByPerkara(snapshot.putusan);
+    const terdakwa = groupByPerkara(snapshot.terdakwa);
+    const insert = this.db.prepare(`INSERT INTO perkara
+      (nomor_perkara, nama_perkara, para_pihak, tahun_masuk, jenis_perkara,
+       sipp_tanggal_register, sipp_klasifikasi, sipp_status, sipp_lama_proses,
+       sipp_pihak_dipublikasikan, sipp_synced, sipp_last_sync, tanggal_putus)
+      VALUES (@nomor_perkara, @nama_perkara, @para_pihak, @tahun_masuk, @jenis_perkara,
+       @sipp_tanggal_register, @sipp_klasifikasi, @sipp_status, @sipp_lama_proses,
+       @sipp_pihak_dipublikasikan, @sipp_synced, @sipp_last_sync, @tanggal_putus)
+      ON CONFLICT(nomor_perkara) DO UPDATE SET
+       nama_perkara=excluded.nama_perkara, para_pihak=excluded.para_pihak,
+       tahun_masuk=excluded.tahun_masuk, jenis_perkara=excluded.jenis_perkara,
+       sipp_tanggal_register=excluded.sipp_tanggal_register, sipp_klasifikasi=excluded.sipp_klasifikasi,
+       sipp_status=excluded.sipp_status, sipp_pihak_dipublikasikan=excluded.sipp_pihak_dipublikasikan,
+       sipp_lama_proses=excluded.sipp_lama_proses, tanggal_putus=excluded.tanggal_putus,
+       sipp_synced=excluded.sipp_synced, sipp_last_sync=excluded.sipp_last_sync,
+       updated_at=CURRENT_TIMESTAMP`);
+    this.db.transaction(() => {
+      snapshot.perkara.forEach((row, i) => {
+        insert.run(row);
+        const original = snapshot.sourcePerkara[i];
+        const id = String(original.perkara_id);
+        this.cacheJadwal(row.nomor_perkara, jadwal.get(id) || [], row.sipp_last_sync);
+        savePutusanCache(this.db, row.nomor_perkara, mapPutusan(original, putusan.get(id)?.[0], terdakwa.get(id)));
       });
-
-      if (raw.length === 0) {
-        container.querySelectorAll('p, li, div').forEach(el => {
-          const text = clean(el.textContent);
-          if (text && text.length > 3 && text.length < 2000) raw.push({ label: '', value: text });
-        });
-      }
-
-      const rawText = clean(container.textContent);
-      if (!rawText && raw.length === 0) return null;
-
-      function findValue(patterns) {
-        const row = raw.find(item => patterns.some(pattern => pattern.test(`${item.label} ${item.value}`)));
-        if (!row) return null;
-        if (row.label && patterns.some(pattern => pattern.test(row.label))) return row.value || null;
-        return row.value || null;
-      }
-
-      return {
-        tanggal_putusan: findValue([/tanggal putusan/i, /tgl putusan/i, /tanggal putus/i]),
-        amar_putusan: findValue([/amar/i, /bunyi putusan/i]),
-        status_putusan: findValue([/status putusan/i, /^status$/i]),
-        tanggal_minutasi: findValue([/tanggal minutasi/i, /tgl minutasi/i, /minutasi/i]),
-        majelis_hakim: findValue([/majelis hakim/i, /hakim majelis/i]),
-        panitera_pengganti: findValue([/panitera pengganti/i, /panitera/i]),
-        raw_text: rawText,
-        raw
-      };
-    });
-
-    console.log('[SIPP] Found putusan data for', nomorPerkara, putusan ? 'yes' : 'no');
-    return putusan;
+    })();
+    return snapshot.perkara.length;
   }
 
-  async fetchAndCachePutusan(nomorPerkara, page) {
-    const putusan = await this._fetchPutusanFromPage(page, nomorPerkara);
-    savePutusanCache(this.db, nomorPerkara, putusan);
-    return putusan ? 1 : 0;
+  async fetchJadwalSidang(nomor) {
+    await this.fetchAndCacheJadwal(nomor);
+    return this.db.prepare(`SELECT nomor, tanggal, jam, agenda, ruangan, alasan_ditunda AS alasanDitunda
+      FROM jadwal_sidang WHERE nomor_perkara = ? AND nomor IS NOT NULL ORDER BY nomor`).all(nomor);
   }
 
-  /**
-   * Cache jadwal sidang dan putusan untuk 100 perkara terbaru.
-   * 1 browser instance dipakai ulang untuk seluruh batch.
-   *
-   * Concurrency-guarded: kalau call kedua masuk saat batch sebelumnya masih
-   * jalan (misal startup populate overlap dengan cron jam :00), call kedua
-   * langsung return dengan `skipped: true` tanpa launch browser baru.
-   *
-   * @returns {Promise<{ok: number, failed: number, total: number, skipped?: boolean}>}
-   */
-  async cacheJadwalCurrentYear(progressCallback = null) {
-    if (this.cachePopulateInProgress) {
-      console.log('[CACHE] populate already in progress, skipping');
-      return { ok: 0, failed: 0, total: 0, skipped: true };
-    }
-    this.cachePopulateInProgress = true;
-
-    try {
-      // Ambil 100 perkara terbaru (berdasarkan created_at DESC)
-      const perkara = this.db.prepare(`
-        SELECT nomor_perkara FROM perkara
-        ORDER BY created_at DESC
-        LIMIT 100
-      `).all();
-
-      console.log(`[CACHE] Caching jadwal and putusan for ${perkara.length} newest perkara`);
-
-      if (perkara.length === 0) {
-        return { ok: 0, failed: 0, jadwalOk: 0, jadwalFailed: 0, putusanOk: 0, putusanFailed: 0, total: 0 };
-      }
-
-      const browser = await puppeteer.launch({
-        headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-      });
-
-      let jadwalOk = 0;
-      let jadwalFailed = 0;
-      let putusanOk = 0;
-      let putusanFailed = 0;
-      try {
-        const page = await browser.newPage();
-        for (let i = 0; i < perkara.length; i++) {
-          const p = perkara[i];
-          try {
-            const n = await this.fetchAndCacheJadwal(p.nomor_perkara, page);
-            jadwalOk++;
-            console.log(`[CACHE] ${i + 1}/${perkara.length}: ${p.nomor_perkara} -> ${n} jadwal`);
-          } catch (err) {
-            jadwalFailed++;
-            console.error(`[CACHE] jadwal failed ${p.nomor_perkara}:`, err.message);
-            // Reset page state so a wedged page (crashed frame, dangling
-            // navigation) doesn't cascade into the next iteration.
-            try { await page.goto('about:blank'); } catch (_) { /* ignore */ }
-          }
-
-          try {
-            const n = await this.fetchAndCachePutusan(p.nomor_perkara, page);
-            putusanOk++;
-            console.log(`[CACHE] ${i + 1}/${perkara.length}: ${p.nomor_perkara} -> ${n ? 'putusan' : 'no putusan'}`);
-          } catch (err) {
-            putusanFailed++;
-            console.error(`[CACHE] putusan failed ${p.nomor_perkara}:`, err.message);
-            try { await page.goto('about:blank'); } catch (_) { /* ignore */ }
-          }
-
-          await new Promise(r => setTimeout(r, 200)); // throttle SIPP
-
-          if (progressCallback) {
-            progressCallback({
-              current: i + 1,
-              total: perkara.length,
-              nomorPerkara: p.nomor_perkara,
-              jadwalOk,
-              jadwalFailed,
-              putusanOk,
-              putusanFailed,
-              failed: jadwalFailed + putusanFailed
-            });
-          }
-        }
-      } finally {
-        await browser.close();
-      }
-
-      const ok = jadwalOk + putusanOk;
-      const failed = jadwalFailed + putusanFailed;
-      console.log(`[CACHE] done: jadwalOk=${jadwalOk}, putusanOk=${putusanOk}, failed=${failed}, total=${perkara.length}`);
-      return { ok, failed, jadwalOk, jadwalFailed, putusanOk, putusanFailed, total: perkara.length };
-    } finally {
-      this.cachePopulateInProgress = false;
-    }
+  async fetchAndCacheJadwal(nomor) {
+    const source = await this.readSource(nomor);
+    if (!source.perkara.length) throw new Error('Perkara tidak ditemukan pada DB SIPP');
+    this.db.transaction(() => this.cacheJadwal(nomor, source.jadwal))();
+    return source.jadwal.length;
   }
 
-  /**
-   * Deteksi jenis perkara dari nomor perkara
-   * Contoh: 4/Pdt.P/2026/PN Ntn -> Perdata
-   *          22/Pid.B/2026/PN Ntn -> Pidana
-   */
-  detectJenisPerkara(nomorPerkara) {
-    const upper = nomorPerkara.toUpperCase();
-
-    // Check PRK first because Pid.Sus-PRK contains both /PID and PRK
-    if (upper.includes('PRK')) return 'Perikanan';
-    if (upper.includes('/PDT')) return 'Perdata';
-    if (upper.includes('/PID')) return 'Pidana';
-
-    return 'Lainnya';
+  async fetchPutusan(nomor) {
+    const source = await this.readSource(nomor);
+    if (!source.perkara.length) throw new Error('Perkara tidak ditemukan pada DB SIPP');
+    return mapPutusan(source.perkara[0], source.putusan[0], source.terdakwa);
   }
 
-  /**
-   * Extract tahun dari nomor perkara
-   * Contoh: 4/Pdt.P/2026/PN Ntn -> 2026
-   */
-  extractTahun(nomorPerkara) {
-    const match = nomorPerkara.match(/\/(\d{4})\//);
-    return match ? parseInt(match[1]) : new Date().getFullYear();
-  }
-
-  /**
-   * Simpan data perkara ke database
-   */
-  async saveToDatabase(perkaraList) {
-    if (perkaraList.length === 0) {
-      console.log('[SIPP] No data to save');
-      return 0;
-    }
-
-    const insert = this.db.prepare(`
-      INSERT OR REPLACE INTO perkara
-      (nomor_perkara, sipp_tanggal_register, sipp_klasifikasi, para_pihak,
-       sipp_status, sipp_lama_proses, jenis_perkara, nama_perkara, tahun_masuk,
-       sipp_synced, sipp_last_sync)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const transaction = this.db.transaction((perkara) => {
-      try {
-        insert.run(
-          perkara.nomor_perkara,
-          perkara.sipp_tanggal_register,
-          perkara.sipp_klasifikasi,
-          perkara.para_pihak,
-          perkara.sipp_status,
-          perkara.sipp_lama_proses,
-          perkara.jenis_perkara,
-          perkara.nama_perkara,
-          perkara.tahun_masuk,
-          perkara.sipp_synced,
-          perkara.sipp_last_sync
-        );
-      } catch (error) {
-        console.error('[SIPP] Error inserting:', perkara.nomor_perkara, error.message);
-      }
-    });
-
-    perkaraList.forEach(transaction);
-    return perkaraList.length;
+  async fetchAndCachePutusan(nomor) {
+    savePutusanCache(this.db, nomor, await this.fetchPutusan(nomor));
+    return 1;
   }
 }
 

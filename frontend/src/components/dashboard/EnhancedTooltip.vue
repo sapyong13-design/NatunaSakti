@@ -1,6 +1,5 @@
 <script setup>
 import { computed } from 'vue'
-import { pihakUtama } from '../../lib/pihak'
 import { formatDateIndo } from '../../lib/date'
 
 const props = defineProps({
@@ -59,7 +58,7 @@ const latestJadwal = computed(() => {
                 <div class="ns-tooltip-body">
                     <div class="ns-tooltip-section">
                         <span class="ns-tooltip-label">Para Pihak</span>
-                        <span class="ns-tooltip-value">{{ pihakUtama(row.para_pihak) }}</span>
+                        <span class="ns-tooltip-value">{{ row.para_pihak || '—' }}</span>
                     </div>
 
                     <div class="ns-tooltip-grid">
@@ -155,6 +154,8 @@ const latestJadwal = computed(() => {
     font-size: 13px;
     color: var(--text);
     line-height: 1.4;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
 }
 
 .ns-tooltip-grid {

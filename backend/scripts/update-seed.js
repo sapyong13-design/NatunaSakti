@@ -28,5 +28,5 @@ const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
 
 console.log(`[SEED] Seed database updated: ${seedDb}`);
 console.log(`[SEED] Size: ${sizeMB} MB`);
-console.log('[SEED] Commit this file to Git for use on other PCs!');
+console.log('[SEED] Local sensitive backup only. Never commit database files to Git.');
 console.log('[SEED] On new setups, the seed will be copied automatically.');

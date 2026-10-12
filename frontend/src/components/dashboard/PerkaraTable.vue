@@ -1,11 +1,10 @@
 <script setup>
-import { ref, onUnmounted } from 'vue'
-import { pihakUtama } from '../../lib/pihak'
-import { formatDateIndo } from '../../lib/date'
+import { ref, computed, onUnmounted } from 'vue'
+import { formatDateIndoShort } from '../../lib/date'
 import StatusBadge from './StatusBadge.vue'
 import ContextualActionMenu from './ContextualActionMenu.vue'
 import JadwalQuickPreview from './JadwalQuickPreview.vue'
-import EnhancedTooltip from './EnhancedTooltip.vue'
+import Icon from '../Icon.vue'
 
 const props = defineProps({
     rows: { type: Array, required: true },
@@ -32,16 +31,8 @@ const jadwalPreview = ref({
     row: null
 })
 
-// Enhanced tooltip state
-const enhancedTooltip = ref({
-    show: false,
-    x: 0,
-    y: 0,
-    row: null
-})
 
 let previewTimeout = null
-let tooltipTimeout = null
 
 function handleContextMenu(e, row) {
     e.preventDefault()
@@ -82,629 +73,162 @@ function handleMouseLeave() {
     jadwalPreview.value.show = false
 }
 
-function handleTooltipMouseEnter(e, row) {
-    if (tooltipTimeout) {
-        clearTimeout(tooltipTimeout)
-    }
-
-    tooltipTimeout = setTimeout(() => {
-        const rect = e.target.getBoundingClientRect()
-        enhancedTooltip.value = {
-            show: true,
-            x: rect.left,
-            y: rect.bottom + 4,
-            row
-        }
-    }, 200)
-}
-
-function handleTooltipMouseLeave() {
-    if (tooltipTimeout) {
-        clearTimeout(tooltipTimeout)
-    }
-    enhancedTooltip.value.show = false
-}
 
 onUnmounted(() => {
     if (previewTimeout) {
         clearTimeout(previewTimeout)
     }
-    if (tooltipTimeout) {
-        clearTimeout(tooltipTimeout)
-    }
 })
 
-function isUpcoming(row) {
-    return props.upcomingPerkaraNumbers?.includes(row.nomor_perkara)
+
+const expandedNumber = ref(null)
+const tableRows = computed(() => props.rows.map(row => {
+    const parties = []
+    for (const line of String(row.para_pihak || '').split('\n').filter(Boolean)) {
+        const colon = line.indexOf(':')
+        if (colon >= 0) parties.push({ role: line.slice(0, colon), name: line.slice(colon + 1).trim() })
+        else if (parties.length) parties[parties.length - 1].name += `\n${line}`
+        else parties.push({ role: 'Pihak', name: line })
+    }
+    const primary = parties.find(party => !/penuntut umum/i.test(party.role)) || parties[0]
+    return { row, parties, primary }
+}))
+
+function toggleParties(number) {
+    expandedNumber.value = expandedNumber.value === number ? null : number
 }
 
-function jenisColor(jenis) {
-    if (jenis === 'Pidana') return '#C75B4A'
-    if (jenis === 'Perdata') return '#4A7C59'
-    if (jenis === 'Perikanan') return '#0ea5e9'
-    return '#9ca3af'
+function formatDate(value) {
+    return formatDateIndoShort(value)
 }
 
-function jenisBg(jenis) {
-    if (jenis === 'Pidana') return 'rgba(199, 91, 74, 0.12)'
-    if (jenis === 'Perdata') return 'rgba(74, 124, 89, 0.12)'
-    if (jenis === 'Perikanan') return 'rgba(14, 165, 233, 0.12)'
-    return 'rgba(156, 163, 175, 0.12)'
-}
-
-function formatDate(s) {
-    return formatDateIndo(s)
-}
-
-// Parse lama_proses (e.g., "15 Hari", "1 Hari") to get days
-function parseLamaProses(lama) {
-    if (!lama) return 0
-    const match = lama.match(/(\d+)\s*(Hari|hari)/)
-    return match ? parseInt(match[1]) : 0
-}
-
-// Get progress color based on days
-function getLamaColor(days) {
-    if (days <= 30) return '#10b981'  // Green - fresh
-    if (days <= 90) return '#f59e0b'  // Yellow - moderate
-    if (days <= 180) return '#f97316' // Orange - long
-    return '#ef4444'                   // Red - very long
-}
-
-// Get progress width (max 365 days = 100%)
-function getLamaProgress(days) {
-    return Math.min((days / 365) * 100, 100)
-}
 
 </script>
 
 <template>
-    <div class="ns-perkara-table-wrap" :class="`is-density-${density}`">
-        <div class="ns-table-scroll">
+    <section class="ns-register" :class="`is-density-${density}`" aria-label="Register perkara">
+        <div class="ns-register-heading">
+            <div><strong>Register perkara</strong><span>{{ rows.length }} perkara pada halaman ini</span></div>
+            <span class="ns-register-help">Pilih nomor untuk detail perkara</span>
+        </div>
+        <div class="ns-table-scroll" tabindex="0" role="region" aria-label="Tabel perkara, dapat digulir">
             <table class="ns-data-table">
-                <thead>
-                    <tr>
-                        <th class="ns-sticky ns-col-no">No</th>
-                        <th class="ns-sticky ns-col-jenis">Jenis</th>
-                        <th class="ns-sticky ns-col-nomor">Nomor Perkara</th>
-                        <th class="ns-col-nama">Nama</th>
-                        <th class="ns-col-klasifikasi">Jenis Perkara</th>
-                        <th class="ns-col-register">Tgl Register</th>
-                        <th class="ns-col-status">Status</th>
-                        <th class="ns-col-lama">Lama</th>
-                    </tr>
-                </thead>
+                <caption class="ns-sr-only">Register perkara SIPP lokal. Anonimisasi merupakan flag publikasi, bukan penggantian nama.</caption>
+                <colgroup><col class="col-no"/><col class="col-number"/><col class="col-party"/><col class="col-kind"/><col class="col-date"/><col class="col-status"/><col class="col-days"/><col class="col-anon"/></colgroup>
+                <thead><tr>
+                    <th scope="col">No</th><th scope="col">Nomor perkara</th><th scope="col">Nama pihak</th>
+                    <th scope="col">Klasifikasi</th><th scope="col">Register</th><th scope="col">Status</th>
+                    <th scope="col" class="align-right">Hari</th><th scope="col" class="align-center"><abbr title="Flag anonimisasi publikasi SIPP">Anon.</abbr></th>
+                </tr></thead>
                 <tbody>
-                    <tr v-if="!rows.length">
-                        <td colspan="8" class="ns-empty-cell">
-                            <div class="ns-empty-state">
-                                <div class="ns-empty-icon">Data</div>
-                                <div class="ns-empty-text">Tidak ada perkara</div>
-                                <div class="ns-empty-hint">Coba sesuaikan filter atau sync data dari SIPP</div>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr
-                        v-else
-                        v-for="(row, idx) in rows"
-                        :key="row.id || row.nomor_perkara"
-                        class="ns-data-row"
-                        :class="{ 'is-upcoming-row': isUpcoming(row) }"
-                        tabindex="0"
-                        :aria-label="`Buka detail perkara ${row.nomor_perkara}`"
-                        @click="emit('rowClick', row)"
-                        @keydown.enter="emit('rowClick', row)"
-                        @contextmenu="handleContextMenu($event, row)"
-                    >
-                        <td class="ns-sticky ns-col-no">{{ idx + 1 + props.startIndex }}</td>
-                        <td class="ns-sticky ns-col-jenis">
-                            <span
-                                class="ns-jenis-badge"
-                                :style="{
-                                    '--jenis-color': jenisColor(row.jenis_perkara),
-                                    '--jenis-bg': jenisBg(row.jenis_perkara)
-                                }"
-                            >
-                                {{ row.jenis_perkara }}
-                            </span>
-                        </td>
-                        <td class="ns-sticky ns-col-nomor">
-                            <span
-                                class="ns-nomor-text"
-                                :title="row.nomor_perkara"
-                                @mouseenter="handleMouseEnter($event, row)"
-                                @mouseleave="handleMouseLeave"
-                            >{{ row.nomor_perkara }}</span>
-                        </td>
-                        <td class="ns-col-nama">
-                            <span
-                                class="ns-nama-text"
-                                :title="pihakUtama(row.para_pihak)"
-                                @mouseenter="handleTooltipMouseEnter($event, row)"
-                                @mouseleave="handleTooltipMouseLeave"
-                            >{{ pihakUtama(row.para_pihak) }}</span>
-                        </td>
-                        <td class="ns-col-klasifikasi">
-                            <span class="ns-klasifikasi-text">{{ row.sipp_klasifikasi || row.nama_perkara || '-' }}</span>
-                        </td>
-                        <td class="ns-col-register">{{ formatDate(row.sipp_tanggal_register) }}</td>
-                        <td class="ns-col-status">
-                            <StatusBadge v-if="row.sipp_status" :status="row.sipp_status" size="sm" />
-                            <span v-else class="ns-status-text">-</span>
-                        </td>
-                        <td class="ns-col-lama">
-                            <div class="ns-lama-cell">
-                                <span class="ns-lama-text">{{ row.sipp_lama_proses || '-' }}</span>
-                                <div
-                                    v-if="row.sipp_lama_proses"
-                                    class="ns-lama-bar"
-                                    :style="{
-                                        width: getLamaProgress(parseLamaProses(row.sipp_lama_proses)) + '%',
-                                        background: getLamaColor(parseLamaProses(row.sipp_lama_proses))
-                                    }"
-                                ></div>
-                            </div>
-                        </td>
-                    </tr>
+                    <tr v-if="!rows.length"><td colspan="8" class="ns-empty-cell"><strong>Tidak ada perkara</strong><p>Coba ubah pencarian atau filter.</p></td></tr>
+                    <template v-for="({ row, parties, primary }, idx) in tableRows" :key="row.id || row.nomor_perkara">
+                        <tr class="ns-data-row" :class="{ 'is-expanded': expandedNumber === row.nomor_perkara }" @contextmenu="handleContextMenu($event, row)">
+                            <td class="ns-row-number">{{ idx + 1 + startIndex }}</td>
+                            <td class="cell-number">
+                                <button class="ns-number" type="button" @click="emit('rowClick', row)" @mouseenter="handleMouseEnter($event, row)" @mouseleave="handleMouseLeave">{{ row.nomor_perkara }}</button>
+                                <span class="ns-case-type" :class="`type-${row.jenis_perkara?.toLowerCase()}`">{{ row.jenis_perkara }}</span>
+                            </td>
+                            <td class="cell-party">
+                                <span class="ns-party-name" :title="primary?.name">{{ primary?.name || 'Nama belum tersedia' }}</span>
+                                <button v-if="parties.length" class="ns-party-button" type="button" :aria-expanded="expandedNumber === row.nomor_perkara" :aria-controls="`parties-${row.id || idx}`" :aria-label="`Semua pihak perkara ${row.nomor_perkara}`" @click="toggleParties(row.nomor_perkara)">
+                                    <span>{{ primary?.role }}</span><span class="ns-party-more">Semua pihak <Icon :name="expandedNumber === row.nomor_perkara ? 'chevronDown' : 'chevronRight'" :size="12" /></span>
+                                </button>
+                            </td>
+                            <td class="cell-kind" data-label="Klasifikasi"><span class="ns-classification" :title="row.sipp_klasifikasi || row.nama_perkara">{{ row.sipp_klasifikasi || row.nama_perkara || '—' }}</span></td>
+                            <td class="ns-date" data-label="Register"><time :datetime="row.sipp_tanggal_register || undefined">{{ formatDate(row.sipp_tanggal_register) }}</time></td>
+                            <td class="cell-status" data-label="Status"><StatusBadge v-if="row.sipp_status" :status="row.sipp_status" size="sm"/><span v-else class="ns-muted">Belum diisi</span></td>
+                            <td class="ns-days align-right" data-label="Hari proses" :title="row.sipp_lama_proses || 'Belum tersedia'">{{ row.sipp_lama_proses?.replace(/\s*Hari/i, '') || '—' }}</td>
+                            <td class="cell-anon align-center" data-label="Anonimisasi">
+                                <input v-if="['T', 'Y'].includes(row.sipp_pihak_dipublikasikan)" type="checkbox" :checked="row.sipp_pihak_dipublikasikan === 'T'" :aria-label="`Anonimisasi perkara ${row.nomor_perkara}`" :title="row.sipp_pihak_dipublikasikan === 'T' ? 'Anonimisasi: Ya' : 'Anonimisasi: Tidak'" disabled />
+                                <span v-else class="ns-unknown" aria-label="Anonimisasi belum diketahui" title="Flag anonimisasi belum diisi pada SIPP">—</span>
+                            </td>
+                        </tr>
+                        <tr v-if="expandedNumber === row.nomor_perkara" class="ns-expanded-row">
+                            <td colspan="8">
+                                <div :id="`parties-${row.id || idx}`" class="ns-parties-detail">
+                                    <div class="ns-parties-heading"><strong>Semua pihak</strong><button type="button" class="ns-close-parties" :aria-label="`Tutup pihak perkara ${row.nomor_perkara}`" @click="toggleParties(row.nomor_perkara)"><Icon name="close" :size="16"/></button></div>
+                                    <dl><div v-for="(party, i) in parties" :key="i"><dt>{{ party.role }}</dt><dd>{{ party.name }}</dd></div></dl>
+                                    <button class="ns-detail-link" type="button" @click="emit('rowClick', row)">Buka detail perkara <Icon name="arrowRight" :size="14"/></button>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
                 </tbody>
             </table>
         </div>
-        <div class="ns-table-footer">
-            <span class="ns-row-count">{{ rows.length }} perkara</span>
-            <span class="ns-scroll-hint">Geser tabel untuk melihat kolom tambahan</span>
-        </div>
-
-        <ContextualActionMenu
-            :show="contextMenu.show"
-            :x="contextMenu.x"
-            :y="contextMenu.y"
-            :row="contextMenu.row"
-            @close="contextMenu.show = false"
-            @action="handleMenuAction"
-        />
-
-        <JadwalQuickPreview
-            :show="jadwalPreview.show"
-            :x="jadwalPreview.x"
-            :y="jadwalPreview.y"
-            :row="jadwalPreview.row"
-            @close="jadwalPreview.show = false"
-        />
-
-        <EnhancedTooltip
-            :show="enhancedTooltip.show"
-            :x="enhancedTooltip.x"
-            :y="enhancedTooltip.y"
-            :row="enhancedTooltip.row"
-            @close="enhancedTooltip.show = false"
-        />
-    </div>
+        <div class="ns-register-footer"><span>Nama sesuai DB SIPP lokal</span><span>Anon.: checklist flag publikasi · — belum diisi</span></div>
+        <ContextualActionMenu :show="contextMenu.show" :x="contextMenu.x" :y="contextMenu.y" :row="contextMenu.row" @close="contextMenu.show = false" @action="handleMenuAction"/>
+        <JadwalQuickPreview :show="jadwalPreview.show" :x="jadwalPreview.x" :y="jadwalPreview.y" :row="jadwalPreview.row" @close="jadwalPreview.show = false"/>
+    </section>
 </template>
 
 <style scoped>
-.ns-perkara-table-wrap {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden;
-}
-
-.ns-table-scroll {
-    overflow-x: auto;
-    max-width: 100%;
-    scrollbar-gutter: stable;
-    -webkit-overflow-scrolling: touch;
-}
-
-.ns-data-table {
-    width: 100%;
-    min-width: 920px;
-    border-collapse: collapse;
-    font-size: 13px;
-    table-layout: fixed;
-}
-
-.ns-data-table thead {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
-
-.ns-data-table th {
-    text-align: left;
-    padding: 14px 16px;
-    font-size: 11.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-3);
-    background: var(--bg-2);
-    border-bottom: 1px solid var(--border);
-    line-height: 1.25;
-    overflow: hidden;
-    overflow-wrap: anywhere;
-    white-space: normal;
-}
-
-.ns-data-table td {
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--border);
-    color: var(--text);
-    min-width: 0;
-    overflow: hidden;
-    overflow-wrap: anywhere;
-    vertical-align: top;
-}
-
-.ns-data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.ns-data-row {
-    cursor: pointer;
-    transition: background 120ms ease, box-shadow 120ms ease;
-}
-
-.ns-data-row:hover {
-    background: var(--surface-2);
-}
-
-.ns-data-row:hover .ns-sticky {
-    background: var(--surface-2);
-}
-
-[data-mode="light"] .ns-data-row:hover .ns-sticky {
-    background: rgba(255, 255, 255, 0.92);
-}
-
-[data-mode="dark"] .ns-data-row:hover .ns-sticky {
-    background: rgba(26, 24, 22, 0.92);
-}
-
-/* Priority highlighting for upcoming sidang */
-.ns-data-row.is-upcoming-row {
-    position: relative;
-    background: linear-gradient(90deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.02));
-}
-
-.ns-data-row.is-upcoming-row .ns-col-no {
-    border-left: 3px solid #f59e0b;
-}
-
-.ns-data-row.is-upcoming-row:hover {
-    background: linear-gradient(90deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04));
-}
-
-[data-mode="dark"] .ns-data-row.is-upcoming-row {
-    background: linear-gradient(90deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.03));
-}
-
-[data-mode="dark"] .ns-data-row.is-upcoming-row:hover {
-    background: linear-gradient(90deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.05));
-}
-
-/* Kept as a class hook, but the full-width dashboard table does not need frozen columns. */
-.ns-sticky {
-    background: var(--surface);
-    transition: background 120ms ease;
-    border-right: 1px solid var(--border);
-    box-shadow: 1px 0 0 var(--border), 8px 0 14px -14px rgba(0, 0, 0, 0.4);
-}
-
-[data-mode="light"] .ns-sticky {
-    background: rgba(255, 255, 255, 0.85);
-    box-shadow: 2px 0 8px rgba(74, 28, 27, 0.06);
-}
-
-[data-mode="dark"] .ns-sticky {
-    background: rgba(26, 24, 22, 0.85);
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
-}
-
-.ns-data-table thead .ns-sticky {
-    background: var(--bg-2);
-}
-
-[data-mode="light"] .ns-data-table thead .ns-sticky {
-    background: rgba(250, 248, 245, 0.95);
-}
-
-[data-mode="dark"] .ns-data-table thead .ns-sticky {
-    background: rgba(38, 32, 32, 0.95);
-}
-
-.ns-col-no {
-    width: 52px;
-    text-align: center;
-    padding-left: 12px;
-}
-
-.ns-col-jenis {
-    width: 96px;
-}
-
-.ns-col-nomor {
-    width: 190px;
-}
-
-.ns-col-nama {
-    width: 220px;
-}
-
-.ns-col-klasifikasi {
-    width: 170px;
-}
-
-.ns-klasifikasi-text {
-    display: -webkit-box;
-    font-size: 12.5px;
-    color: var(--text-2);
-    line-height: 1.4;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    overflow-wrap: anywhere;
-}
-
-.ns-col-register {
-    width: 112px;
-}
-
-.ns-col-status {
-    width: 126px;
-}
-
-.ns-col-lama {
-    width: 84px;
-}
-
-.ns-lama-cell {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.ns-lama-text {
-    font-size: 12.5px;
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-.ns-lama-bar {
-    height: 3px;
-    border-radius: 2px;
-    transition: width 300ms ease;
-}
-
-/* Cell content */
-.ns-col-no {
-    font-family: "JetBrains Mono", monospace;
-    font-size: 12px;
-    color: var(--text-3);
-    font-variant-numeric: tabular-nums;
-}
-
-.ns-jenis-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 5px 11px;
-    border-radius: 7px;
-    font-size: 11.5px;
-    font-weight: 600;
-    background: var(--jenis-bg);
-    color: var(--jenis-color);
-    transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
-    max-width: 100%;
-    white-space: nowrap;
-    overflow-wrap: normal;
-}
-
-.ns-jenis-badge:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px var(--jenis-color);
-}
-
-.ns-nomor-text {
-    display: block;
-    font-family: "JetBrains Mono", monospace;
-    font-size: 12.5px;
-    font-weight: 500;
-    letter-spacing: 0;
-    font-variant-numeric: tabular-nums;
-    overflow-wrap: anywhere;
-}
-
-.ns-nama-text {
-    display: -webkit-box;
-    font-weight: 500;
-    line-height: 1.4;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    overflow-wrap: anywhere;
-}
-
-.ns-col-register,
-.ns-col-status,
-.ns-col-lama {
-    font-family: "JetBrains Mono", monospace;
-    font-size: 12.5px;
-    color: var(--text-2);
-    font-variant-numeric: tabular-nums;
-}
-
-/* Focus states for accessibility */
-.ns-data-row:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
-    background: var(--accentSoft);
-}
-
-.ns-data-row:focus-visible .ns-sticky {
-    background: var(--accentSoft);
-}
-
-[data-mode="light"] .ns-data-row:focus-visible .ns-sticky {
-    background: rgba(74, 28, 27, 0.08);
-}
-
-[data-mode="dark"] .ns-data-row:focus-visible .ns-sticky {
-    background: rgba(201, 169, 98, 0.12);
-}
-
-.ns-status-text {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: var(--surface-2);
-    font-size: 11.5px;
-}
-
-/* Empty state */
-.ns-empty-cell {
-    padding: 0 !important;
-}
-
-.ns-empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 48px 24px;
-    text-align: center;
-}
-
-.ns-empty-icon {
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 12px;
-    opacity: 0.5;
-}
-
-.ns-empty-text {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text);
-    margin-bottom: 4px;
-}
-
-.ns-empty-hint {
-    font-size: 12px;
-    color: var(--text-3);
-}
-
-/* Footer */
-.ns-table-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 16px;
-    background: var(--surface-2);
-    border-top: 1px solid var(--border);
-    font-size: 11.5px;
-}
-
-.ns-row-count {
-    font-weight: 500;
-    color: var(--text);
-}
-
-.ns-scroll-hint {
-    color: var(--text-3);
-}
-
-.ns-perkara-table-wrap.is-density-compact .ns-data-table th,
-.ns-perkara-table-wrap.is-density-compact .ns-data-table td {
-    padding: 9px 10px;
-}
-
-.ns-perkara-table-wrap.is-density-compact .ns-data-table {
-    font-size: 12px;
-}
-
-.ns-perkara-table-wrap.is-density-compact .ns-nomor-text,
-.ns-perkara-table-wrap.is-density-compact .ns-klasifikasi-text,
-.ns-perkara-table-wrap.is-density-compact .ns-col-register,
-.ns-perkara-table-wrap.is-density-compact .ns-col-status,
-.ns-perkara-table-wrap.is-density-compact .ns-col-lama,
-.ns-perkara-table-wrap.is-density-compact .ns-lama-text {
-    font-size: 11.5px;
-}
-
-.ns-perkara-table-wrap.is-density-compact .ns-jenis-badge {
-    font-size: 10.5px;
-    padding: 3px 6px;
-}
-
-@media (max-width: 1280px) {
-    .ns-data-table th,
-    .ns-data-table td {
-        padding: 11px 9px;
-    }
-
-    .ns-data-table {
-        font-size: 12px;
-    }
-
-    .ns-nomor-text,
-    .ns-klasifikasi-text,
-    .ns-col-register,
-    .ns-col-status,
-    .ns-col-lama,
-    .ns-lama-text {
-        font-size: 11.5px;
-    }
-
-    .ns-jenis-badge {
-        padding: 4px 7px;
-        font-size: 10.5px;
-    }
-
-}
-
+.ns-register { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.ns-register-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.ns-register-heading strong { font-size: 15px; color: var(--text); font-weight: 600; }
+.ns-register-heading div { display: flex; align-items: baseline; gap: 12px; }
+.ns-register-heading span, .ns-register-footer { font-size: 12px; color: var(--text-2); }
+.ns-table-scroll { overflow: auto; max-height: min(640px, 72vh); scrollbar-gutter: stable; scrollbar-color: var(--border) transparent; }
+.ns-data-table { width: 100%; min-width: 1000px; table-layout: fixed; border-spacing: 0; border-collapse: separate; font-size: 13px; line-height: 1.4; color: var(--text); }
+.col-no { width: 42px; }.col-number { width: 210px; }.col-party { width: auto; }.col-kind { width: 150px; }.col-date { width: 104px; }.col-status { width: 120px; }.col-days { width: 60px; }.col-anon { width: 56px; }
+.ns-data-table th { position: sticky; top: 0; z-index: 2; text-align: left; background: var(--bg-2); color: var(--text-2); font-size: 12px; font-weight: 600; padding: 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.ns-data-table td { padding: 10px 12px; vertical-align: middle; border-bottom: 1px solid var(--border); }
+.ns-data-row { height: 64px; }
+.ns-data-row:hover { background: var(--surface-2); }
+.ns-data-row.is-expanded { background: var(--accentSoft); }
+.ns-row-number { color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ns-number { display: block; border: 0; padding: 0; background: none; color: var(--text); font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; white-space: nowrap; text-underline-offset: 3px; }
+.ns-number:hover { text-decoration: underline; color: var(--accent); }
+.ns-case-type { display: block; font-size: 11px; margin-top: 4px; color: var(--text-2); }
+.type-pidana { color: #e49b8e; }.type-perdata { color: #8ec6a0; }.type-perikanan { color: #80c9ec; }
+:global([data-mode="light"]) .type-pidana { color: #963f32; }:global([data-mode="light"]) .type-perdata { color: #356040; }:global([data-mode="light"]) .type-perikanan { color: #226681; }
+.ns-party-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.ns-party-button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 24px; border: 0; padding: 0; background: none; color: var(--text-2); font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
+.ns-party-button > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ns-party-more { display: inline-flex; align-items: center; flex-shrink: 0; gap: 2px; color: var(--accent); }
+.ns-classification { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--text-2); font-size: 12px; }
+.ns-date { font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ns-days { font-variant-numeric: tabular-nums; }
+.ns-data-table .align-right { text-align: right; }.ns-data-table .align-center { text-align: center; }
+.ns-data-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); vertical-align: middle; opacity: 1; }
+.ns-unknown, .ns-muted { color: var(--text-2); }
+.ns-data-table abbr { text-decoration: none; cursor: help; }
+.ns-expanded-row > td { padding: 0 20px 20px 54px; background: var(--accentSoft); }
+.ns-parties-detail { padding-top: 16px; }
+.ns-parties-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ns-parties-heading strong { font-size: 13px; }
+.ns-close-parties { display: grid; place-items: center; width: 32px; height: 32px; background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--text); cursor: pointer; }
+.ns-parties-detail dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 32px; margin: 12px 0 16px; }
+.ns-parties-detail dt { font-size: 11px; color: var(--text-2); margin-bottom: 4px; }
+.ns-parties-detail dd { margin: 0; color: var(--text); line-height: 1.6; white-space: pre-line; overflow-wrap: anywhere; }
+.ns-detail-link { display: inline-flex; align-items: center; gap: 8px; border: 0; padding: 4px 0; background: none; color: var(--accent); cursor: pointer; font: inherit; font-size: 12px; }
+.ns-register button:focus-visible, .ns-table-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+.ns-register-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; padding: 12px 20px; }
+.ns-mobile-hint { display: none; }
+.ns-empty-cell { padding: 48px 20px !important; text-align: center; }.ns-empty-cell p { color: var(--text-2); }
+.ns-sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.is-density-compact .ns-data-row { height: 56px; }.is-density-compact .ns-data-table td { padding-top: 7px; padding-bottom: 7px; }
 @media (max-width: 760px) {
-    .ns-data-table {
-        min-width: 620px;
-    }
-
-    .ns-col-klasifikasi,
-    .ns-col-lama {
-        display: none;
-    }
-
-    .ns-data-table th,
-    .ns-data-table td {
-        padding: 8px 6px;
-    }
-
-    .ns-data-table {
-        font-size: 10.5px;
-    }
-
-    .ns-data-table th {
-        font-size: 10px;
-        letter-spacing: 0;
-    }
-
-    .ns-nomor-text,
-    .ns-klasifikasi-text,
-    .ns-col-register,
-    .ns-col-status,
-    .ns-col-lama,
-    .ns-lama-text {
-        font-size: 10px;
-    }
-
-    .ns-jenis-badge {
-        padding: 3px 5px;
-        font-size: 10px;
-    }
-
-    .ns-table-footer {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 4px;
-    }
+    .ns-register-heading { align-items: flex-start; padding: 16px; }.ns-register-heading div { flex-direction: column; gap: 4px; }.ns-register-help { display: none; }
+    .ns-table-scroll { max-height: none; overflow: visible; }
+    .ns-data-table { min-width: 0; display: block; }
+    .ns-data-table colgroup { display: none; }
+    .ns-data-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .ns-data-table tbody { display: block; }
+    .ns-data-row, .is-density-compact .ns-data-row { display: grid; grid-template-columns: 1fr 1fr; height: auto; padding: 16px; gap: 12px 16px; border-bottom: 1px solid var(--border); }
+    .ns-data-table .ns-data-row td { display: block; padding: 0; border: 0; text-align: left; }
+    .ns-data-row .ns-row-number { display: none; }
+    .cell-number, .cell-party, .cell-kind { grid-column: 1 / -1; }
+    .cell-party { padding: 12px 0 !important; border-top: 1px solid var(--border) !important; border-bottom: 1px solid var(--border) !important; }
+    .ns-number { font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
+    .ns-party-name { white-space: normal; }
+    .ns-party-button { min-height: 36px; }
+    .ns-classification { display: block; }
+    td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 4px; font-size: 11px; color: var(--text-2); }
+    .ns-expanded-row, .ns-expanded-row > td { display: block; }
+    .ns-expanded-row > td { padding: 0 16px 16px; }
+    .ns-parties-detail dl { grid-template-columns: 1fr; }
+    .ns-register-footer { flex-direction: column; padding: 16px; }
 }
 </style>

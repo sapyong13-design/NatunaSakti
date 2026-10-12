@@ -2,7 +2,6 @@
 import { ref, watch, computed, nextTick } from 'vue'
 import Icon from '../Icon.vue'
 import { getJadwalSidang, refreshJadwal, getPutusanPerkara, refreshPutusan, deletePerkara } from '../../lib/api'
-import { pihakUtama } from '../../lib/pihak'
 import { parseDateIndo, formatDateIndo } from '../../lib/date'
 import { buildPutusanDisplay } from '../../lib/putusanDisplay'
 
@@ -277,7 +276,7 @@ watch(() => props.open, async (open) => {
                     <div>
                         <div class="ns-detail-eyebrow">{{ row.jenis_perkara }}</div>
                         <h2 class="ns-detail-title ns-mono">{{ row.nomor_perkara }}</h2>
-                        <div class="ns-detail-pihak">{{ pihakUtama(row.para_pihak) }}</div>
+                        <div class="ns-detail-pihak">{{ row.para_pihak || '—' }}</div>
                     </div>
                     <button class="ns-icon-btn ns-icon-btn-light" type="button" @click="closePanel" aria-label="Tutup detail perkara">
                         <Icon name="close" :size="18" class="close-icon" />
@@ -311,6 +310,19 @@ watch(() => props.open, async (open) => {
                             <div class="ns-detail-field">
                                 <div class="ns-detail-field-label">Tanggal Putus</div>
                                 <div class="ns-detail-field-value">{{ formatDate(row.tanggal_putus) }}</div>
+                            </div>
+                            <div class="ns-detail-field">
+                                <div class="ns-detail-field-label">Anonimisasi</div>
+                                <div class="ns-detail-field-value">
+                                    <input
+                                        v-if="row.sipp_pihak_dipublikasikan === 'T' || row.sipp_pihak_dipublikasikan === 'Y'"
+                                        type="checkbox"
+                                        :checked="row.sipp_pihak_dipublikasikan === 'T'"
+                                        aria-label="Anonimisasi"
+                                        disabled
+                                    />
+                                    <span v-else>Belum diketahui</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1415,6 +1427,8 @@ watch(() => props.open, async (open) => {
     font-size: 14px;
     color: rgba(255, 255, 255, 0.95);
     line-height: 1.5;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
 }
 
 /* Light icon button for colored header */

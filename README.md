@@ -22,6 +22,8 @@ NatunaSakti membantu petugas kepaniteraan dan administrasi untuk:
 
 Dashboard menampilkan ringkasan perkara dalam bentuk yang mudah dipantau. Pengguna dapat mencari perkara, memfilter berdasarkan jenis atau status, melihat statistik, dan membuka detail perkara tanpa berpindah halaman.
 
+Register perkara memakai delapan kolom terpisah: nomor urut, nomor/jenis perkara, nama pihak, klasifikasi, tanggal register singkat, status, hari proses, dan checklist anonimisasi. Baris utama tetap ringkas; tombol **Semua pihak** membuka rincian nama lengkap per peran dalam baris lebar di bawahnya, tanpa mengganti nama atau membuka panel detail. Klik nomor untuk detail perkara. Header tetap terlihat saat tabel digulir; layar kecil mengubah setiap baris menjadi susunan berlabel tanpa gulir horizontal. Mode rapat/lega tetap tersedia.
+
 Pada detail perkara tersedia:
 
 - informasi pokok perkara;
@@ -32,9 +34,9 @@ Pada detail perkara tersedia:
 
 ### Sinkronisasi SIPP
 
-Aplikasi dapat mengambil data perkara dari SIPP PN Natuna. Saat sinkronisasi berjalan, aplikasi juga memperbarui data pendukung seperti jadwal sidang dan putusan untuk perkara terbaru.
+Aplikasi membaca seluruh data perkara, jadwal sidang, dan putusan dari database SIPP lokal melalui SSH tunnel dengan akun khusus read-only. Nama pihak ditampilkan sesuai sumber DB; checklist Anonimisasi mengikuti flag publikasi terpisah, tanpa mengganti nama. Sinkron tidak menulis ke database SIPP dan tidak memakai scraping publik.
 
-Data yang sudah berhasil diambil akan disimpan di database lokal agar lebih cepat dibuka kembali.
+Hasil sinkron disimpan atomik di database lokal. Jika sumber tidak terjangkau, cache sebelumnya dipertahankan. Persyaratan akses dan batas keamanan tersedia di [docs/SIPP_SYNC.md](docs/SIPP_SYNC.md).
 
 ### Laporan Bulanan
 
@@ -98,13 +100,14 @@ Menu Kasir membantu pengelolaan data kasir dan dokumen pendukung, antara lain:
 ```bash
 cd backend
 npm install
+python -m pip install -r requirements.txt
 npm run dev
 ```
 
 Backend berjalan di:
 
 ```text
-http://localhost:3000
+http://127.0.0.1:3000
 ```
 
 ### Menjalankan Frontend
@@ -118,8 +121,10 @@ npm run dev
 Frontend berjalan di:
 
 ```text
-http://localhost:5173
+http://127.0.0.1:5173
 ```
+
+Backend membutuhkan Windows, Python 3 di PATH, dan kredensial SSH/DB khusus yang sudah disiapkan di `%LOCALAPPDATA%\NatunaSakti\access`. Kredensial dilindungi DPAPI pengguna Windows dan tidak disimpan di repo. Aplikasi tidak memakai login, sehingga frontend/API dibatasi ke loopback; jangan mengekspos port ke LAN/internet. File DB sensitif tidak boleh di-commit ke Git.
 
 ## Data yang Disimpan
 

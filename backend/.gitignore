@@ -1,8 +1,8 @@
-# Live database (will be regenerated from seed on new setups)
-data/akurasi.db
-
-# Keep seed database in git
-!data/akurasi-seed.db
+# Local databases may contain internal SIPP names. Never commit live or seed copies.
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
 
 # Node modules
 node_modules/
