@@ -75,7 +75,7 @@ def read_snapshot(nomor=None):
             cursorclass=pymysql.cursors.DictCursor,
         )
         db.connect(sock=channel)
-        # No remote commands or write SQL. One consistent InnoDB snapshot across four reads.
+        # No remote commands or write SQL. One consistent InnoDB snapshot across five reads.
         with db.cursor() as cursor:
             cursor.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT")
             where = " WHERE nomor_perkara=%s" if nomor else ""
@@ -92,6 +92,7 @@ def read_snapshot(nomor=None):
                 "putusan": "SELECT j.perkara_id,j.tanggal_putusan,j.status_putusan_nama,j.status_putusan_text,j.amar_putusan,j.tanggal_minutasi,j.tanggal_bht FROM perkara_putusan j",
                 "terdakwa": "SELECT j.perkara_id,j.id,j.tanggal_putusan,j.status_putusan_text,j.durasi_nominal,j.satuan,j.keterangan_putusan FROM perkara_putusan_terdakwa j",
             }
+            queries["hakim"] = "SELECT j.id,j.perkara_id,j.tahapan_id,j.tanggal_penetapan,j.urutan,j.jabatan_hakim_id,j.jabatan_hakim_nama,j.hakim_id,j.hakim_nama,j.aktif,j.tanggal_tidak_aktif,j.diganti_oleh_id FROM sipp32.perkara_hakim_pn j"
             result = {"perkara": perkara}
             for name, query in queries.items():
                 if nomor:

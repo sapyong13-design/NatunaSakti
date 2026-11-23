@@ -1,0 +1,82 @@
+{
+  "profile_url": "https://www.pn-natuna.go.id/index.php/en/about/profil-hakim-dan-pegawai/profil-hakim",
+  "images": [
+    {
+      "name": "Joko Ciptanto",
+      "file": "joko-ciptanto.jpg",
+      "source": "https://pn-natuna.go.id/images/profil/pegawai/hakim/joko-ciptanto.jpg",
+      "sha256": "50041eb874db61f6b538e685e7c33af858fe5624a63b830cd70c831cf270e721",
+      "bytes": 145553
+    },
+    {
+      "name": "Salihin Ardiansyah",
+      "file": "salihin.jpg",
+      "source": "https://pn-natuna.go.id/images/profil/pegawai/hakim/salihin.jpg",
+      "sha256": "b96046ac72d6c7bc47685d9a9dd722a6101f6d2e3684f1578eb30392ee114d5f",
+      "bytes": 31616
+    },
+    {
+      "name": "Alfariz Maulana Reza",
+      "file": "alfariz.jpg",
+      "source": "https://pn-natuna.go.id/images/profil/pegawai/hakim/alfariz.jpg",
+      "sha256": "b863209fe62a13aa5bc6ddc8f9701effe003cc683d355533f24c7735dac3a5d1",
+      "bytes": 68930
+    },
+    {
+      "name": "Geraldo Gracelo Mario Situmeang",
+      "file": "geraldo.jpeg",
+      "source": "https://pn-natuna.go.id/images/profil/pegawai/hakim/geraldo.jpeg",
+      "sha256": "cbfbd5ba01aa1847e6b3bcdb4cb83e021c321f8f1b7df41fe1b578477cae8431",
+      "bytes": 116963
+    },
+    {
+      "name": "Haditio",
+      "file": "haditio.png",
+      "source": "https://pn-natuna.go.id/images/profil/pegawai/hakim/haditio.png",
+      "sha256": "ae5c94dfa1daa2c1d52b0e017b77797dba154792b066722fb39dbe1c17e3269f",
+      "bytes": 251986
+    },
+    {
+      "name": "Swandi Hutabarat",
+      "file": "swandi.jpeg",
+      "source": "https://pn-natuna.go.id/images/profil/pegawai/hakim/swandi.jpeg",
+      "sha256": "612f366c3bffb76fcf3dc7e1011fad30b3693cbc5cd2b149cf6f181d68bfa3c7",
+      "bytes": 69711
+    },
+    {
+      "name": "Sutriyadi",
+      "file": "sutriyadi.png",
+      "source": "https://pn-natuna.go.id/images/profil/pegawai/hakim/sutriyadi.png",
+      "sha256": "617c83b900c3a2658c8c6c1ad73b8f65228ce0fb7ebb99a79ecde1e3b3ccc893",
+      "bytes": 218320
+    },
+    {
+      "name": "Endro Basuki Prabowo",
+      "file": "endro.png",
+      "source": "https://pn-natuna.go.id/images/profil/pegawai/hakim/endro.png",
+      "sha256": "981fe037bdba7504c95726cd5b57af02a5865825a9bb2c2661e84d1bfac007b4",
+      "bytes": 240035
+    },
+    {
+      "name": "Suriadi",
+      "file": "suriadi.png",
+      "source": "https://pn-natuna.go.id/images/profil/pegawai/hakim/suriadi.png",
+      "sha256": "720ceeede9d2cdccdd3adb69c1a179ed8605e608adebd1267728d5f707ce8892",
+      "bytes": 231820
+    },
+    {
+      "name": "Sirodjuddin",
+      "file": "sirodjuddin.png",
+      "source": "https://pn-natuna.go.id/images/profil/pegawai/hakim/sirodjuddin.png",
+      "sha256": "2d39beb1fd5f7b77cb40d05b88c357cee5357ea59fd9c7c827efd74216f59aa4",
+      "bytes": 219507
+    },
+    {
+      "name": "Dr. Halomoan Freddy Sitinjak Alexandra",
+      "file": "halomoan-freddy-sitinjak.png",
+      "source": "https://pn-natuna.go.id/images/profil/pegawai/hakim/halomoan-freddy-sitinjak.png",
+      "sha256": "d09a2c0e17fbd2cab6321e4143856a522db3cd747db7b6c5dbd2060f8da7c71d",
+      "bytes": 156346
+    }
+  ]
+}

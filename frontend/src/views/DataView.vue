@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '../components/shell/PageHeader.vue'
 import StatsStrip from '../components/dashboard/StatsStrip.vue'
 import TrendCard from '../components/dashboard/TrendCard.vue'
+import JudgeLeaderboard from '../components/dashboard/JudgeLeaderboard.vue'
+import DashboardTabs from '../components/dashboard/DashboardTabs.vue'
 import MiniStatCard from '../components/dashboard/MiniStatCard.vue'
 import ToolbarFilters from '../components/dashboard/ToolbarFilters.vue'
 import SyncCluster from '../components/dashboard/SyncCluster.vue'
@@ -376,6 +378,8 @@ onMounted(() => {
             <StatsStrip :stats="stats" />
         </PageHeader>
 
+        <DashboardTabs>
+        <template #data>
         <div class="ns-c-cards-row">
             <div class="ns-c-trend-wrapper">
                 <TrendCard
@@ -603,6 +607,12 @@ onMounted(() => {
                 </div>
             </div>
         </template>
+
+        </template>
+        <template #leaderboard>
+            <JudgeLeaderboard :refresh-key="syncStatus.last_sync" />
+        </template>
+        </DashboardTabs>
 
         <DetailPanel
             :row="selectedRow"

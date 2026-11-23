@@ -192,6 +192,12 @@ export const subscribeSyncProgress = (onProgress) => {
     return eventSource;
 };
 
+export const getJudgeLeaderboard = async (filters = {}) => {
+    const params = new URLSearchParams(filters);
+    const response = await fetchWithRetry(`${API_BASE}/dashboard/judges?${params}`);
+    return response.json();
+};
+
 // Get trend data for last N weeks
 export const getPerkaraTrend = async (weeks = 8) => {
     try {

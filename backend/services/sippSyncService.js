@@ -2,6 +2,7 @@ const { execFile } = require('node:child_process');
 const path = require('node:path');
 const cheerio = require('cheerio');
 const { savePutusanCache } = require('../lib/putusanCache');
+const { ensureAssignmentSchema, replaceAssignments } = require('../lib/judgeLeaderboard');
 
 function plain(value) {
   if (!value) return '';
@@ -83,6 +84,7 @@ function mapPutusan(perkara, putusan, terdakwa = []) {
 class SIPPSyncService {
   constructor(db) {
     this.db = db;
+    ensureAssignmentSchema(db);
     const columns = db.prepare('PRAGMA table_info(perkara)').all();
     if (!columns.some(column => column.name === 'sipp_pihak_dipublikasikan')) {
       db.exec('ALTER TABLE perkara ADD COLUMN sipp_pihak_dipublikasikan TEXT');
@@ -101,7 +103,7 @@ class SIPPSyncService {
         if (error) return reject(new Error(stderr.trim() || 'Koneksi DB SIPP gagal; cache lokal tidak diubah'));
         try {
           const snapshot = JSON.parse(stdout);
-          for (const key of ['perkara', 'jadwal', 'putusan', 'terdakwa']) {
+          for (const key of ['perkara', 'jadwal', 'putusan', 'terdakwa', 'hakim']) {
             if (!Array.isArray(snapshot[key])) throw new Error('Respons DB SIPP tidak valid');
           }
           resolve(snapshot);
@@ -115,6 +117,7 @@ class SIPPSyncService {
   async fetchSIPPData(progressCallback = null) {
     progressCallback?.({ current: 0, total: 0, fetchedCount: 0, status: 'db-read' });
     const source = await this.readSource();
+    if (!Array.isArray(source.hakim)) throw new Error('Snapshot hakim tidak valid; cache dipertahankan');
     if (!source.perkara.length) throw new Error('DB SIPP mengembalikan snapshot kosong; cache lokal dipertahankan');
     const fetchedAt = new Date().toISOString();
     const decisions = groupByPerkara(source.putusan);
@@ -168,6 +171,7 @@ class SIPPSyncService {
        sipp_synced=excluded.sipp_synced, sipp_last_sync=excluded.sipp_last_sync,
        updated_at=CURRENT_TIMESTAMP`);
     this.db.transaction(() => {
+      replaceAssignments(this.db, snapshot.hakim);
       snapshot.perkara.forEach((row, i) => {
         insert.run(row);
         const original = snapshot.sourcePerkara[i];

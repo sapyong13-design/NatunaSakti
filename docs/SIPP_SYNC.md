@@ -26,6 +26,16 @@ Sinkron membaca seluruh perkara, jadwal sidang, dan putusan langsung dari MariaD
   - `sipp_synced`: Jumlah perkara dari SIPP
   - `last_sync`: Timestamp sync terakhir
 
+## Leaderboard Hakim (tanggal penetapan)
+
+- `GET /api/dashboard/judges?period=monthly&year=2026&month=10` atau `period=yearly&year=2026`. Default bulan berjalan menurut waktu lokal backend. Parameter salah menghasilkan HTTP 400. Tidak melakukan pembacaan remote saat dashboard dibuka.
+- Snapshot baca sekarang mencakup lima tabel, termasuk query tetap kolom disetujui pada `sipp32.perkara_hakim_pn`. Cache `hakim_assignment` dan timestamp `hakim_assignment_sync` diganti hanya dalam transaksi sinkron penuh yang sama dengan perkara/jadwal/putusan. Gagal baca atau tulis mempertahankan snapshot sebelumnya; refresh detail tidak mengganti cache penugasan penuh.
+- Dasar periode adalah `tanggal_penetapan`, bukan `tanggal_pendaftaran`. Semua tahapan PN disertakan, termasuk tahapan 17, dan assignment tidak aktif/diganti tetap dihitung sebagai riwayat penunjukan.
+- Semantik sumber diverifikasi melalui pembacaan terbatas oleh pengelola akses: jabatan 1 `Hakim Ketua` urutan 1; jabatan 3 `Hakim Tunggal` urutan 1; jabatan 2 `Hakim Anggota` urutan 2 = Anggota 1, urutan 3 = Anggota 2. Aplikasi memeriksa ID, label yang dinormalisasi spasinya, dan urutan bersama; kombinasi lain tidak diterka, melainkan dikecualikan dan ditampilkan dalam `coverage.unknown_roles`.
+- Identitas hakim menggunakan `hakim_id`, bukan nama. Tiap kolom menghitung perkara unik per hakim/peran; total menghitung perkara unik lintas peran, bukan penjumlahan kolom. Baris duplikat identik tidak menambah hitungan; ID duplikat bertentangan menggagalkan sinkron atomik. Urut tabel: total menurun, nama, lalu ID. Ini bukan penilaian kinerja atau jumlah perkara aktif/putusan.
+- Cakupan respons/UI mencantumkan baris periode yang dapat dihitung, peran tidak dikenal, identitas hakim hilang, tanggal hilang, dan waktu sinkron terakhir. Tanpa cache, UI meminta sinkron penuh (tidak menampilkan data contoh). Filter leaderboard mandiri dari filter pendaftaran dashboard.
+- Uji offline (tidak memakai kredensial atau data remote): `node --test lib/*.test.js services/*.test.js routes/*.test.js` dari `backend`, `python scripts/test_read_sipp_db.py`, `node --test src/lib/*.test.mjs` dan `node node_modules/vite/bin/vite.js build` dari `frontend`. Gunakan Node 24 runtime lokal karena native SQLite tidak cocok dengan Node 26 sistem.
+
 ## Kolom Database
 
 | Kolom | Tipe | Keterangan |
@@ -90,7 +100,7 @@ Akses khusus sudah aktif dipakai sinkron NatunaSakti. Penyiapan tidak mengubah d
 
 - SSH: `natunasakti_tunnel` pada `192.168.1.2:22`, autentikasi public key saja. Hanya local forwarding ke `127.0.0.1:3306`; sesi shell/command/SFTP, remote forwarding, agent/X11 forwarding, PTY, dan Unix-socket forwarding ditutup.
 - Key dibatasi ke alamat sumber yang terlihat server, `192.168.1.1`. Ini gateway NAT, bukan identitas unik PC; SSH key tetap wajib.
-- DB: `natunasakti_ro@localhost`, hanya `SELECT` kolom terpilih pada `sipp32.perkara`, `perkara_jadwal_sidang`, `perkara_putusan`, dan `perkara_putusan_terdakwa`; maksimum dua koneksi. Tanpa akses langsung ke tabel `pihak`, tabel admin, atau kolom dokumen/posita yang tidak diperlukan.
+- DB: `natunasakti_ro@localhost`, hanya `SELECT` kolom terpilih pada `sipp32.perkara`, `perkara_jadwal_sidang`, `perkara_putusan`, `perkara_putusan_terdakwa`, dan tambahan terbatas `perkara_hakim_pn`; maksimum dua koneksi. Izin tambahan penugasan hanya `id,perkara_id,tahapan_id,tanggal_penetapan,urutan,jabatan_hakim_id,jabatan_hakim_nama,hakim_id,hakim_nama,aktif,tanggal_tidak_aktif,diganti_oleh_id`. Tidak meminta NIP, tabel master hakim, atau dokumen. Tanpa akses langsung ke tabel `pihak`, tabel admin, atau kolom dokumen/posita yang tidak diperlukan.
 - Kredensial di `%LOCALAPPDATA%\NatunaSakti\access`, di luar repo. Private key terenkripsi; password DB dan passphrase key dibungkus Windows DPAPI untuk pengguna Windows saat ini. ACL direktori hanya pengguna tersebut dan SYSTEM. DPAPI tidak melindungi dari proses jahat yang sudah berjalan sebagai pengguna itu atau admin PC.
 - Pemeriksaan berulang: `verify_access.py` pada direktori yang sama, memakai Python dengan `paramiko` dan `pymysql`. Pemeriksaan melakukan pembacaan terbatas, penolakan akses terlarang, dan `SHOW GRANTS`; tidak menjalankan query tulis atau mencetak isi perkara/kredensial.
 - Verifikasi nyata lulus: tunnel dan pembacaan kolom diizinkan; sesi SSH dan forwarding tujuan lain ditolak; kolom/tabel di luar izin ditolak; grant hanya USAGE dan SELECT kolom. Hak root DB tidak berubah; login admin SSH baru berhasil; sshd, MariaDB, dan Apache tetap aktif.

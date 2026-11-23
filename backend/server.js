@@ -187,6 +187,7 @@ setupDatabase();
 
 // Initialize SIPP Sync Service
 const sippService = new SIPPSyncService(db);
+app.use('/api/dashboard', require('./routes/judgeLeaderboard')(db));
 console.log('[SIPP] Service initialized');
 
 // Make db and sippService available to routes

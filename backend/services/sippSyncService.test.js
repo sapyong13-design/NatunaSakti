@@ -17,6 +17,28 @@ function database() {
   return db;
 }
 
+test('full sync caches assignments atomically and preserves them on failed read/write', async () => {
+  const db = database();
+  try {
+    const service = new SIPPSyncService(db);
+    const row = { id: 7, perkara_id: 1, tahapan_id: 10, tanggal_penetapan: '2026-02-02', urutan: 1,
+      jabatan_hakim_id: 3, jabatan_hakim_nama: 'Hakim Tunggal', hakim_id: 9, hakim_nama: 'Hakim A',
+      aktif: 'T', tanggal_tidak_aktif: '2026-03-01', diganti_oleh_id: null };
+    service.readSource = async () => ({ ...source(), hakim: [row, row] });
+    await service.saveToDatabase(await service.fetchSIPPData());
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM hakim_assignment').get().n, 1);
+    assert.equal(db.prepare('SELECT aktif FROM hakim_assignment').get().aktif, 'T');
+    db.exec("CREATE TRIGGER reject_hakim BEFORE INSERT ON hakim_assignment BEGIN SELECT RAISE(ABORT,'assignment failure'); END");
+    service.readSource = async () => ({ ...source('Y', 'rollback'), hakim: [{ ...row, id: 8 }] });
+    await assert.rejects(service.saveToDatabase(await service.fetchSIPPData()), /assignment failure/);
+    assert.equal(db.prepare('SELECT id FROM hakim_assignment').get().id, 7);
+    assert.match(db.prepare('SELECT para_pihak FROM perkara').get().para_pihak, /Nama lengkap sumber/);
+    service.readSource = async () => { const s = source(); delete s.hakim; return s; };
+    await assert.rejects(service.fetchSIPPData(), /hakim|snapshot/i);
+    assert.equal(db.prepare('SELECT id FROM hakim_assignment').get().id, 7);
+  } finally { db.close(); }
+});
+
 function source(flag = 'T', name = 'Nama lengkap sumber') {
   return { perkara: [{ perkara_id: 1, nomor_perkara: '1/Pid.B/2026/PN Ntn',
     jenis_perkara_nama: 'Penipuan', tanggal_pendaftaran: '2026-01-01',
@@ -24,7 +46,7 @@ function source(flag = 'T', name = 'Nama lengkap sumber') {
     proses_terakhir_text: 'Minutasi' }],
     jadwal: [{ perkara_id: 1, tanggal_sidang: '2026-01-02', agenda: 'Pembuktian' }],
     putusan: [{ perkara_id: 1, tanggal_putusan: '2026-01-03', tanggal_minutasi: '2026-01-04' }],
-    terdakwa: [] };
+    terdakwa: [], hakim: [] };
 }
 
 test('full sync keeps real names and independent publication flags; upsert preserves identity/manual fields', async () => {
