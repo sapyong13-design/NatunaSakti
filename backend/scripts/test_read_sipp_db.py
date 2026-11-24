@@ -29,5 +29,19 @@ class ReaderTest(unittest.TestCase):
         db.rollback.assert_called_once()
         db.close.assert_called_once()
 
+    def test_schema_mode_reads_column_metadata_without_reading_case_records(self):
+        db = MagicMock()
+        cursor = db.cursor.return_value.__enter__.return_value
+        with patch.object(reader, 'credentials', return_value=dict(
+            ssh_key_path='unused', ssh_key_passphrase='unused', ssh_host='unused',
+            ssh_port=22, ssh_user='unused', db_host='unused', db_port=3306,
+            db_user='unused', db_password='unused', db_database='sipp32'
+        )), patch.object(reader.paramiko, 'SSHClient'), patch.object(reader.paramiko.Ed25519Key, 'from_private_key_file'), patch.object(reader.pymysql, 'connect', return_value=db):
+            reader.read_snapshot(schema_only=True)
+        statements = [call.args[0] for call in cursor.execute.call_args_list]
+        self.assertEqual(len(statements), 2)
+        self.assertIn('FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()', statements[1])
+        db.rollback.assert_called_once()
+
 if __name__ == '__main__':
     unittest.main()

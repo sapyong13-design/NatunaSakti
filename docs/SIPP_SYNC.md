@@ -108,6 +108,11 @@ Akses khusus sudah aktif dipakai sinkron NatunaSakti. Penyiapan tidak mengubah d
 
 Akun read-only tetap dapat menyalin data yang diizinkan. Backend dan Vite hanya listen `127.0.0.1`; API membatasi Host/Origin serta request lintas situs. Semua file DB lokal dihentikan pelacakannya dan di-ignore; file tetap di PC, direktori data dibatasi ACL ke pengguna Windows dan SYSTEM. Riwayat Git lama tidak ditulis ulang: salinan DB yang pernah di-commit tetap ada di riwayat lama. Jangan menaruh kredensial di frontend, source code, log, atau chat.
 
+Untuk memeriksa struktur yang dapat dilihat oleh akun sinkron, jalankan `python scripts/read-sipp-db.py --schema` dari `backend`. Perintah CLI ini hanya menampilkan nama tabel, nama kolom, tipe, dan nullability dari `information_schema.COLUMNS` untuk `sipp32`; tidak membaca baris perkara dan tidak menambah izin. MariaDB 5.5 tidak mendukung `START TRANSACTION … READ ONLY`; pembatasan tulis ditegakkan lewat izin `SELECT` akun dan query tetap pada pembaca. Akses membaca skema tidak berarti semua tabel disalin ke SQLite.
+
+Untuk audit EIS saksi dan BAS, admin memperluas izin `natunasakti_ro@localhost` menjadi `SELECT` pada `sipp32.*`. Batas lima tabel di atas adalah konfigurasi awal. Verifikasi `SHOW GRANTS` memastikan tidak ada izin tulis atau `GRANT OPTION`. Sinkron reguler tetap memakai query tetap yang sama; audit membaca hanya kolom yang dibutuhkan untuk bulan terpilih. Alamat saksi, isi tanya-jawab, dan rujukan berkas BAS tidak dikembalikan oleh API. Jangan gunakan akun ini untuk membaca skema di luar `sipp32` atau menyalin seluruh database.
+
+
 ## Bukti cutover — 12 Oktober 2026
 
 Sinkron nyata lewat endpoint manual berhasil membaca 4.607 perkara dan 15.501 jadwal sidang. Flag sumber: 283 `T`, 2.806 `Y`, 1.518 kosong/null. UI menampilkan nama sumber bahkan untuk flag `T`, dengan checklist terpisah. Permintaan sinkron bersamaan ditolak 429. Origin/Host asing dan POST lintas situs ditolak 403. Pengujian transaksi memastikan kegagalan detail mengembalikan seluruh perubahan lokal. Penambahan akun ini bukan jaminan terhadap query berat atau kompromi akun Windows lokal.

@@ -17,7 +17,7 @@ import Toast from '../components/dashboard/Toast.vue'
 import EmptyState from '../components/base/EmptyState.vue'
 import Toggles from '../components/dashboard/Toggles.vue'
 import Icon from '../components/Icon.vue'
-import { getPerkara, getSippStatus, getPerkaraTrendMonthly, getPerkaraTrendYearly } from '../lib/api'
+import { getPerkara, getPerkaraById, getSippStatus, getPerkaraTrendMonthly, getPerkaraTrendYearly } from '../lib/api'
 import { getDashboardAlerts, isPerkaraAktif } from '../lib/perkaraStats'
 import {
     applyPerkaraFilters,
@@ -88,6 +88,7 @@ function syncRouteState() {
         density: density.value,
         page: currentPage.value
     })
+    if (typeof route.query.perkara === 'string') query.perkara = route.query.perkara
     router.replace({ query })
 }
 
@@ -269,6 +270,20 @@ watch([search, filterJenis, filterTahun, filterStatus], () => {
 
 watch([search, filterJenis, filterTahun, filterStatus, viewMode, density, currentPage], syncRouteState)
 watch(() => route.query, applyRouteState)
+watch(() => route.name === 'Data' ? route.query.perkara : null, async (id, previous, onCleanup) => {
+    let stale = false
+    onCleanup(() => { stale = true })
+    if (typeof id !== 'string' || !/^[1-9]\d{0,14}$/.test(id)) {
+        if (previous) selectedRow.value = null
+        return
+    }
+    try {
+        const row = await getPerkaraById(id)
+        if (!stale) handleRowClick(row)
+    } catch {
+        if (!stale) showToast('error', 'Perkara tidak dapat dibuka dari tautan')
+    }
+}, { immediate: true })
 
 watch(filterTahun, () => {
     loadTrendData()
@@ -322,6 +337,15 @@ function handleRefresh() {
 function handleRowClick(row) {
     scrollPosition.value = window.pageYOffset || document.documentElement.scrollTop
     selectedRow.value = row
+}
+
+function closeCaseDetail() {
+    selectedRow.value = null
+    if ('perkara' in route.query) {
+        const query = { ...route.query }
+        delete query.perkara
+        router.replace({ query })
+    }
 }
 
 // Handle context menu actions
@@ -617,7 +641,7 @@ onMounted(() => {
         <DetailPanel
             :row="selectedRow"
             :open="!!selectedRow"
-            @close="selectedRow = null"
+            @close="closeCaseDetail"
             @deleted="onRowDeleted"
         />
 

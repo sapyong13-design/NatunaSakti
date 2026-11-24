@@ -188,6 +188,9 @@ setupDatabase();
 // Initialize SIPP Sync Service
 const sippService = new SIPPSyncService(db);
 app.use('/api/dashboard', require('./routes/judgeLeaderboard')(db));
+const eisOfficial = require('./services/eisOfficial').createOfficialEis(db);
+const { currentEisPeriod } = require('./lib/eisPeriod');
+app.use('/api/eis', require('./routes/eis')(db, eisOfficial));
 console.log('[SIPP] Service initialized');
 
 // Make db and sippService available to routes
@@ -1302,8 +1305,18 @@ const syncTask = cron.schedule('0 * * * *', async () => {
 syncTask.start();
 console.log('[CRON] Auto-sync enabled (runs every hour at minute 0)');
 
+function refreshMonthlyEis() {
+    // The cache records the latest attempt per Jakarta calendar day.
+    eisOfficial.refresh(currentEisPeriod()).catch(error => {
+        console.error('[EIS] Daily refresh error:', error.name);
+    });
+}
+
+cron.schedule('0 * * * *', refreshMonthlyEis, { timezone: 'Asia/Jakarta' });
+
 // Start server
 app.listen(PORT, '127.0.0.1', () => {
     console.log(`Server running on http://127.0.0.1:${PORT}`);
     console.log(`Database: ${dbPath}`);
+    refreshMonthlyEis();
 });

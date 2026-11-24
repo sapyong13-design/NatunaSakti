@@ -7,6 +7,13 @@ export const SIDEBAR_ITEMS = [
         to: '/data'
     },
     {
+        type: 'item',
+        id: 'monitoring-eis',
+        label: 'Monitoring EIS',
+        icon: 'fileCheck',
+        to: '/monitoring-eis'
+    },
+    {
         type: 'group',
         id: 'bulanan',
         label: 'Bulanan',

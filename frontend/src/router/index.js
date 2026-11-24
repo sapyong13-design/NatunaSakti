@@ -39,6 +39,11 @@ const routes = [
         component: () => import('../views/KasirTemplateView.vue')
     },
     {
+        path: '/monitoring-eis',
+        name: 'MonitoringEis',
+        component: () => import('../views/MonitoringEisView.vue')
+    },
+    {
         path: '/data',
         name: 'Data',
         component: () => import('../views/DataView.vue')

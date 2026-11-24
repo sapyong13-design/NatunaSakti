@@ -51,7 +51,72 @@ def encode(value):
     raise TypeError("Unsupported DB value")
 
 
-def read_snapshot(nomor=None):
+def read_eis_audit(cursor, kind, start, end):
+    if kind == 'witness':
+        cursor.execute("""
+            SELECT w.id,w.perkara_id,p.nomor_perkara,w.nama,w.jenis_saksi,w.diinput_tanggal,
+                w.urutan > 0 AS has_order,w.saksi_pihak_ke > 0 AS has_side,
+                w.jenis_pihak_id > 0 AS has_party_type,
+                EXISTS(SELECT 1 FROM pihak x WHERE x.id=w.pihak_id) AS has_party,
+                TRIM(COALESCE(w.alamat,'')) <> '' AS has_address,
+                COUNT(k.id) AS qa_count,
+                SUM(CASE WHEN k.id IS NOT NULL AND TRIM(COALESCE(k.pertanyaan,'')) <> ''
+                    AND TRIM(COALESCE(k.jawaban,'')) <> '' THEN 1 ELSE 0 END) AS qa_complete
+            FROM perkara_pihak5 w
+            JOIN perkara p ON p.perkara_id=w.perkara_id
+            LEFT JOIN perkara_keterangan_saksi k ON k.perkara_id=w.perkara_id AND k.saksi_id=w.id
+            WHERE w.diinput_tanggal >= %s AND w.diinput_tanggal < %s
+            GROUP BY w.id,w.perkara_id,p.nomor_perkara,w.nama,w.jenis_saksi,w.diinput_tanggal,
+                w.urutan,w.saksi_pihak_ke,w.jenis_pihak_id,w.pihak_id,w.alamat
+            ORDER BY w.diinput_tanggal,w.id
+        """, (start, end))
+        entries = cursor.fetchall()
+        cursor.execute("""
+            SELECT MIN(j.id) AS id,p.perkara_id,p.nomor_perkara,MIN(j.tanggal_sidang) AS tanggal_sidang,
+                MIN(j.agenda) AS agenda,
+                (SELECT COUNT(*) FROM perkara_pihak5 w WHERE w.perkara_id=p.perkara_id) AS witness_count,
+                (SELECT COUNT(*) FROM perkara_pihak5 w WHERE w.perkara_id=p.perkara_id
+                    AND TRIM(COALESCE(w.nama,'')) <> '') AS named_count
+            FROM perkara_jadwal_sidang j JOIN perkara p ON p.perkara_id=j.perkara_id
+            WHERE j.tanggal_sidang >= %s AND j.tanggal_sidang < %s
+                AND LOWER(j.agenda) REGEXP '[[:<:]]saksi[[:>:]]'
+            GROUP BY p.perkara_id,p.nomor_perkara
+            ORDER BY tanggal_sidang,p.nomor_perkara
+        """, (start, end))
+        return {'entries': entries, 'hearings': cursor.fetchall()}
+    else:
+        cursor.execute("""
+            SELECT j.id,j.perkara_id,p.nomor_perkara,j.tanggal_sidang,j.agenda,
+                CASE WHEN TRIM(COALESCE(j.edoc_bas,'')) IN ('','0','-') THEN 'empty'
+                     WHEN TRIM(j.edoc_bas) REGEXP '[.][[:alnum:]]{2,5}$' THEN 'registered'
+                     ELSE 'unknown' END AS upload_state,
+                EXISTS(SELECT 1 FROM template_perkara_bas b WHERE b.perkara_id=j.perkara_id
+                    AND b.sidang_id=j.id AND TRIM(COALESCE(b.isian,'')) <> '') AS has_template_content,
+                EXISTS(SELECT 1 FROM perkara_jadwal_sidang_detil d WHERE d.perkara_id=j.perkara_id
+                    AND d.sidang_id=j.id AND TRIM(COALESCE(d.uraian,'')) <> '') AS has_hearing_detail,
+                EXISTS(SELECT 1 FROM template_perkara_bas_detil_tanya_jawab b WHERE b.perkara_id=j.perkara_id
+                    AND b.sidang_id=j.id AND (TRIM(COALESCE(b.pertanyaan_t,'')) <> ''
+                    OR TRIM(COALESCE(b.jawaban_t,'')) <> '')) AS has_template_qa,
+                EXISTS(SELECT 1 FROM template_perkara_bas_penutup b WHERE b.perkara_id=j.perkara_id
+                    AND b.sidang_id=j.id AND TRIM(COALESCE(b.redaksi,'')) <> '') AS has_template_closing
+            FROM perkara_jadwal_sidang j JOIN perkara p ON p.perkara_id=j.perkara_id
+            WHERE j.tanggal_sidang >= %s AND j.tanggal_sidang < %s
+            ORDER BY j.tanggal_sidang,j.id
+        """, (start, end))
+    return cursor.fetchall()
+
+
+def audit_bounds(period, cutoff=None):
+    if len(period) != 7 or period[4] != '-' or not (period[:4] + period[5:]).isascii() or not (period[:4] + period[5:]).isdigit():
+        raise ValueError('Invalid audit period')
+    start = date.fromisoformat(period + '-01')
+    end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    if cutoff is not None:
+        limit = date.fromisoformat(cutoff) + timedelta(days=1)
+        end = min(end, limit)
+    return start.isoformat(), end.isoformat()
+
+def read_snapshot(nomor=None, schema_only=False, audit=None, compliance=None):
     config = credentials()
     ssh = paramiko.SSHClient()
     ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
@@ -75,9 +140,30 @@ def read_snapshot(nomor=None):
             cursorclass=pymysql.cursors.DictCursor,
         )
         db.connect(sock=channel)
-        # No remote commands or write SQL. One consistent InnoDB snapshot across five reads.
+        # MariaDB 5.5 has no READ ONLY transaction modifier; the account grants
+        # enforce read-only access. This reader issues fixed SELECTs only.
         with db.cursor() as cursor:
             cursor.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT")
+            if compliance is not None:
+                rule, start, end = compliance
+                cursor.execute(rule['sql'], (start, end))
+                result = {'basis': rule['basis'], 'mode': rule['mode'], 'rows': cursor.fetchall()}
+                db.rollback()
+                return result
+            if audit is not None:
+                rows = read_eis_audit(cursor, *audit)
+                db.rollback()
+                return rows
+            if schema_only:
+                cursor.execute(
+                    "SELECT TABLE_NAME AS table_name,COLUMN_NAME AS column_name,"
+                    "COLUMN_TYPE AS column_type,IS_NULLABLE AS is_nullable "
+                    "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
+                    "ORDER BY TABLE_NAME,ORDINAL_POSITION"
+                )
+                columns = cursor.fetchall()
+                db.rollback()
+                return columns
             where = " WHERE nomor_perkara=%s" if nomor else ""
             params = (nomor,) if nomor else ()
             cursor.execute(
@@ -113,6 +199,25 @@ def read_snapshot(nomor=None):
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     try:
+        if sys.argv[1:] == ['--schema']:
+            json.dump(read_snapshot(schema_only=True), sys.stdout, ensure_ascii=False)
+            sys.exit(0)
+        if len(sys.argv) == 4 and sys.argv[1] == '--eis-audit' and sys.argv[2] in ('witness', 'bas'):
+            audit = (sys.argv[2], *audit_bounds(sys.argv[3]))
+            json.dump(read_snapshot(audit=audit), sys.stdout, ensure_ascii=False, default=encode)
+            sys.exit(0)
+        if len(sys.argv) in (4, 5) and sys.argv[1] == '--eis-compliance':
+            from eis_compliance_appeals import RULES as appeals
+            from eis_compliance_casework import RULES as casework
+            from eis_compliance_events import RULES as events
+            from eis_compliance_fit import RULES as fit
+            rule = (appeals | casework | events | fit)[sys.argv[2]]
+            cutoff = sys.argv[4] if len(sys.argv) == 5 else None
+            json.dump(read_snapshot(compliance=(rule, *audit_bounds(sys.argv[3], cutoff))),
+                      sys.stdout, ensure_ascii=False, default=encode)
+            sys.exit(0)
+        if sys.argv[1:]:
+            raise ValueError('Unsupported argument')
         request = json.load(sys.stdin)
         nomor = request.get("nomor")
         if nomor is not None and (not isinstance(nomor, str) or not 1 <= len(nomor) <= 250):

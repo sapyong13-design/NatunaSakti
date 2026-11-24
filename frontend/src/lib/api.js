@@ -3,7 +3,7 @@
 // With retry logic and error recovery
 // ============================================
 
-const API_BASE = 'http://localhost:3000/api';
+export const API_BASE = 'http://localhost:3000/api';
 
 // Retry configuration
 const DEFAULT_MAX_RETRIES = 3;

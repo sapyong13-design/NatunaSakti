@@ -38,6 +38,22 @@ Aplikasi membaca seluruh data perkara, jadwal sidang, dan putusan dari database 
 
 Hasil sinkron disimpan atomik di database lokal. Jika sumber tidak terjangkau, cache sebelumnya dipertahankan. Persyaratan akses dan batas keamanan tersedia di [docs/SIPP_SYNC.md](docs/SIPP_SYNC.md).
 
+### Monitoring EIS
+
+Menu **Monitoring EIS** menampilkan penilaian resmi [EIS Badilum PN v3](https://evaluasi.badilum.mahkamahagung.go.id/evaluasi3) untuk PN Natuna, PT Kepulauan Riau, seluruh kategori dan kelas. Satu periode selalu satu bulan, default bulan berjalan (WIB). Backend mengambil data resmi sekali per hari saat berjalan; tombol **Muat Ulang** juga bisa mengambil periode lampau. Jika pengambilan gagal, snapshot terakhir periode yang sama tetap tersedia.
+
+Di tab **Kinerja**, **Kepatuhan**, **Kelengkapan**, dan **Kesesuaian**, klik angka **Tidak** untuk melihat pemeriksaan cache SIPP lokal dan membuka detail perkara. Tab **Konversi** menampilkan nilai resmi. Temuan lokal bukan daftar perkara resmi EIS; indikator tanpa data pendukung yang cukup ditandai belum dapat diperiksa, bukan nol. Modul EIS hanya membaca situs resmi untuk angka agregat dan tidak mengirim data perkara lokal ke situs tersebut. Sinkronisasi database SIPP melalui SSH tetap terpisah.
+
+Untuk **Pencatatan Saksi** dan **Dokumen Elektronik Berita Acara Sidang (BAS)**, rincian membaca langsung SIPP lokal lewat SSH. Daftar saksi memakai tanggal input awal dan memisahkan kelengkapan kolom inti dari catatan tanya-jawab. Daftar BAS memakai tanggal sidang, menampilkan isian terstruktur dan rujukan unggahan secara terpisah, serta menandai jadwal hari ini dan mendatang. Rujukan unggahan tidak membuktikan keberadaan fisik berkas atau penerimaan oleh MIS. Jika koneksi gagal, daftar jadwal cache tetap ditampilkan sebagai pembanding, tanpa menebak status.
+
+Penghitung **Jumlah / Sesuai / Tidak** di dialog selalu berasal dari snapshot resmi Badilum. Untuk saksi, pembanding lokal memakai jadwal pada bulan terpilih yang agendanya menyebut saksi dan mengecek apakah perkara tersebut punya catatan saksi bernama. Angka bisa cocok tanpa membuktikan identitas perkara resmi. Daftar semua entri yang diinput bulan itu tersedia terpisah dan tidak dihitung sebagai jumlah EIS.
+
+Filter **Ada ‘Tidak’** menampilkan indikator yang mempunyai angka ketidaksesuaian di snapshot resmi. Daftar lokal saksi dan BAS memisahkan **Perlu dicek** (tanggal sudah lewat dan bukti lokal belum tercatat atau tidak dikenali), **Sudah lewat**, **Hari ini**, dan **Mendatang**. Pengelompokan ini bukan kriteria Badilum: waktu pengambilan snapshot bukan batas waktu data yang dinilai EIS, dan tanggal lewat tidak membuktikan sidang terlaksana.
+
+**Kepatuhan** memiliki pembanding SIPP lokal untuk 27 indikator (35 rincian termasuk subindikator banding, kasasi, dan PK). Rincian tetap bisa dibuka ketika angka resmi nol atau kosong. NatunaSakti membaca data bulan terpilih saat dialog dibuka dan memisahkan **Perlu dicek**, **Memenuhi cek lokal**, dan **Belum bisa dinilai**. Setiap catatan menunjukkan tanggal acuan dan pembanding. Pembacaan dibatasi sampai tanggal sinkron SIPP terakhir (`MAX(sipp_last_sync)`, bisa diganti dengan parameter `asOf=YYYY-MM-DD`), sehingga kejadian setelah sinkron tidak ikut terhitung. Aturan 1×24 jam tidak menebak jam yang hilang; penerbitan salinan tidak dianggap bukti TTE. Unggah putusan dan penundaan sidang menggunakan log tindakan SIPP yang bisa dihubungkan ke perkara, bukan timestamp perubahan umum. Pembanding lokal tidak mengubah angka resmi dan tidak membuktikan identitas temuan MIS.
+
+**Kelengkapan** dan **Kesesuaian** memakai pola rincian yang sama untuk 17 pemeriksaan lokal: rujukan dokumen, laporan mediasi/diversi, relaas, kalender persidangan, anonimisasi, agenda, publikasi pihak, BHT, penahanan, sisa biaya, verifikasi e-Litigasi, dan arsip. Pemeriksaan hanya menyatakan data lokal memenuhi syarat yang bisa dibuktikan, misalnya rujukan dokumen ada atau sisa panjar sudah nol; isi dokumen, dasar anonimisasi, dan jejak verifikasi hakim tidak disimpulkan. Sinkronisasi SIPP Web dan Data Center MARI adalah penilaian tingkat satker, bukan daftar perkara.
+
 ### Laporan Bulanan
 
 Laporan bulanan dibuat berdasarkan bulan dan tahun yang dipilih. Pengguna juga dapat menentukan tanggal akhir laporan, misalnya jika akhir bulan jatuh pada hari libur atau cuti bersama.
