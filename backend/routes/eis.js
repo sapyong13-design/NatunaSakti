@@ -3,11 +3,28 @@ const { currentEisPeriod, parseEisPeriod } = require('../lib/eisPeriod');
 const { getEisFindings } = require('../lib/eisFindings');
 const { getMonthlySippAudit } = require('../services/eisSippAudit');
 const { localAudit, getLocalCompliance } = require('../services/eisCompliance');
+const { scoreSnapshot } = require('../lib/eisScore');
 
 const monthlyAudits = new Map([
     ['Pencatatan Saksi', 'witness'],
     ['Dokumen Elektronik Berita Acara Sidang', 'bas']
 ]);
+
+// Nilai pembanding diambil dari snapshot EIS periode ini: kode satker yang
+// ditampilkan, versi SIPP yang dinilai, dan versi terbaru menurut Badilum.
+function officialExpectation(snapshot, tab) {
+    const rows = snapshot?.tabs.find(item => item.id === tab)?.rows ?? [];
+    const values = label => rows.find(row => row.label === label)?.details?.[0]?.values ?? [];
+    const expectation = {};
+    const code = values('Kesesuaian Kode Satker Nomor Perkara')[0];
+    if (code) expectation.code_expected = String(code).trim();
+    const versions = values('Rilis Versi SIPP');
+    if (versions.length >= 2) {
+        expectation.version_latest = String(versions[0]).trim();
+        expectation.version_expected = String(versions[1]).trim();
+    }
+    return expectation;
+}
 
 module.exports = function createEisRouter(db, official) {
     const router = express.Router();
@@ -26,6 +43,12 @@ module.exports = function createEisRouter(db, official) {
     });
 
     router.get('/', (req, res) => res.json(official.get(req.eisPeriod)));
+
+    router.get('/score', (req, res) => {
+        const { snapshot } = official.get(req.eisPeriod);
+        if (!snapshot) return res.status(404).json({ error: 'Snapshot EIS periode ini belum tersedia.' });
+        res.json({ period: req.eisPeriod, ...scoreSnapshot(snapshot) });
+    });
 
     router.post('/refresh', async (req, res, next) => {
         try {
@@ -46,7 +69,9 @@ module.exports = function createEisRouter(db, official) {
         const row = tab?.rows.find(item => item.label === label);
         const item = row?.details[Number(index)];
         const mismatch = row?.headers.findIndex(header => header.trim().toLowerCase() === 'tidak');
-        if (!item || !(mismatch >= 0)) {
+        const hasLocalRule = ['kinerja', 'kepatuhan', 'kelengkapan', 'kesesuaian'].includes(tab?.id)
+            && Boolean(localAudit(tab.id, label, Number(index)));
+        if (!item || (!(mismatch >= 0) && !hasLocalRule)) {
             return res.status(404).json({ error: 'Indikator ketidaksesuaian tidak ditemukan pada snapshot EIS periode ini.' });
         }
         const kind = monthlyAudits.get(label);
@@ -61,14 +86,14 @@ module.exports = function createEisRouter(db, official) {
                 return next(error);
             }
         }
-        if (['kepatuhan', 'kelengkapan', 'kesesuaian'].includes(tab.id)) {
+        if (['kinerja', 'kepatuhan', 'kelengkapan', 'kesesuaian'].includes(tab.id)) {
             const audit = localAudit(tab.id, label, Number(index));
-            if (!audit) return res.json({ status: 'unavailable', reason: 'Indikator ini belum dipetakan ke sumber SIPP lokal.', findings: [] });
+            if (!audit) return res.json(getEisFindings(db, req.eisPeriod, label));
             if (audit.notCaseBased) return res.json({ status: 'not_case_based', reason: audit.notCaseBased, findings: [] });
             const asOf = typeof req.query.asOf === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.asOf) ? req.query.asOf : undefined;
             if (req.query.asOf !== undefined && !asOf) return res.status(400).json({ error: 'Tanggal sinkron tidak valid.' });
             try {
-                return res.json(await getLocalCompliance(db, audit.key, req.eisPeriod, asOf));
+                return res.json(await getLocalCompliance(db, audit.key, req.eisPeriod, asOf, { ...officialExpectation(snapshot, tab.id), snapshotAt: snapshot.fetchedAt ?? null }));
             } catch (error) {
                 if (error.code === 'SIPP_AUDIT_READ') return res.json({ status: 'unavailable', reason: error.message, findings: [] });
                 return next(error);

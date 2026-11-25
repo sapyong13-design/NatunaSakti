@@ -23,6 +23,9 @@ function civilDate(value) {
 <template>
     <section class="compliance" aria-label="Pembanding Kepatuhan SIPP lokal">
         <p class="compliance-method">{{ audit.basis }}</p>
+        <p v-if="audit.nonPdfCount" class="compliance-nonpdf" role="status">
+            Format non-PDF: <strong>{{ audit.nonPdfCount }}</strong> berkas yang diunggah bukan PDF (EIS tetap menghitung sebagai unggahan).
+        </p>
         <div class="compliance-filters" role="group" aria-label="Status pemeriksaan lokal">
             <button v-for="item in filters" :key="item.id" type="button" :aria-pressed="filter === item.id" @click="filter = item.id">
                 {{ item.label }} <strong>{{ audit.counts[item.id] }}</strong>
@@ -36,14 +39,14 @@ function civilDate(value) {
                 <header>
                     <RouterLink v-if="row.id" :to="{ name: 'Data', query: { perkara: row.id } }">{{ row.nomorPerkara }}</RouterLink>
                     <strong v-else>{{ row.nomorPerkara || 'Nomor perkara tidak tercatat' }}</strong>
-                    <span :data-state="row.state">{{ row.note }}</span>
+                    <span :data-state="row.state" :data-nonpdf="row.nonPdf ? 'true' : null">{{ row.note }}</span>
                 </header>
                 <dl>
-                    <div><dt>{{ row.eventLabel }}</dt><dd>{{ civilDate(row.eventAt) }}</dd></div>
+                    <div v-if="row.eventAt"><dt>{{ row.eventLabel }}</dt><dd>{{ civilDate(row.eventAt) }}</dd></div>
                     <div v-if="row.comparisonAt"><dt>{{ row.comparisonLabel }}</dt><dd>{{ civilDate(row.comparisonAt) }}</dd></div>
-                    <div v-if="row.present !== null && row.totalDocs === null"><dt>Catatan pendukung</dt><dd>{{ row.present ? 'Tercatat' : 'Belum tercatat' }}</dd></div>
+                    <div v-if="row.present !== null"><dt>Catatan pendukung</dt><dd>{{ row.present ? 'Tercatat' : 'Belum tercatat' }}</dd></div>
                     <div v-if="row.flagText"><dt>Flag publikasi lokal</dt><dd>{{ row.flagText === 'Y' ? 'Dipublikasikan' : row.flagText === 'T' ? 'Tidak dipublikasikan' : row.flagText }}</dd></div>
-                    <div v-if="row.totalDocs !== null"><dt>Dokumen e-Litigasi terverifikasi</dt><dd>{{ row.verifiedDocs }} dari {{ row.totalDocs }}</dd></div>
+                    <div v-if="row.docExt || row.nonPdf"><dt>Format berkas</dt><dd :class="row.nonPdf ? 'compliance-nonpdf-ext' : 'compliance-pdf-ext'">{{ row.nonPdf ? `${row.nonPdf} (bukan PDF)` : 'PDF (.pdf)' }}<template v-if="row.docName"> · {{ row.docName }}</template></dd></div>
                 </dl>
             </li>
         </ul>
@@ -68,4 +71,7 @@ function civilDate(value) {
 .compliance-list a { color: var(--accent); font-weight: 700; }
 .compliance-list header span { color: var(--text-2); font-size: .78rem; }
 .compliance-list header [data-state='review'] { color: var(--danger); font-weight: 700; }
+.compliance-nonpdf { margin: 0; padding: .48rem .65rem; border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-inline-start: 3px solid var(--warn); border-radius: 7px; background: var(--warn-soft); color: var(--warn); font-size: .8rem; font-weight: 600; }
+.compliance-pdf-ext { color: var(--success, #16a34a); font-weight: 700; }
+.compliance-list header [data-nonpdf='true'], .compliance-nonpdf-ext { color: var(--warn); font-weight: 700; }
 </style>

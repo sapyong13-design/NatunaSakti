@@ -151,7 +151,7 @@ unavailable(['Data Nilai Sengketa'], 'Perlu nilai sengketa terstruktur dan penan
 unavailable(['Publikasi Pihak'], 'Cache dapat memuat flag publikasi, tetapi tidak memuat dasar anonimisasi per perkara sesuai SK KMA 2-144/2022 atau keadaan publikasi yang terverifikasi.');
 unavailable(['Penahanan'], 'Perlu interval penahanan per terdakwa, termasuk perpanjangan, penangguhan atau pengalihan, untuk dibandingkan dengan tanggal putus.');
 unavailable(['Sisa Biaya Perkara Tk Pertama', 'Sisa Biaya Perkara Tingkat Pertama'], 'Perlu saldo panjar, kewajiban pengembalian, dan transaksi pengembalian biaya tingkat pertama.');
-unavailable(['Verifikasi Dokumen Elektronik Elitigasi', 'Verifikasi Dokumen Elektronik E-Litigasi'], 'Perlu cakupan e-Litigasi, metadata dokumen dan jejak verifikasi oleh hakim/majelis.');
+unavailable(['Verifikasi Dokumen Elektronik Elitigasi', 'Verifikasi Dokumen Elektronik E-Litigasi'], 'Daftar entri yang dinilai Badilum dan aturan Sesuai/Tidak belum diketahui. Bundel SIPP tidak memuat tanggal verifikasi dan hitungan menurut tanggal input tidak cocok dengan EIS pada bulan yang diuji. Karena itu bundel tidak ditampilkan sebagai rincian penilaian.');
 unavailable(['Pengarsipan Perkara'], 'Perlu tanggal serah/arsip, tanggal awal menurut SOP Kepaniteraan dan definisi pengecualian.');
 for (const [labels, reason] of [
     [['Rilis Versi SIPP'], 'Penilaian tingkat satker terhadap versi SIPP yang terpasang, bukan perkara.'],

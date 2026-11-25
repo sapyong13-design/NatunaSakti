@@ -90,6 +90,7 @@ def read_eis_audit(cursor, kind, start, end):
                 CASE WHEN TRIM(COALESCE(j.edoc_bas,'')) IN ('','0','-') THEN 'empty'
                      WHEN TRIM(j.edoc_bas) REGEXP '[.][[:alnum:]]{2,5}$' THEN 'registered'
                      ELSE 'unknown' END AS upload_state,
+                NULLIF(TRIM(COALESCE(j.edoc_bas,'')),'') AS doc_path,
                 EXISTS(SELECT 1 FROM template_perkara_bas b WHERE b.perkara_id=j.perkara_id
                     AND b.sidang_id=j.id AND TRIM(COALESCE(b.isian,'')) <> '') AS has_template_content,
                 EXISTS(SELECT 1 FROM perkara_jadwal_sidang_detil d WHERE d.perkara_id=j.perkara_id
@@ -146,7 +147,10 @@ def read_snapshot(nomor=None, schema_only=False, audit=None, compliance=None):
             cursor.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT")
             if compliance is not None:
                 rule, start, end = compliance
-                cursor.execute(rule['sql'], (start, end))
+                if rule.get('params', True):
+                    cursor.execute(rule['sql'], (start, end))
+                else:
+                    cursor.execute(rule['sql'])
                 result = {'basis': rule['basis'], 'mode': rule['mode'], 'rows': cursor.fetchall()}
                 db.rollback()
                 return result
@@ -211,7 +215,8 @@ if __name__ == "__main__":
             from eis_compliance_casework import RULES as casework
             from eis_compliance_events import RULES as events
             from eis_compliance_fit import RULES as fit
-            rule = (appeals | casework | events | fit)[sys.argv[2]]
+            from eis_compliance_kinerja import RULES as kinerja
+            rule = (appeals | casework | events | fit | kinerja)[sys.argv[2]]
             cutoff = sys.argv[4] if len(sys.argv) == 5 else None
             json.dump(read_snapshot(compliance=(rule, *audit_bounds(sys.argv[3], cutoff))),
                       sys.stdout, ensure_ascii=False, default=encode)

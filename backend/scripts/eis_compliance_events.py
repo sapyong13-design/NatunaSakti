@@ -57,6 +57,16 @@ _FIRST_JUDGE_DATE = """(
       AND h.tanggal_penetapan > '1000-01-01'
 )"""
 
+# EIS hanya menilai penetapan jurusita untuk perkara perdata.
+_CIVIL_ONLY = " AND p.nomor_perkara REGEXP '/Pdt[.]|/Pdt/'"
+
+_PENETAPAN_COLUMNS = {
+    "judge": "penetapan_majelis_hakim",
+    "clerk": "penetapan_panitera_pengganti",
+    "bailiff": "penetapan_jurusita",
+    "hearing": "penetapan_hari_sidang",
+}
+
 for key, table, phase, reference, label in _APPOINTMENTS:
     # The identifier checks distinguish actual assignments/orders from empty rows.
     acuan = "p.tanggal_pendaftaran" if key == "judge" else _FIRST_JUDGE_DATE
@@ -64,6 +74,8 @@ for key, table, phase, reference, label in _APPOINTMENTS:
     end_label = f"Tanggal penetapan {label}"
     scope = "hari sidang pertama" if key == "hearing" else f"{label} pertama"
     condition = f"a.tahapan_id={phase} AND a.{reference} > 0"
+    if key == "bailiff":
+        condition += _CIVIL_ONLY
     RULES[f"{key}-appoint"] = dict(
         sql=f"""
             SELECT p.nomor_perkara, {acuan} AS event_at, a.tanggal_penetapan AS comparison_at,
@@ -88,17 +100,16 @@ for key, table, phase, reference, label in _APPOINTMENTS:
     )
     RULES[f"{key}-input"] = dict(
         sql=f"""
-            SELECT p.nomor_perkara, a.tanggal_penetapan AS event_at,
+            SELECT p.nomor_perkara, MIN(a.tanggal_penetapan) AS event_at,
                    MIN(CASE WHEN a.diinput_tanggal > '1000-01-01' THEN a.diinput_tanggal END) AS comparison_at,
                    '{end_label}' AS event_label, 'Waktu input pertama di SIPP' AS comparison_label
             FROM perkara p JOIN {table} a ON a.perkara_id=p.perkara_id
             WHERE a.tanggal_penetapan >= %s AND a.tanggal_penetapan < %s
               AND {condition}
-            GROUP BY p.perkara_id, p.nomor_perkara, a.tanggal_penetapan
+            GROUP BY p.perkara_id, p.nomor_perkara
         """,
         basis=(f"Periode menurut tanggal penetapan {label}. Pembanding 1×24 jam memakai waktu "
-               "pembuatan catatan paling awal untuk setiap perkara dan tanggal penetapan; baris "
-               "pada tanggal yang sama dihitung sekali. Penetapan ulang pada tanggal berbeda "
-               "tetap diperiksa. Tanggal penetapan tidak menyimpan jam."),
-        mode="date24",
+               "pembuatan catatan paling awal untuk setiap perkara; baris pada tanggal yang sama "
+               "dihitung sekali. Tanggal penetapan tidak menyimpan jam."),
+        mode="date24_or_present",
     )

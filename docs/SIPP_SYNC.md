@@ -117,3 +117,51 @@ Untuk audit EIS saksi dan BAS, admin memperluas izin `natunasakti_ro@localhost` 
 
 Sinkron nyata lewat endpoint manual berhasil membaca 4.607 perkara dan 15.501 jadwal sidang. Flag sumber: 283 `T`, 2.806 `Y`, 1.518 kosong/null. UI menampilkan nama sumber bahkan untuk flag `T`, dengan checklist terpisah. Permintaan sinkron bersamaan ditolak 429. Origin/Host asing dan POST lintas situs ditolak 403. Pengujian transaksi memastikan kegagalan detail mengembalikan seluruh perubahan lokal. Penambahan akun ini bukan jaminan terhadap query berat atau kompromi akun Windows lokal.
 
+
+## Bukti lokal indikator Kinerja
+
+Tab Kinerja kini punya pemeriksaan lokal per perkara, bukan hanya teks kriteria. Sumber dan aturannya:
+
+| Indikator | Sumber lokal | Aturan | Mode |
+|---|---|---|---|
+| Penyelesaian Perkara Tepat Waktu | `perkara_putusan`, `perkara`, `perkara_jadwal_sidang`, `perkara_mediasi` | Pidana: tanggal pendaftaran → putusan. Perdata: sidang pertama setelah keputusan mediasi → putusan. Batas 5 bulan kalender. | `months` |
+| Rilis Versi SIPP | `sys_config.app_version` | Versi terpasang dibandingkan dengan versi yang dinilai EIS (`ver. Satker`) dan versi terbaru (`ver. Terbaru`) dari snapshot. | `version` |
+| Kesesuaian Kode Satker Nomor Perkara | `perkara.nomor_perkara` | Akhiran nomor perkara dibandingkan dengan kode satker yang ditampilkan EIS. | `code` |
+| Jangka Waktu Pelaksanaan Delegasi Masuk | `delegasi_proses_masuk` | `tgl_surat_diterima` → `tgl_relaas`, batas 7 hari kerja (Senin–Jumat, libur nasional tidak dihitung). | `businessdays` |
+| Pelaksanaan Mediasi | `perkara_mediasi` | Laporan/keputusan mediasi pada bulan terpilih; berhasil bila `hasil_mediasi` Y/Y1/Y2 atau tanggal kesepakatan terisi. | `mediation` |
+
+Nilai pembanding (kode satker, versi) diambil dari snapshot EIS periode itu sendiri, bukan ditulis di kode. Peristiwa yang tanggalnya sama atau setelah waktu snapshot EIS diambil dilaporkan sebagai "belum dapat dinilai", bukan dihitung sebagai temuan.
+
+Drawer tiap indikator menampilkan tabel `EIS / SIPP lokal / selisih` untuk Jumlah, Sesuai, dan Tidak, lalu daftar perkara dengan tanggal acuan, tanggal pembanding, dan catatan batas waktu. Tombol "Bukti SIPP lokal" tersedia pada semua indikator agar baris tanpa kolom angka (versi, kode satker) tetap dapat diperiksa.
+
+Verifikasi 11 periode (Januari–November 2026): kelima indikator Kinerja cocok dengan angka EIS, termasuk 583 poin unsur dan 44/44 komponen pada mesin hitung `lib/eisScore.js`.
+
+## Handoff Monitoring EIS & Keselarasan SIPP — 25 November 2026
+
+### Mesin Skor & Peta Keselarasan
+- `backend/lib/eisScore.js` (`GET /api/eis/score`) mereproduksi nilai maksimal, perolehan, konversi per komponen, dan skor total EIS dari snapshot resmi (termasuk bobot efektif banding `7`, kasasi `7`, PK `0` serta daftar `ALWAYS_COUNTED`).
+- `backend/lib/eisParity.js` memetakan sub-indikator yang belum selaras 100% menjadi dua tier:
+  - `warn` (kuning, **Mendekati** di UI): `Kelengkapan | Dokumen Elektronik Rencana Persidangan (Court Callendar)` (`8/11` bulan cocok) dan `Kesesuaian | Penahanan` (`6/11` bulan cocok; `Jumlah` lokal `>=` EIS namun 0 `Tidak` lokal belum menutup `1–2 Tidak` MIS pada Mar/Mei/Jul/Agu).
+  - `diff` (merah, **Belum sama** di UI): `Kesesuaian | Verifikasi Dokumen Elektronik Elitigasi` dan `18` sub-bagian di **Kepatuhan** (banding/kasasi/PK, penetapan hakim/PP/hari sidang, pemberitahuan putusan, penundaan jadwal sidang, unggah putusan akhir, minutasi, TTE pidana).
+- `Pelaksanaan Sinkronisasi SIPP WEB` dan `Pelaksanaan Sinkronisasi SIPP ke Data Center MARI` tidak ditandai tidak selaras karena penilaian tingkat satker tidak memiliki log sinkronisasi di `sipp32` (`sys_sinkronisasi` dan `sync_antrian` 0 baris).
+
+### Aturan Lokal & Pemeriksaan Format Berkas
+- **Kepatuhan (`backend/scripts/eis_compliance_casework.py`)**:
+  - `Penginputan Penetapan Perpanjangan Penahanan`: selaras **10/10** bulan (Jan–Okt 2026) memakai `jenis_penahanan_id IN (7, 8)` menurut `tanggal_surat` dengan mode `date24_early`.
+  - `Kepatuhan Penundaan Jadwal Sidang`: **7/10** cocok (Jan–Mei, Agu, Okt) memakai log `INSERT` penundaan (`urutan > 1`) terhadap `tanggal_sidang` baru (`YEAR(prev)=YEAR(new)`).
+  - `Unggah Putusan Akhir`: **6/10** cocok (Jan, Mar–Jun, Agu) per berkas `amar_putusan_dok` unik.
+- **Kelengkapan & Kesesuaian (`backend/scripts/eis_compliance_fit.py`)**:
+  - `Publikasi Pihak`: selaras **11/11** berdasarkan `tanggal_pendaftaran` perkara SK KMA 2-144/2022 (`alur 118`, `-Anak/`, Perlindungan Anak, Perceraian, Pornografi, Kesusilaan, KDRT, atau `pihak_dipublikasikan = 'T'`).
+  - `Penahanan`: mewajibkan baris penahanan PN bertanggal (`jenis_penahanan_id IN (7, 8)` dan `status_penahanan_id = 1`) sehingga perkara pra-PN/rehab tidak memicu `Tidak` palsu di April.
+  - `Court Callendar`: memakai `MAX(perkara_penetapan_hari_sidang.tanggal_sidang)` (`tahapan_id = 12`) non-praperadilan (`alur_perkara_id <> 119`), cocok **8/11** bulan; total EIS `114` > `111` perkara SIPP akibat riwayat penetapan ulang di sisi MIS.
+  - **Audit PDF Kelengkapan & BAS (`eisCompliance.js`, `eisSippAudit.js`, `EisComplianceList.vue`, `EisScheduleList.vue`)**: menampilkan nama berkas (`docName`) dan ekstensi (`docExt`) di tiap baris; berkas terunggah selain `.pdf` (`.docx`/`.doc`/`.rtf`) diberi banner dan penanda kuning tanpa mengubah status `Sesuai`/`Tidak` EIS.
+- **Pencatatan Saksi (`MonitoringEisView.vue`)**: cocok **10/10** (Jan–Okt 2026); di November 2026 `6/6` lengkap di SIPP lokal vs `6/5/1` EIS karena `26/Pdt.P` baru diinput `24 Nov 14:15` dan tampilan web EIS menunggu pembaruan dari sisi Badilum.
+
+### Catatan Operasional MIS Badilum (`192.168.1.2/mis/sinkronisasi`)
+- `AUTOSYNC` / `SINKRONISASI MASSAL` berjalan via loop JS browser dan berisiko macet setelah tabel `#1` (`perkara`); gunakan **SINKRON** parsial (`kirimparsial`) untuk tahun berjalan pada tabel inti perkara jika angka Badilum tertinggal.
+- Tabel historis pra-2026 (`perkara_jadwal_sidang`, `perkara_hakim_pn`, dll.) wajar berselisih dengan total lokal sejak 2009 dan **tidak perlu `RESET`** kecuali ada penghapusan baris 2026 yang merusak hitung EIS.
+
+### Verifikasi Terakhir (25 November 2026)
+- Backend Node: `62/62` lulus (`node --test lib/*.test.js services/*.test.js routes/*.test.js`).
+- Backend Python: `2/2` lulus (`python scripts/test_read_sipp_db.py`).
+- Frontend: `31/31` lulus (`node --test src/lib/*.test.mjs`) dan `npm run build` sukses.

@@ -54,23 +54,61 @@ RULES = {
         LEFT JOIN perkara p ON p.perkara_id=d.perkara_id AND p.nomor_perkara=d.nomor_perkara
         WHERE x.tgl_relaas >= %s AND x.tgl_relaas < %s ORDER BY x.tgl_relaas,d.id""",
         'Relaas delegasi masuk pada bulan terpilih. Timestamp pembuatan baris proses tidak membuktikan kapan relaas diinput, sehingga hanya menjadi bukti pembanding.'),
-    'adjournment-input': audited_event('perkara_jadwal_sidang', 'PENUNDAAN JADWAL SIDANG', 'UPDATE',
-        'perkara_jadwal_sidang', 'id', 'tanggal_sidang', 'Tanggal sidang yang ditunda'),
+    'adjournment-input': rule("""SELECT p.nomor_perkara,
+        (SELECT MAX(j0.tanggal_sidang) FROM perkara_jadwal_sidang j0
+         WHERE j0.perkara_id=j.perkara_id AND j0.id < j.id) AS event_at,
+        MIN(a.datetime) AS comparison_at,
+        'Tanggal sidang yang ditunda' AS event_label,
+        'Waktu input penundaan di SIPP' AS comparison_label
+        FROM sys_audittrail a
+        JOIN perkara_jadwal_sidang j ON j.id=CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(a.title,'[id=',-1),']',1) AS UNSIGNED)
+        JOIN perkara p ON p.perkara_id=j.perkara_id
+        WHERE a.tablename='perkara_jadwal_sidang'
+          AND a.formname='PENUNDAAN JADWAL SIDANG'
+          AND a.action='INSERT'
+          AND a.title REGEXP '[[]id=[0-9]+[]]$'
+          AND j.urutan > 1
+          AND j.tanggal_sidang >= %s AND j.tanggal_sidang < %s
+          AND YEAR((SELECT MAX(j0.tanggal_sidang) FROM perkara_jadwal_sidang j0
+                    WHERE j0.perkara_id=j.perkara_id AND j0.id < j.id)) = YEAR(j.tanggal_sidang)
+        GROUP BY p.nomor_perkara,j.id,j.perkara_id,j.tanggal_sidang
+        ORDER BY comparison_at,p.nomor_perkara""",
+        'Jadwal sidang tunda baru (urutan > 1) pada bulan terpilih; membandingkan waktu input PENUNDAAN (INSERT) dengan tanggal sidang sebelumnya, batas 1×24 jam.', 'date24'),
     'detention-input': rule("""SELECT p.nomor_perkara,x.tanggal_surat AS event_at,x.diinput_tanggal AS comparison_at,
-        'Tanggal surat perpanjangan' AS event_label,'Waktu input awal penahanan' AS comparison_label
-        FROM penahanan_terdakwa x JOIN perkara p USING(perkara_id) JOIN jenis_penahanan j ON j.id=x.jenis_penahanan_id
-        WHERE j.nama REGEXP '^Hakim PN.*Perpanjangan' AND x.tanggal_surat >= %s AND x.tanggal_surat < %s
+        'Tanggal surat penetapan/perpanjangan' AS event_label,'Waktu input penahanan di SIPP' AS comparison_label
+        FROM penahanan_terdakwa x JOIN perkara p USING(perkara_id)
+        WHERE x.jenis_penahanan_id IN (7, 8) AND x.tanggal_surat >= %s AND x.tanggal_surat < %s
         ORDER BY x.tanggal_surat,x.id""",
-        'Surat perpanjangan dengan jenis penahanan Hakim PN. Tanggal surat tidak selalu sama dengan tanggal penetapan yang dipakai EIS; tidak disimpulkan kepatuhan 24 jam.'),
-    'decision-upload': audited_event('perkara_putusan', 'UPLOAD E-DOCS PUTUSAN AKHIR', 'UNGGAH',
-        'perkara_putusan', 'perkara_id', 'tanggal_putusan', 'Tanggal putusan akhir', grouped=True),
+        'Penahanan Hakim PN dan perpanjangan oleh Ketua PN (jenis 7 & 8) menurut tanggal surat; dibandingkan waktu input awal, batas 1×24 jam.', 'date24_early'),
+    'decision-upload': rule("""SELECT p.nomor_perkara,x.tanggal_putusan AS event_at,MIN(a.datetime) AS comparison_at,
+        'Tanggal putusan akhir' AS event_label,'Waktu unggah e-doc putusan akhir' AS comparison_label
+        FROM sys_audittrail a
+        JOIN perkara_putusan x ON x.perkara_id=CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(a.title,'[id=',-1),']',1) AS UNSIGNED)
+        JOIN perkara p ON p.perkara_id=x.perkara_id
+        WHERE a.tablename='perkara_putusan'
+          AND a.formname='UPLOAD E-DOCS PUTUSAN AKHIR'
+          AND a.action='UNGGAH'
+          AND a.title REGEXP '[[]id=[0-9]+[]]$'
+          AND a.description LIKE '%%<td>amar_putusan_dok</td>%%'
+          AND a.datetime >= %s AND a.datetime < %s
+        GROUP BY p.nomor_perkara,x.perkara_id,x.tanggal_putusan,
+                 SUBSTRING_INDEX(SUBSTRING_INDEX(a.description,'<td>amar_putusan_dok</td><td>',-1),'</td>',1)
+        ORDER BY comparison_at,p.nomor_perkara""",
+        'Unggah dokumen amar_putusan_dok pada bulan terpilih dibandingkan tanggal putusan akhir, batas 1×24 jam. Dokumen anonimisasi tidak dihitung.', 'date24_early'),
 }
 
-for key, case_pattern in [('tte-civil', '/Pdt[.]|/Pdt/'), ('tte-criminal', '/Pid[.]|/Pid/|/PRK/')]:
+# EIS menghitung salinan putusan untuk putusan pada bulan terpilih. Perkara anak
+# tidak termasuk kelompok pidana (terbukti dari angka resmi tiga periode).
+for key, case_pattern, exclude in [
+        ('tte-civil', '/Pdt[.]|/Pdt/', ''),
+        ('tte-criminal', '/Pid[.]|/Pid/|/PRK/', ' AND p.nomor_perkara NOT REGEXP "Anak"')]:
     RULES[key] = rule(f"""SELECT p.nomor_perkara,x.tanggal_putusan AS event_at,
-        x.penerbitan_salinan_putusan AS comparison_at,
-        'Tanggal putusan' AS event_label,'Tanggal penerbitan salinan' AS comparison_label
+        1 AS present,
+        'Tanggal putusan' AS event_label
         FROM perkara_putusan x JOIN perkara p USING(perkara_id)
-        WHERE p.nomor_perkara REGEXP '{case_pattern}' AND x.tanggal_putusan >= %s AND x.tanggal_putusan < %s
+        WHERE p.nomor_perkara REGEXP '{case_pattern}'{exclude}
+          AND x.tanggal_putusan >= %s AND x.tanggal_putusan < %s
         ORDER BY x.tanggal_putusan,p.perkara_id""",
-        'Tanggal penerbitan salinan dari SIPP bukan timestamp tanda tangan elektronik. Status TTE 1×24 jam tidak dapat dipastikan dari kolom ini.')
+        'Putusan pada bulan terpilih untuk kelompok perkara ini. EIS menghitung satu baris per '
+        'putusan dan menilai salinannya tepat waktu; cache tidak memuat kolom penerbitan salinan, '
+        'sehingga status per perkara tidak dipastikan.', 'presence')

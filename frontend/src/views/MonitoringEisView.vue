@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { getEisFindings, getOfficialEis } from '../lib/eisApi'
+import { getEisFindings, getEisScore, getOfficialEis } from '../lib/eisApi'
 import EisScheduleList from '../components/dashboard/EisScheduleList.vue'
 import EisComplianceList from '../components/dashboard/EisComplianceList.vue'
 
@@ -33,17 +33,56 @@ const localStatus = {
     not_case_based: 'Indikator tidak berbasis perkara'
 }
 const active = ref(tabs[0].id)
-const onlyIssues = ref(false)
+const filterMode = ref('all')
 const cache = new Map()
 const official = shallowRef(null)
 const busy = ref(false)
 const snapshot = computed(() => official.value?.snapshot)
 const implementationScore = computed(() => snapshot.value?.tabs.find(tab => tab.id === 'konversi')?.rows.at(-1)?.points)
 const rows = computed(() => snapshot.value?.tabs.find(tab => tab.id === active.value)?.rows ?? [])
+const computedScore = shallowRef(null)
+const scoreDelta = computed(() => {
+    const a = computedScore.value
+    if (!a || a.total === null || a.officialTotal === null) return null
+    const delta = Math.round((a.total - a.officialTotal) * 100) / 100
+    return { value: delta, text: (delta > 0 ? '+' : '') + delta.toFixed(2).replace('.', ',') }
+})
 const hasIssue = row => row.details.some(detail => row.headers.some((header, i) => (officialCount(header, detail.values[i]) ?? 0) > 0))
 const issueCount = computed(() => rows.value.filter(hasIssue).length)
-const visibleRows = computed(() => onlyIssues.value && active.value !== 'konversi' ? rows.value.filter(hasIssue) : rows.value)
-const percent = value => `${value.replace('.', ',').replace(/\s*%$/, '')}%`
+const elementParity = (tabId, label) => computedScore.value?.components.find(item => item.id === tabId)?.elements.find(item => item.label === label)?.parity ?? null
+const partParity = (tabId, label, index) => elementParity(tabId, label)?.parts?.[index] ?? null
+const isUnaligned = (tabId, row) => Boolean(elementParity(tabId, row.label) && !elementParity(tabId, row.label).aligned)
+const unalignedCount = computed(() => active.value === 'konversi' ? 0 : rows.value.filter(row => isUnaligned(active.value, row)).length)
+const tabUnaligned = id => computedScore.value?.components.find(item => item.id === id)?.unalignedParts ?? 0
+const visibleRows = computed(() => {
+    if (active.value === 'konversi') return rows.value
+    if (filterMode.value === 'issues') return rows.value.filter(hasIssue)
+    if (filterMode.value === 'unaligned') return rows.value.filter(row => isUnaligned(active.value, row))
+    return rows.value
+})
+const percent = value => `${String(value).replace('.', ',').replace(/\s*%$/, '')}%`
+const computedFor = label => computedScore.value?.components.find(item => item.id === String(label).toLowerCase()) ?? null
+const cellNumber = value => {
+    const text = String(value ?? '').trim()
+    if (!/^(?:\d+|\d{1,3}(?:\.\d{3})+)$/.test(text)) return null
+    const number = Number(text.replaceAll('.', ''))
+    return Number.isSafeInteger(number) ? number : null
+}
+function tabPercent(id) {
+    if (id === 'konversi') return computedScore.value?.total != null ? percent(String(computedScore.value.total)) : null
+    const component = computedScore.value?.components.find(item => item.id === id)
+    return component?.konversi != null ? percent(String(component.konversi)) : null
+}
+const computedElement = label => computedScore.value?.components.flatMap(item => item.elements).find(item => item.label === label) ?? null
+function calcText(label) {
+    const element = computedElement(label)
+    if (!element) return null
+    const parts = [`bobot ${element.weight}`, `poin ${element.points}`]
+    parts.push(element.denominator > 0 ? `penyebut ${element.denominator}` : 'tidak masuk penyebut')
+    if (element.alwaysCounted && element.activeParts === 0) parts.push('unsur wajib walau tanpa data')
+    if (element.weightOverridden) parts.push('bobot mengikuti hitungan EIS, bukan teks indikator')
+    return parts.join(' · ')
+}
 let officialRequest
 let localRequest
 
@@ -53,6 +92,38 @@ const result = shallowRef(null)
 const checking = ref(false)
 const evidence = shallowRef(null)
 const localContext = computed(() => result.value?.context)
+const localCompare = computed(() => {
+    const context = localContext.value
+    if (context?.kind !== 'compliance' || !selection.value) return null
+    const counts = context.counts ?? {}
+    // Jumlah EIS = perkara yang dinilai; yang belum bisa dinilai dilaporkan terpisah.
+    const local = {
+        jumlah: (counts.matched ?? 0) + (counts.review ?? 0),
+        sesuai: counts.matched ?? 0,
+        tidak: counts.review ?? 0,
+        belum: counts.unknown ?? 0
+    }
+    const official = new Map(selection.value.metrics.map(metric => [metric.label.trim().toLowerCase(), metric.value]))
+    const read = key => {
+        const value = official.get(key)
+        return value === undefined || value === '' || value === '—' ? null : Number(String(value).replaceAll('.', ''))
+    }
+    const eis = { jumlah: read('jumlah'), sesuai: read('sesuai'), tidak: read('tidak') }
+    const rows = []
+    if (eis.jumlah !== null) rows.push({ label: 'Jumlah', eis: eis.jumlah, local: local.jumlah })
+    if (eis.sesuai !== null) rows.push({ label: 'Sesuai', eis: eis.sesuai, local: local.sesuai })
+    if (eis.tidak !== null) rows.push({ label: 'Tidak', eis: eis.tidak, local: local.tidak })
+    const differing = rows.filter(row => row.eis !== row.local)
+    const blank = eis.jumlah === null && eis.sesuai === null && eis.tidak === null
+    return {
+        rows,
+        belum: local.belum,
+        verdict: blank ? 'EIS belum menilai indikator ini pada periode ini.'
+            : !rows.length ? 'EIS tidak menampilkan angka pembanding untuk indikator ini.'
+            : differing.length ? `${differing.length} angka berbeda dari EIS.`
+            : 'Semua angka sama dengan EIS.'
+    }
+})
 const basComparison = computed(() => {
     const context = result.value?.context
     if (context?.kind !== 'bas' || !selection.value) return null
@@ -60,9 +131,12 @@ const basComparison = computed(() => {
     const value = counts.get('jumlah')
     const official = value && /^\d+(?:\.\d{3})*$/.test(value) ? Number(value.replaceAll('.', '')) : null
     if (official === null) return null
-    return official === context.summary.registered
+    const pdfNote = context.summary.nonPdf
+        ? ` Format bukan PDF: ${context.summary.nonPdf} berkas BAS.`
+        : context.summary.registered ? ' Format seluruh BAS terdaftar: PDF.' : ''
+    return (official === context.summary.registered
         ? 'Jumlah sidang ber-BAS di lokal sama dengan Jumlah EIS. Angka Sesuai/Tidak butuh pemeriksaan berkas.'
-        : `Jumlah sidang ber-BAS lokal ${context.summary.registered}, EIS ${official}.`
+        : `Jumlah sidang ber-BAS lokal ${context.summary.registered}, EIS ${official}.`) + pdfNote
 })
 const witnessComparison = computed(() => {
     const cohort = result.value?.context?.cohort
@@ -73,9 +147,13 @@ const witnessComparison = computed(() => {
         return value && /^\d+(?:\.\d{3})*$/.test(value) ? Number(value.replaceAll('.', '')) : null
     })
     if (expected.some(value => value === null)) return null
-    return expected[0] === cohort.total && expected[1] === cohort.recorded && expected[2] === cohort.total - cohort.recorded
-        ? 'Jumlah dan rincian lokal cocok dengan EIS. Badilum tidak menampilkan identitas perkaranya.'
-        : 'Jumlah pembanding lokal berbeda dari EIS. Angka resmi tetap menjadi acuan.'
+    if (expected[0] === cohort.total && expected[1] === cohort.recorded && expected[2] === cohort.total - cohort.recorded) {
+        return 'Jumlah dan rincian lokal cocok dengan EIS. Badilum tidak menampilkan identitas perkaranya.'
+    }
+    if (expected[0] === cohort.total && cohort.recorded > expected[1]) {
+        return `Jumlah perkara cocok dengan EIS (${cohort.total}), dan di SIPP lokal sudah tercatat ${cohort.recorded}/${cohort.total} (${cohort.recorded === cohort.total ? 'sudah lengkap semua, ' : ''}tinggal menunggu sinkronisasi dari SIPP ke web EIS agar angka resmi ikut terbarui).`
+    }
+    return 'Jumlah pembanding lokal berbeda dari EIS. Angka resmi tetap menjadi acuan.'
 })
 const localCount = computed(() => {
     const audit = result.value
@@ -94,6 +172,16 @@ function closeFindings() {
     trigger = undefined
     selection.value = null
     evidence.value = null
+}
+
+async function loadScore(requestedPeriod, signal) {
+    computedScore.value = null
+    try {
+        const data = await getEisScore(requestedPeriod, signal)
+        if (period.value === requestedPeriod) computedScore.value = data
+    } catch {
+        if (period.value === requestedPeriod) computedScore.value = null
+    }
 }
 
 async function loadOfficial(refresh = false, background = false) {
@@ -116,6 +204,7 @@ async function loadOfficial(refresh = false, background = false) {
         const received = data.snapshot?.period === requestedPeriod ? data.snapshot : null
         if (data.status === 'ready' && !received) throw new Error('Snapshot periode yang dipilih tidak diterima.')
         official.value = { ...data, snapshot: received ?? previous?.snapshot ?? null }
+        void loadScore(requestedPeriod, controller.signal)
     } catch (error) {
         if (officialRequest !== controller) return
         official.value = {
@@ -162,6 +251,7 @@ async function openFindings(event, row, detail, index, count) {
     selection.value = {
         label: row.label, detail: detail.label, count, points: row.points,
         description: row.details.length === 1 && row.description !== detail.label ? row.description : '',
+        calc: calcText(row.label),
         metrics: row.headers.map((header, i) => ({ label: header, value: detail.values[i] || '—' }))
     }
     evidence.value = null
@@ -213,6 +303,11 @@ onBeforeUnmount(() => {
                 <h1 id="eis-heading">Monitoring EIS</h1>
                 <p>Pengadilan Negeri Natuna <span aria-hidden="true">·</span> PT Kepulauan Riau</p>
             </div>
+            <div v-if="computedScore" class="eis-score">
+                <span>Implementasi SIPP</span>
+                <strong>{{ computedScore.total === null ? '—' : percent(String(computedScore.total)) }}</strong>
+                <small v-if="scoreDelta">{{ scoreDelta.text }} pp vs EIS</small>
+            </div>
             <div v-if="implementationScore" class="eis-score">
                 <span>Implementasi SIPP</span>
                 <strong>{{ implementationScore.replace('.', ',').replace(/\s*%$/, '') }}<small>%</small></strong>
@@ -241,45 +336,65 @@ onBeforeUnmount(() => {
         <div role="tablist" aria-label="Aspek penilaian EIS" class="eis-tabs">
             <button v-for="(tab, index) in tabs" :id="`eis-tab-${tab.id}`" :key="tab.id" type="button" role="tab"
                 :aria-selected="active === tab.id" :aria-controls="`eis-panel-${tab.id}`" :tabindex="active === tab.id ? 0 : -1"
-                @click="active = tab.id" @keydown="handleTabKeys($event, index)">{{ tab.label }}</button>
+                @click="active = tab.id" @keydown="handleTabKeys($event, index)">
+                {{ tab.label }}<span v-if="tabUnaligned(tab.id)" class="eis-tab-unaligned" :data-parity="computedFor(tab.label)?.unalignedTier" :title="`${tabUnaligned(tab.id)} bagian belum sama persis`">{{ tabUnaligned(tab.id) }}</span>
+            </button>
         </div>
 
         <section v-for="tab in tabs" v-show="active === tab.id" :id="`eis-panel-${tab.id}`" :key="tab.id"
             :aria-labelledby="`eis-tab-${tab.id}`" :aria-busy="busy" role="tabpanel" tabindex="0" class="eis-panel">
             <template v-if="active === tab.id && snapshot">
                 <div class="eis-register-bar">
-                    <div><h2>{{ tab.label }}</h2><span>{{ rows.length }} {{ tab.id === 'konversi' ? 'ringkasan nilai' : 'indikator resmi' }}</span></div>
+                    <div><h2>{{ tab.label }}</h2><span>{{ rows.length }} {{ tab.id === 'konversi' ? 'ringkasan nilai' : 'indikator resmi' }}</span><strong v-if="tabPercent(tab.id)" class="eis-tab-score">{{ tabPercent(tab.id) }}</strong></div>
                     <div v-if="tab.id !== 'konversi'" class="eis-switch" role="group" aria-label="Filter indikator resmi">
-                        <button type="button" :aria-pressed="!onlyIssues" @click="onlyIssues = false">Semua</button>
-                        <button type="button" :aria-pressed="onlyIssues" @click="onlyIssues = true">Ada ‘Tidak’ <span>{{ issueCount }}</span></button>
+                        <button type="button" :aria-pressed="filterMode === 'all'" @click="filterMode = 'all'">Semua</button>
+                        <button type="button" :aria-pressed="filterMode === 'issues'" @click="filterMode = 'issues'">Ada ‘Tidak’ <span>{{ issueCount }}</span></button>
+                        <button type="button" class="eis-switch-unaligned" :aria-pressed="filterMode === 'unaligned'" @click="filterMode = 'unaligned'">Belum sama <span>{{ unalignedCount }}</span></button>
                     </div>
                 </div>
                 <div v-if="tab.id === 'konversi' && rows.length" class="eis-register eis-conversion">
                     <table>
-                        <thead><tr><th scope="col">Kategori</th><th scope="col">Nilai maksimal</th><th scope="col">Nilai satker</th><th scope="col">Konversi</th></tr></thead>
+                        <thead><tr><th scope="col">Kategori</th><th scope="col">Nilai maksimal</th><th scope="col">Nilai satker</th><th scope="col">Konversi</th><th scope="col">Hitung ulang</th></tr></thead>
                         <tbody><tr v-for="row in rows.slice(0, -1)" :key="row.label">
                             <th scope="row">{{ row.label }}</th>
                             <td>{{ row.details[0]?.values[0] || '—' }}</td><td>{{ row.details[0]?.values[1] || '—' }}</td>
                             <td class="eis-conversion-value">{{ row.points ? percent(row.points) : '—' }}</td>
+                            <td class="eis-conversion-check"><template v-if="computedFor(row.label)">{{ computedFor(row.label).konversi === null ? '—' : percent(String(computedFor(row.label).konversi)) }}<small>{{ computedFor(row.label).maks }} / {{ computedFor(row.label).peroleh }}</small></template><template v-else>—</template></td>
                         </tr></tbody>
                     </table>
-                    <div class="eis-conversion-total"><span>Implementasi SIPP</span><strong>{{ implementationScore ? percent(implementationScore) : '—' }}</strong></div>
+                    <div class="eis-conversion-total"><span>Implementasi SIPP</span><strong>{{ implementationScore ? percent(implementationScore) : '—' }}<small v-if="computedScore"> · hitung ulang {{ computedScore.total === null ? '—' : percent(String(computedScore.total)) }}<template v-if="scoreDelta"> ({{ scoreDelta.text }} pp)</template></small></strong></div>
                 </div>
                 <div v-else-if="visibleRows.length" class="eis-register">
-                    <article v-for="row in visibleRows" :key="row.label" class="eis-indicator" :class="{ 'eis-indicator-issue': hasIssue(row) }">
+                    <article v-for="row in visibleRows" :key="row.label" class="eis-indicator"
+                        :class="{ 'eis-indicator-issue': hasIssue(row), 'eis-indicator-unaligned': isUnaligned(tab.id, row) }" :data-parity="elementParity(tab.id, row.label)?.tier">
                         <header>
-                            <div class="eis-indicator-name"><h3>{{ row.label }}</h3><span class="eis-points">{{ row.points || '—' }} poin</span></div>
+                            <div class="eis-indicator-name">
+                                <h3>{{ row.label }}</h3>
+                                <span class="eis-points">{{ row.points || '—' }} poin</span>
+                                <span v-if="isUnaligned(tab.id, row)" class="eis-unaligned-badge" :data-parity="elementParity(tab.id, row.label)?.tier">
+                                    {{ elementParity(tab.id, row.label)?.tier === 'warn' ? 'Mendekati' : 'Belum sama' }}<template v-if="(elementParity(tab.id, row.label)?.totalParts ?? 1) > 1"> · {{ elementParity(tab.id, row.label).unalignedCount }}/{{ elementParity(tab.id, row.label).totalParts }}</template>
+                                </span>
+                            </div>
+                            <p v-if="isUnaligned(tab.id, row) && (elementParity(tab.id, row.label)?.totalParts ?? 1) === 1" class="eis-unaligned-note">
+                                {{ elementParity(tab.id, row.label).note }}
+                            </p>
                             <details v-if="row.description && !row.details.some(detail => detail.label)" class="eis-indicator-rule">
                                 <summary>Kriteria penilaian</summary><p>{{ row.description }}</p>
                             </details>
                         </header>
                         <div v-if="row.details.length" class="eis-measures">
-                            <div v-for="(detail, index) in row.details" :key="index" class="eis-measure">
-                                <p v-if="detail.label" class="eis-submeasure">{{ detail.label }}</p>
+                            <div v-for="(detail, index) in row.details" :key="index" class="eis-measure"
+                                :class="{ 'eis-measure-unaligned': partParity(tab.id, row.label, index) && !partParity(tab.id, row.label, index).aligned }" :data-parity="partParity(tab.id, row.label, index)?.tier">
+                                <p v-if="detail.label" class="eis-submeasure">
+                                    {{ detail.label }}
+                                    <span v-if="partParity(tab.id, row.label, index) && !partParity(tab.id, row.label, index).aligned" class="eis-unaligned-badge" :data-parity="partParity(tab.id, row.label, index)?.tier">
+                                        {{ partParity(tab.id, row.label, index)?.tier === 'warn' ? 'Mendekati' : 'Belum sama' }} · {{ partParity(tab.id, row.label, index).note }}
+                                    </span>
+                                </p>
                                 <dl><div v-for="(header, cell) in row.headers" :key="cell" :data-status="header.toLowerCase()">
                                     <dt>{{ header }}</dt>
                                     <dd>
-                                        <button v-if="officialCount(header, detail.values[cell]) !== null || (['kepatuhan', 'kelengkapan', 'kesesuaian'].includes(tab.id) && header.trim().toLowerCase() === 'tidak')" type="button" class="eis-count"
+                                        <button v-if="cellNumber(detail.values[cell]) !== null" type="button" class="eis-count"
                                             :class="{ 'eis-count-alert': officialCount(header, detail.values[cell]) > 0 }" :disabled="busy"
                                             :aria-label="`Periksa temuan lokal untuk ${row.label}${detail.label ? ` — ${detail.label}` : ''}; Tidak resmi: ${detail.values[cell] || 'belum dinilai'}`"
                                             @click="openFindings($event, row, detail, index, officialCount(header, detail.values[cell]))">{{ detail.values[cell] || '—' }}</button>
@@ -290,7 +405,7 @@ onBeforeUnmount(() => {
                         </div>
                     </article>
                 </div>
-                <p v-else class="eis-empty">{{ onlyIssues && rows.length ? 'Tidak ada indikator dengan angka “Tidak” di tab ini.' : 'Belum ada indikator untuk tab ini.' }}</p>
+                <p v-else class="eis-empty">{{ filterMode === 'issues' && rows.length ? 'Tidak ada indikator dengan angka “Tidak” di tab ini.' : filterMode === 'unaligned' && rows.length ? 'Semua indikator di tab ini sudah sama persis dengan EIS.' : 'Belum ada indikator untuk tab ini.' }}</p>
             </template>
         </section>
 
@@ -314,10 +429,24 @@ onBeforeUnmount(() => {
                             <dt>{{ metric.label }}</dt><dd>{{ metric.value }}</dd>
                         </div>
                     </dl>
+                    <p v-if="selection.calc" class="eis-provenance">Hitungan: {{ selection.calc }}</p>
                     <p class="eis-provenance">Badilum tidak menampilkan batas waktu data atau daftar perkara yang dinilai.</p>
                     <details v-if="selection.description" class="eis-indicator-rule">
                         <summary>Kriteria penilaian</summary><p>{{ selection.description }}</p>
                     </details>
+                </section>
+                <section v-if="localCompare" aria-labelledby="eis-compare-title" class="eis-compare">
+                    <div class="eis-section-heading"><h3 id="eis-compare-title">Perbandingan angka</h3></div>
+                    <table v-if="localCompare.rows.length">
+                        <thead><tr><th scope="col">Angka</th><th scope="col">EIS</th><th scope="col">SIPP lokal</th><th scope="col">Selisih</th></tr></thead>
+                        <tbody><tr v-for="line in localCompare.rows" :key="line.label">
+                            <th scope="row">{{ line.label }}</th>
+                            <td>{{ line.eis }}</td>
+                            <td>{{ line.local }}</td>
+                            <td :data-diff="line.local - line.eis !== 0">{{ line.local - line.eis === 0 ? 'sama' : (line.local - line.eis > 0 ? '+' : '') + (line.local - line.eis) }}</td>
+                        </tr></tbody>
+                    </table>
+                    <p class="eis-provenance">{{ localCompare.verdict }}<template v-if="localCompare.belum"> · {{ localCompare.belum }} catatan belum dapat dinilai.</template></p>
                 </section>
                 <div class="eis-local-bar">
                     <h3>Pemeriksaan SIPP lokal</h3>
@@ -337,6 +466,9 @@ onBeforeUnmount(() => {
                 <section v-if="localContext?.kind === 'witness' || localContext?.kind === 'bas'" class="eis-hearing-context" aria-label="Daftar jadwal lokal">
                     <p v-if="witnessComparison" class="eis-subtitle">{{ witnessComparison }}</p>
                     <p v-if="basComparison" class="eis-subtitle">{{ basComparison }}</p>
+                    <p v-if="localContext.kind === 'bas' && localContext.summary?.nonPdf" class="eis-bas-nonpdf" role="status">
+                        Format non-PDF: <strong>{{ localContext.summary.nonPdf }}</strong> berkas BAS yang diunggah bukan PDF.
+                    </p>
                     <EisScheduleList :kind="localContext.kind" :checked-at="localContext.checkedAt"
                         :rows="localContext.kind === 'witness' ? localContext.cohort?.rows ?? [] : localContext.rows" />
                     <details class="eis-method">
@@ -407,6 +539,24 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.eis-score small { display: block; font-size: .72rem; color: var(--text-2); }
+.eis-tab-score { font-size: .95rem; font-weight: 700; color: var(--accent); letter-spacing: -.01em; }
+.eis-compare table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.eis-compare th, .eis-compare td { padding: .3rem .4rem; border-bottom: 1px solid var(--border); text-align: start; }
+.eis-compare td[data-diff='true'] { color: var(--danger); font-weight: 700; }
+.eis-tab-unaligned { display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; margin-inline-start: .35rem; padding-inline: .3rem; border-radius: 999px; background: var(--danger-soft); color: var(--danger); font-size: .7rem; font-weight: 750; }
+.eis-switch-unaligned { color: var(--danger) !important; }
+.eis-switch-unaligned[aria-pressed='true'] { border-color: var(--danger) !important; background: var(--danger-soft) !important; }
+.eis-indicator-unaligned { border-inline-start-color: var(--danger); background: color-mix(in srgb, var(--danger) 5%, var(--bg2)); }
+.eis-unaligned-badge { display: inline-block; padding: .12rem .42rem; border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); border-radius: 5px; background: var(--danger-soft); color: var(--danger); font-size: .71rem; font-weight: 750; }
+.eis-unaligned-note { margin-top: .22rem !important; color: var(--danger); font-size: .76rem; font-weight: 600; }
+.eis-measure-unaligned { padding-inline-start: .5rem; border-inline-start: 2px solid var(--danger); }
+.eis-tab-unaligned[data-parity='warn'] { background: var(--warn-soft); color: var(--warn); }
+.eis-indicator-unaligned[data-parity='warn'] { border-inline-start-color: var(--warn); background: color-mix(in srgb, var(--warn) 6%, var(--bg2)); }
+.eis-unaligned-badge[data-parity='warn'] { border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: var(--warn-soft); color: var(--warn); }
+.eis-indicator-unaligned[data-parity='warn'] .eis-unaligned-note { color: var(--warn); }
+.eis-measure-unaligned[data-parity='warn'] { border-inline-start-color: var(--warn); }
+.eis-bas-nonpdf { margin: 0; padding: .48rem .65rem; border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-inline-start: 3px solid var(--warn); border-radius: 7px; background: var(--warn-soft); color: var(--warn); font-size: .8rem; font-weight: 600; }
 .eis-page { display: grid; gap: 1rem; width: 100%; max-width: 1240px; min-width: 0; margin-inline: auto; color: var(--text); }
 .eis-page :is(h1, h2, h3, h4, p, dl, dd) { margin: 0; }
 .eis-page :is(button, input, summary):focus-visible, .eis-page a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

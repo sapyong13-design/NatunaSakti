@@ -33,7 +33,13 @@ function needsReview(row) {
 }
 
 function state(row) {
-    if (!needsReview(row)) return { label: props.kind === 'witness' ? `${row.witnessCount} entri` : 'Rujukan BAS ada', tone: 'ok' }
+    if (!needsReview(row)) {
+        if (props.kind === 'bas') {
+            if (row.nonPdf) return { label: `BAS bukan PDF (${row.nonPdf})`, tone: 'warn' }
+            return { label: row.docExt ? `BAS · ${row.docExt.slice(1).toUpperCase()}` : 'Rujukan BAS ada', tone: 'ok' }
+        }
+        return { label: `${row.witnessCount} entri`, tone: 'ok' }
+    }
     if (row.tanggal > today.value) return { label: 'Belum waktunya', tone: 'neutral' }
     if (row.tanggal === today.value) return { label: 'Belum tercatat · hari ini', tone: 'neutral' }
     return { label: props.kind === 'bas' && row.uploadState === 'unknown' ? 'Rujukan tidak dikenali' : 'Belum tercatat', tone: 'review' }
@@ -63,6 +69,7 @@ function labelDate(date) {
                 <div class="schedule-case">
                     <RouterLink v-if="row.id" :to="{ name: 'Data', query: { perkara: row.id } }">{{ row.nomorPerkara }}</RouterLink>
                     <strong v-else>{{ row.nomorPerkara }}</strong>
+                    <p v-if="kind === 'bas' && row.docName" class="schedule-file">{{ row.docName }}</p>
                     <details v-if="row.agenda || kind === 'bas'" class="schedule-extra">
                         <summary>{{ kind === 'bas' ? 'Agenda & isian BAS' : 'Agenda sidang' }}</summary>
                         <p v-if="row.agenda">{{ row.agenda }}</p>
@@ -91,6 +98,8 @@ function labelDate(date) {
 .schedule-state { width: fit-content; border-radius: 5px; padding: .12rem .4rem; background: var(--bg3); color: var(--text-2); font-size: .75rem; font-weight: 650; }
 .schedule-state[data-tone='ok'] { color: var(--success); background: var(--success-soft); }
 .schedule-state[data-tone='review'] { color: var(--danger); background: var(--danger-soft); }
+.schedule-state[data-tone='warn'] { color: var(--warn); background: var(--warn-soft); }
+.schedule-file { margin: .12rem 0 0; color: var(--text-2); font-size: .74rem; font-family: var(--font-mono, ui-monospace, monospace); overflow-wrap: anywhere; }
 .schedule-extra { margin-top: .15rem; color: var(--text-2); font-size: .77rem; }
 .schedule-extra summary { cursor: pointer; }
 .schedule-extra p { margin: .2rem 0 0; }

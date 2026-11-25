@@ -45,7 +45,12 @@ async function getMonthlySippAudit(db, kind, period, read = readMonthlyAudit, no
                 missing, qaCount: Number(row.qa_count), qaComplete: Number(row.qa_complete) };
         }
         const tanggal = row.tanggal_sidang.slice(0, 10);
-        return { ...common, tanggal, agenda: row.agenda, uploadState: row.upload_state,
+        const trimmedPath = typeof row.doc_path === 'string' ? row.doc_path.trim() : '';
+        const extMatch = /\.([a-z0-9]{2,5})$/i.exec(trimmedPath);
+        const docExt = extMatch ? `.${extMatch[1].toLowerCase()}` : null;
+        const docName = trimmedPath ? path.posix.basename(trimmedPath.replaceAll('\\', '/')) : null;
+        const nonPdf = row.upload_state === 'registered' && docExt && docExt !== '.pdf' ? docExt : null;
+        return { ...common, tanggal, agenda: row.agenda, uploadState: row.upload_state, docExt, docName, nonPdf,
             scheduleState: tanggal > today ? 'future' : tanggal === today ? 'today' : 'past',
             hasTemplateContent: !!row.has_template_content, hasHearingDetail: !!row.has_hearing_detail,
             hasTemplateQa: !!row.has_template_qa, hasTemplateClosing: !!row.has_template_closing };
@@ -57,6 +62,7 @@ async function getMonthlySippAudit(db, kind, period, read = readMonthlyAudit, no
         incompleteQa: rows.filter(row => row.qaCount > row.qaComplete).length
     } : {
         total: rows.length, registered: rows.filter(row => row.uploadState === 'registered').length,
+        nonPdf: rows.filter(row => row.nonPdf).length,
         empty: rows.filter(row => row.uploadState === 'empty').length,
         unknown: rows.filter(row => row.uploadState === 'unknown').length,
         content: rows.filter(row => row.hasTemplateContent || row.hasHearingDetail || row.hasTemplateQa || row.hasTemplateClosing).length
