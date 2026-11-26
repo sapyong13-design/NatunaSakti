@@ -76,6 +76,7 @@ for key, table, phase, reference, label in _APPOINTMENTS:
     condition = f"a.tahapan_id={phase} AND a.{reference} > 0"
     if key == "bailiff":
         condition += _CIVIL_ONLY
+    appoint_condition = condition + (" AND p.alur_perkara_id <> 118" if key == "hearing" else "")
     RULES[f"{key}-appoint"] = dict(
         sql=f"""
             SELECT p.nomor_perkara, {acuan} AS event_at, a.tanggal_penetapan AS comparison_at,
@@ -83,7 +84,7 @@ for key, table, phase, reference, label in _APPOINTMENTS:
                    'Penetapan {scope}' AS comparison_label
             FROM perkara p JOIN {table} a ON a.perkara_id=p.perkara_id
             WHERE a.tanggal_penetapan >= %s AND a.tanggal_penetapan < %s
-              AND {condition}
+              AND {appoint_condition}
               AND NOT EXISTS (
                   SELECT 1 FROM {table} earlier WHERE earlier.perkara_id=a.perkara_id
                     AND earlier.tahapan_id={phase} AND earlier.{reference} > 0
@@ -92,11 +93,21 @@ for key, table, phase, reference, label in _APPOINTMENTS:
               )
             GROUP BY p.perkara_id, p.nomor_perkara, event_at, a.tanggal_penetapan
         """,
-        basis=(f"Periode berdasarkan tanggal penetapan {scope} yang tercatat di SIPP. "
-               f"Satu baris per perkara; penetapan ulang dan anggota majelis tidak dihitung lagi. "
+        basis=(f"Periode berdasarkan tanggal penetapan {scope}" + (" (non-anak)" if key == "hearing" else "") +
+               " yang tercatat di SIPP. Satu baris per perkara; penetapan ulang dan anggota majelis tidak dihitung lagi. "
                f"Pembanding lokal: maksimal 3 hari kalender dari {acuan_label.lower()}. "
                "Penetapan tanpa tanggal tidak bisa ditempatkan dalam periode."),
         mode="days",
+    )
+    input_condition = condition + ("" if key == "hearing" else " AND a.aktif='Y'")
+    input_group = f"GROUP BY a.id, p.perkara_id, p.nomor_perkara" if key == "hearing" else "GROUP BY p.perkara_id, p.nomor_perkara"
+    input_basis = (
+        f"Periode menurut tanggal penetapan {label}; setiap penetapan (termasuk penetapan kembali) "
+        "dihitung per baris. Pembanding 1×24 jam memakai waktu input catatan; tanggal penetapan tidak menyimpan jam."
+        if key == "hearing" else
+        f"Periode menurut tanggal penetapan {label} yang berstatus aktif (aktif='Y'). Pembanding 1×24 jam memakai "
+        "waktu pembuatan catatan paling awal untuk setiap perkara; baris pada tanggal yang sama dihitung sekali. "
+        "Tanggal penetapan tidak menyimpan jam."
     )
     RULES[f"{key}-input"] = dict(
         sql=f"""
@@ -105,11 +116,10 @@ for key, table, phase, reference, label in _APPOINTMENTS:
                    '{end_label}' AS event_label, 'Waktu input pertama di SIPP' AS comparison_label
             FROM perkara p JOIN {table} a ON a.perkara_id=p.perkara_id
             WHERE a.tanggal_penetapan >= %s AND a.tanggal_penetapan < %s
-              AND {condition}
-            GROUP BY p.perkara_id, p.nomor_perkara
+              AND {input_condition}
+            {input_group}
+            ORDER BY event_at, p.perkara_id
         """,
-        basis=(f"Periode menurut tanggal penetapan {label}. Pembanding 1×24 jam memakai waktu "
-               "pembuatan catatan paling awal untuk setiap perkara; baris pada tanggal yang sama "
-               "dihitung sekali. Tanggal penetapan tidak menyimpan jam."),
+        basis=input_basis,
         mode="date24_or_present",
     )

@@ -46,7 +46,13 @@ RULES = {
         FROM perkara_putusan x JOIN perkara p USING(perkara_id)
         WHERE x.tanggal_putusan >= %s AND x.tanggal_putusan < %s ORDER BY x.tanggal_putusan,p.perkara_id""",
         'Putusan bulan terpilih; batas lokal 7 hari pidana dan 14 hari perdata, dihitung dalam hari kalender. Tanggal minutasi kosong bukan bukti terlambat.', 'days'),
-    'decision-notice': process_input(218, 'Tanggal pemberitahuan putusan'),
+    'decision-notice': rule("""SELECT p.nomor_perkara,x.tanggal AS event_at,x.diinput_tanggal AS comparison_at,
+        'Tanggal pemberitahuan putusan' AS event_label,'Waktu input proses' AS comparison_label
+        FROM perkara_proses x JOIN perkara p USING(perkara_id)
+        WHERE x.proses_id=218 AND p.alur_perkara_id NOT IN (2, 119)
+          AND x.tanggal >= %s AND x.tanggal < %s
+        ORDER BY x.tanggal,p.perkara_id""",
+        'Tanggal pemberitahuan putusan non-permohonan dan non-praperadilan pada log proses SIPP. Batas 1×24 jam; input sebelum tanggal proses dihitung sesuai di EIS.', 'date24_early'),
     'delegation-input': rule("""SELECT COALESCE(p.nomor_perkara,d.nomor_perkara) AS nomor_perkara,
         x.tgl_relaas AS event_at,x.diinput_tanggal AS comparison_at,
         'Tanggal relaas delegasi masuk' AS event_label,'Waktu input awal proses delegasi' AS comparison_label
@@ -98,10 +104,10 @@ RULES = {
 }
 
 # EIS menghitung salinan putusan untuk putusan pada bulan terpilih. Perkara anak
-# tidak termasuk kelompok pidana (terbukti dari angka resmi tiga periode).
+# dan praperadilan (alur 119) tidak termasuk kelompok pidana (Feb–Jun: 27=27).
 for key, case_pattern, exclude in [
         ('tte-civil', '/Pdt[.]|/Pdt/', ''),
-        ('tte-criminal', '/Pid[.]|/Pid/|/PRK/', ' AND p.nomor_perkara NOT REGEXP "Anak"')]:
+        ('tte-criminal', '/Pid[.]|/Pid/|/PRK/', ' AND p.alur_perkara_id <> 119 AND p.nomor_perkara NOT REGEXP "Anak"')]:
     RULES[key] = rule(f"""SELECT p.nomor_perkara,x.tanggal_putusan AS event_at,
         1 AS present,
         'Tanggal putusan' AS event_label
@@ -109,6 +115,6 @@ for key, case_pattern, exclude in [
         WHERE p.nomor_perkara REGEXP '{case_pattern}'{exclude}
           AND x.tanggal_putusan >= %s AND x.tanggal_putusan < %s
         ORDER BY x.tanggal_putusan,p.perkara_id""",
-        'Putusan pada bulan terpilih untuk kelompok perkara ini. EIS menghitung satu baris per '
-        'putusan dan menilai salinannya tepat waktu; cache tidak memuat kolom penerbitan salinan, '
-        'sehingga status per perkara tidak dipastikan.', 'presence')
+        'Putusan pada bulan terpilih untuk kelompok perkara ini. SIPP lokal tidak menyimpan '
+        'waktu penandatanganan TTE salinan di e-Berpadu/MIS (kolom penerbitan_salinan_putusan '
+        'kosong), sehingga pergeseran bulan TTE maupun keterlambatan TTE tidak dapat dipastikan.', 'presence')

@@ -138,9 +138,15 @@ test('peta keselarasan menandai sub-bagian yang belum cocok dan membiarkan yang 
         label: 'Pengiriman Berkas Kasasi',
         details: [{ values: ['2', '2', '0'] }, { values: ['3', '0', '3'] }, { values: ['3', '0', '0'] }, { values: ['0', '0', '0'] }]
     });
-    assert.equal(kasasi.aligned, false);
-    assert.equal(kasasi.unalignedCount, 2);
-    assert.deepEqual(kasasi.parts.map((p) => p.aligned), [false, true, false, true]);
+    assert.equal(kasasi.aligned, true);
+    const banding = rowParity('kepatuhan', {
+        label: 'Pengiriman Berkas Banding',
+        details: [{ values: ['5', '5', '0'] }, { values: ['1', '1', '0'] }, { values: ['1', '1', '0'] }]
+    });
+    assert.equal(banding.aligned, true);
+    const unggah = rowParity('kepatuhan', { label: 'Unggah Putusan Akhir', details: [{ values: ['11', '11', '0'] }] });
+    assert.equal(unggah.aligned, false);
+    assert.equal(unggah.tier, 'diff');
     assert.equal(rowParity('kinerja', { label: 'Pelaksanaan Mediasi', details: [{ values: ['0', '0', '0'] }] }).aligned, true);
     const penahanan = rowParity('kesesuaian', { label: 'Penahanan', details: [{ values: ['4', '4', '0'] }] });
     assert.equal(penahanan.aligned, false);
@@ -150,4 +156,7 @@ test('peta keselarasan menandai sub-bagian yang belum cocok dan membiarkan yang 
     const cc = rowParity('kelengkapan', { label: 'Dokumen Elektronik Rencana Persidangan (Court Callendar)', details: [{ values: ['10', '10', '0'] }] });
     assert.equal(cc.aligned, false);
     assert.equal(cc.tier, 'warn');
+    const tunda = rowParity('kepatuhan', { label: 'Kepatuhan Penundaan Jadwal Sidang', details: [{ values: ['37', '37', '0'] }] });
+    assert.equal(tunda.aligned, false);
+    assert.equal(tunda.tier, 'warn');
 });

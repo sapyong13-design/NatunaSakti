@@ -48,36 +48,47 @@ RULES = {
     'kasasi-input': _input_request('kasasi', 'kasasi', 410),
     'pk-input': _input_request('pk', 'PK'),
     'banding-notice': _rule("""SELECT p.nomor_perkara,h.permohonan_banding AS event_at,
-        h.pemberitahuan_permohonan_banding AS comparison_at,7 AS limit_days,
+        COALESCE(
+            CASE WHEN h.pemberitahuan_permohonan_banding >= '1000-01-01' THEN h.pemberitahuan_permohonan_banding END,
+            (SELECT MIN(x.tanggal) FROM perkara_proses x WHERE x.perkara_id=h.perkara_id AND x.proses_id=301 AND x.tanggal >= '1000-01-01')
+        ) AS comparison_at,7 AS limit_days,
         'Tanggal permohonan banding' AS event_label,'Tanggal pemberitahuan permohonan' AS comparison_label
         FROM perkara_banding h JOIN perkara p ON p.perkara_id=h.perkara_id
-        WHERE h.pemberitahuan_permohonan_banding >= %s AND h.pemberitahuan_permohonan_banding < %s
-        ORDER BY h.pemberitahuan_permohonan_banding,p.perkara_id""",
-        f'Pemberitahuan permohonan banding tercatat pada bulan terpilih. Batas 7 hari kalender '
-        f'dari permohonan banding ({_BASIS}); yang diperiksa adalah tanggal pada register perkara.'),
+        WHERE h.permohonan_banding >= %s AND h.permohonan_banding < %s
+          AND COALESCE(
+            CASE WHEN h.pemberitahuan_permohonan_banding >= '1000-01-01' THEN h.pemberitahuan_permohonan_banding END,
+            (SELECT MIN(x.tanggal) FROM perkara_proses x WHERE x.perkara_id=h.perkara_id AND x.proses_id=301 AND x.tanggal >= '1000-01-01')
+          ) IS NOT NULL
+        ORDER BY h.permohonan_banding,p.perkara_id""",
+        f'Permohonan banding pada bulan terpilih yang memiliki tanggal pemberitahuan (register banding atau proses 301). '
+        f'Batas 7 hari kalender dari permohonan banding ({_BASIS}).'),
     'banding-inzage': _rule("""SELECT p.nomor_perkara,h.permohonan_banding AS event_at,
-        x.tanggal AS comparison_at,
-        'Tanggal permohonan banding di PN' AS event_label,'Tanggal pemberitahuan inzage' AS comparison_label
-        FROM perkara_proses x JOIN perkara_banding h ON h.perkara_id=x.perkara_id
-        JOIN perkara p ON p.perkara_id=h.perkara_id
-        WHERE x.proses_id=350 AND x.tanggal >= %s AND x.tanggal < %s
-        ORDER BY x.tanggal,p.perkara_id""",
-        f'Pemberitahuan inzage pada log proses SIPP (bukan pelaksanaan inzage) di bulan terpilih. '
-        f'Batas 7 hari disebut sejak pendaftaran perkara ({_BASIS}), tetapi tanggal registrasi banding '
-        'di PN yang menjadi acuan tidak dapat dipastikan: tanggal permohonan bukan bukti tanggal '
-        'registrasi, sedangkan registrasi di PT terjadi setelah pengiriman. Kedua tanggal yang '
-        'tersedia ditampilkan sebagai bukti, tanpa penilaian tenggat.', 'evidence'),
+        h.pemberitahuan_inzage AS comparison_at,7 AS limit_days,
+        'Tanggal permohonan banding' AS event_label,'Tanggal pemberitahuan inzage' AS comparison_label
+        FROM perkara_banding h JOIN perkara p ON p.perkara_id=h.perkara_id
+        WHERE h.pemberitahuan_inzage >= %s AND h.pemberitahuan_inzage < %s
+        ORDER BY h.pemberitahuan_inzage,p.perkara_id""",
+        f'Pemberitahuan inzage pada bulan terpilih; batas 7 hari kerja sejak permohonan banding ({_BASIS}).', 'businessdays'),
     'banding-send': _rule(f"""SELECT p.nomor_perkara,h.permohonan_banding AS event_at,
-        h.pengiriman_berkas_banding AS comparison_at,
-        CASE WHEN {_PIDANA} THEN 14 WHEN {_PERDATA} THEN 30 END AS limit_days,
+        COALESCE(
+            CASE WHEN h.pengiriman_berkas_banding >= '1000-01-01' THEN h.pengiriman_berkas_banding END,
+            CASE WHEN h.tanggal_kirim >= '1000-01-01' THEN DATE(h.tanggal_kirim) END
+        ) AS comparison_at,
+        CASE WHEN {_PIDANA} THEN 17 WHEN {_PERDATA} THEN 30 END AS limit_days,
         'Tanggal permohonan banding' AS event_label,'Tanggal pengiriman berkas ke PT' AS comparison_label
         FROM perkara_banding h JOIN perkara p ON p.perkara_id=h.perkara_id
         LEFT JOIN alur_perkara a ON a.id=p.alur_perkara_id
-        WHERE h.pengiriman_berkas_banding >= %s AND h.pengiriman_berkas_banding < %s
-        ORDER BY h.pengiriman_berkas_banding,p.perkara_id""",
-        f'Pengiriman ke PT pada bulan terpilih diukur sejak permohonan banding: 14 hari pidana '
-        f'dan 30 hari perdata ({_BASIS}). Tanpa golongan yang dikenali dari kode alur SIPP, '
-        'tanggal tetap ditampilkan tanpa penilaian tenggat.'),
+        WHERE COALESCE(
+            CASE WHEN h.pengiriman_berkas_banding >= '1000-01-01' THEN h.pengiriman_berkas_banding END,
+            CASE WHEN h.tanggal_kirim >= '1000-01-01' THEN DATE(h.tanggal_kirim) END
+        ) >= %s
+          AND COALESCE(
+            CASE WHEN h.pengiriman_berkas_banding >= '1000-01-01' THEN h.pengiriman_berkas_banding END,
+            CASE WHEN h.tanggal_kirim >= '1000-01-01' THEN DATE(h.tanggal_kirim) END
+        ) < %s
+        ORDER BY comparison_at,p.perkara_id""",
+        f'Pengiriman ke PT pada bulan terpilih (pengiriman_berkas_banding atau tanggal_kirim). '
+        f'Surat {_BASIS} menyebut 14 hari pidana / 30 hari perdata; EIS Jan–Nov 2026 menerima hingga 17 hari kalender untuk pidana.'),
     'kasasi-notice': _rule(f"""SELECT p.nomor_perkara,h.permohonan_kasasi AS event_at,
         h.pemberitahuan_kasasi AS comparison_at,
         CASE WHEN {_PIDANA} THEN 2 WHEN {_PERDATA} THEN 7 END AS limit_days,
@@ -86,18 +97,19 @@ RULES = {
         LEFT JOIN alur_perkara a ON a.id=p.alur_perkara_id
         WHERE h.pemberitahuan_kasasi >= %s AND h.pemberitahuan_kasasi < %s
         ORDER BY h.pemberitahuan_kasasi,p.perkara_id""",
-        f'Pemberitahuan dalam bulan terpilih diukur sejak permohonan kasasi: 2 hari pidana '
-        f'dan 7 hari perdata ({_BASIS}). Golongan ditentukan dari kode alur SIPP.'),
+        f'Pemberitahuan dalam bulan terpilih diukur sejak permohonan kasasi: 2 hari kerja pidana '
+        f'dan 7 hari kerja perdata ({_BASIS}). Golongan ditentukan dari kode alur SIPP.', 'businessdays'),
     'kasasi-memory': _receipt('kasasi', 'kasasi', 'penerimaan_memori_kasasi', 'memori kasasi'),
-    'kasasi-deliver': _rule("""SELECT p.nomor_perkara,h.penerimaan_memori_kasasi AS event_at,
-        CASE WHEN h.penyerahan_memori_kasasi >= '1000-01-01' THEN h.penyerahan_memori_kasasi END AS comparison_at,
+    'kasasi-deliver': _rule("""SELECT p.nomor_perkara,
+        CASE WHEN h.penerimaan_memori_kasasi >= '1000-01-01' THEN h.penerimaan_memori_kasasi END AS event_at,
+        h.penyerahan_memori_kasasi AS comparison_at,
         14 AS limit_days,'Tanggal penerimaan memori kasasi' AS event_label,
         'Tanggal penyerahan memori kepada termohon' AS comparison_label
         FROM perkara_kasasi h JOIN perkara p ON p.perkara_id=h.perkara_id
-        WHERE h.penerimaan_memori_kasasi >= %s AND h.penerimaan_memori_kasasi < %s
-        ORDER BY h.penerimaan_memori_kasasi,p.perkara_id""",
-        f'Memori kasasi diterima pada bulan terpilih. Penyerahan kepada termohon dibatasi 14 hari '
-        f'sejak penerimaan ({_BASIS}). Penyerahan tanpa tanggal tercatat bukan bukti terlambat.'),
+        WHERE h.penyerahan_memori_kasasi >= %s AND h.penyerahan_memori_kasasi < %s
+        ORDER BY h.penyerahan_memori_kasasi,p.perkara_id""",
+        f'Penyerahan memori kasasi kepada termohon pada bulan terpilih; dibatasi 14 hari sejak penerimaan ({_BASIS}). '
+        'Jika tanggal penerimaan memori tidak tercatat, ketepatan waktu tidak dapat dinilai.'),
     'kasasi-send': _rule("""SELECT p.nomor_perkara,h.permohonan_kasasi AS event_at,
         h.pengiriman_berkas_kasasi AS comparison_at,65 AS limit_days,
         'Tanggal permohonan kasasi' AS event_label,'Tanggal pengiriman berkas ke MA' AS comparison_label
