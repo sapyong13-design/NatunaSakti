@@ -38,7 +38,13 @@ const cache = new Map()
 const official = shallowRef(null)
 const busy = ref(false)
 const snapshot = computed(() => official.value?.snapshot)
+const aspectIds = ['kinerja', 'kepatuhan', 'kelengkapan', 'kesesuaian']
 const implementationScore = computed(() => snapshot.value?.tabs.find(tab => tab.id === 'konversi')?.rows.at(-1)?.points)
+const totalScoreText = computed(() => {
+    if (implementationScore.value) return percent(implementationScore.value)
+    if (computedScore.value?.total != null) return percent(String(computedScore.value.total))
+    return null
+})
 const rows = computed(() => snapshot.value?.tabs.find(tab => tab.id === active.value)?.rows ?? [])
 const computedScore = shallowRef(null)
 const scoreDelta = computed(() => {
@@ -46,6 +52,37 @@ const scoreDelta = computed(() => {
     if (!a || a.total === null || a.officialTotal === null) return null
     const delta = Math.round((a.total - a.officialTotal) * 100) / 100
     return { value: delta, text: (delta > 0 ? '+' : '') + delta.toFixed(2).replace('.', ',') }
+})
+const formatScoreNum = value => {
+    const num = Number(String(value ?? '').trim().replace(',', '.'))
+    if (!Number.isFinite(num)) return '—'
+    return num.toFixed(2).replace(/\.00$/, '').replace('.', ',')
+}
+const aspectSummaries = computed(() => {
+    const convRows = snapshot.value?.tabs.find(tab => tab.id === 'konversi')?.rows ?? []
+    return aspectIds.map(id => {
+        const tabInfo = tabs.find(tab => tab.id === id)
+        const tabRows = snapshot.value?.tabs.find(tab => tab.id === id)?.rows ?? []
+        const convRow = convRows.find(row => row.label.toLowerCase() === id)
+        const comp = computedScore.value?.components.find(item => item.id === id)
+        const officialPct = convRow?.points && !/^[-—]$/.test(convRow.points.trim()) ? convRow.points : null
+        const pctText = officialPct ? percent(officialPct) : (comp?.konversi != null ? percent(String(comp.konversi)) : '—')
+        const pctNum = officialPct ? Number(String(officialPct).replace(',', '.').replace('%', '')) : (comp?.konversi ?? 0)
+        const maks = convRow?.details?.[0]?.values?.[0] ?? comp?.maks
+        const peroleh = convRow?.details?.[0]?.values?.[1] ?? comp?.peroleh
+        const pointsText = maks != null && peroleh != null ? `${formatScoreNum(peroleh)} / ${formatScoreNum(maks)}` : null
+        const issueRows = tabRows.filter(hasIssue).length
+        return {
+            id,
+            label: tabInfo?.label ?? id,
+            pctText,
+            pctWidth: `${Math.max(0, Math.min(100, Number.isFinite(pctNum) ? pctNum : 0))}%`,
+            pointsText,
+            issueRows,
+            unalignedParts: comp?.unalignedParts ?? 0,
+            unalignedTier: comp?.unalignedTier ?? 'ok'
+        }
+    })
 })
 const hasIssue = row => row.details.some(detail => row.headers.some((header, i) => (officialCount(header, detail.values[i]) ?? 0) > 0))
 const issueCount = computed(() => rows.value.filter(hasIssue).length)
@@ -298,21 +335,31 @@ onBeforeUnmount(() => {
 <template>
     <section class="eis-page" aria-labelledby="eis-heading">
         <header class="eis-hero">
-            <div class="eis-hero-copy">
-                <p class="eis-kicker">Evaluasi Implementasi SIPP</p>
-                <h1 id="eis-heading">Monitoring EIS</h1>
-                <p>Pengadilan Negeri Natuna <span aria-hidden="true">·</span> PT Kepulauan Riau</p>
+            <div class="eis-hero-top">
+                <div class="eis-hero-copy">
+                    <h1 id="eis-heading">Monitoring EIS</h1>
+                    <p class="eis-hero-sub">Evaluasi Implementasi SIPP <span aria-hidden="true">·</span> Pengadilan Negeri Natuna <span aria-hidden="true">·</span> PT Kepulauan Riau</p>
+                </div>
+                <div v-if="totalScoreText" class="eis-score">
+                    <span class="eis-score-label">Implementasi SIPP <span aria-hidden="true">·</span> {{ periodLabel }}</span>
+                    <strong class="eis-score-value">{{ totalScoreText }}</strong>
+                    <span v-if="scoreDelta" class="eis-score-delta" :data-match="scoreDelta.value === 0">
+                        {{ scoreDelta.value === 0 ? 'Sama dengan hitung ulang (0,00 pp)' : `Hitung ulang ${scoreDelta.text} pp vs EIS` }}
+                    </span>
+                </div>
             </div>
-            <div v-if="computedScore" class="eis-score">
-                <span>Implementasi SIPP</span>
-                <strong>{{ computedScore.total === null ? '—' : percent(String(computedScore.total)) }}</strong>
-                <small v-if="scoreDelta">{{ scoreDelta.text }} pp vs EIS</small>
-            </div>
-            <div v-if="implementationScore" class="eis-score">
-                <span>Implementasi SIPP</span>
-                <strong>{{ implementationScore.replace('.', ',').replace(/\s*%$/, '') }}<small>%</small></strong>
-                <span>{{ periodLabel }}</span>
-            </div>
+            <nav v-if="snapshot" class="eis-pillars" aria-label="Ringkasan nilai per aspek">
+                <button v-for="item in aspectSummaries" :key="item.id" type="button" class="eis-pillar"
+                    :class="{ 'is-active': active === item.id }" :aria-pressed="active === item.id" @click="active = item.id">
+                    <div class="eis-pillar-head">
+                        <span class="eis-pillar-name">{{ item.label }}</span>
+                        <span v-if="item.issueRows" class="eis-pillar-issue">{{ item.issueRows }} ‘Tidak’</span>
+                    </div>
+                    <strong class="eis-pillar-pct">{{ item.pctText }}</strong>
+                    <span v-if="item.pointsText" class="eis-pillar-pts">{{ item.pointsText }} poin</span>
+                    <span class="eis-pillar-bar" aria-hidden="true"><span :style="{ width: item.pctWidth }"></span></span>
+                </button>
+            </nav>
         </header>
 
         <div class="eis-toolbar">
@@ -539,7 +586,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.eis-score small { display: block; font-size: .72rem; color: var(--text-2); }
 .eis-tab-score { font-size: .95rem; font-weight: 700; color: var(--accent); letter-spacing: -.01em; }
 .eis-compare table { width: 100%; border-collapse: collapse; font-size: .82rem; }
 .eis-compare th, .eis-compare td { padding: .3rem .4rem; border-bottom: 1px solid var(--border); text-align: start; }
@@ -562,14 +608,29 @@ onBeforeUnmount(() => {
 .eis-page :is(button, input, summary):focus-visible, .eis-page a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .eis-page button:not(:disabled), .eis-page summary { cursor: pointer; }
 .eis-page button:disabled { opacity: .65; }
-.eis-kicker { color: var(--accent); letter-spacing: .09em; font-size: .73rem; text-transform: uppercase; font-weight: 750; }
-.eis-hero { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: clamp(1.2rem, 4vw, 2.2rem); border: 1px solid var(--border); border-radius: 16px; background: linear-gradient(120deg, var(--accent-soft), transparent 65%), var(--bg2); }
-.eis-hero h1 { margin-block: .25rem; font-size: clamp(1.7rem, 4vw, 2.6rem); letter-spacing: -.035em; line-height: 1.1; }
-.eis-hero-copy > p:last-child, .eis-score span, .eis-source span, .eis-subtitle { color: var(--text-2); }
-.eis-score { display: grid; justify-items: end; flex: none; padding-inline-start: 1.1rem; border-inline-start: 1px solid var(--border); text-align: end; font-size: .83rem; }
-.eis-score strong { line-height: 1.12; font-size: clamp(1.45rem, 4vw, 2.25rem); color: var(--accent); font-variant-numeric: tabular-nums; }
-.eis-score small { font-size: .55em; }
-.eis-toolbar { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: .8rem 1.2rem; }
+.eis-hero { display: grid; border: 1px solid var(--border); border-radius: 14px; background: var(--bg2); overflow: hidden; }
+.eis-hero-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem 1.5rem; flex-wrap: wrap; padding: 1.05rem 1.35rem; }
+.eis-hero-copy { display: grid; gap: .2rem; min-width: 0; }
+.eis-hero-copy h1 { font-size: 1.5rem; font-weight: 750; letter-spacing: -.02em; line-height: 1.18; }
+.eis-hero-sub, .eis-source span, .eis-subtitle { color: var(--text-2); font-size: .85rem; }
+.eis-score { display: grid; justify-items: end; flex: none; padding-inline-start: 1.25rem; border-inline-start: 1px solid var(--border); text-align: end; gap: .12rem; }
+.eis-score-label { color: var(--text-2); font-size: .78rem; font-weight: 600; }
+.eis-score-value { line-height: 1.08; font-size: 2rem; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.eis-score-delta { font-size: .74rem; color: var(--text-2); font-weight: 600; }
+.eis-score-delta[data-match='true'] { color: var(--success); }
+.eis-pillars { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--border); background: color-mix(in srgb, var(--bg3) 55%, var(--bg2)); }
+.eis-pillar { position: relative; display: grid; gap: .18rem; padding: .78rem 1.1rem .78rem; border: 0; background: transparent; color: var(--text); font: inherit; text-align: start; transition: background-color 150ms ease, box-shadow 150ms ease; }
+.eis-pillar + .eis-pillar { border-inline-start: 1px solid var(--border); }
+.eis-pillar:hover { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.eis-pillar.is-active { background: color-mix(in srgb, var(--accent) 8%, transparent); box-shadow: inset 0 2px 0 var(--accent); }
+.eis-pillar-head { display: flex; align-items: center; justify-content: space-between; gap: .4rem; }
+.eis-pillar-name { font-size: .78rem; font-weight: 650; color: var(--text-2); }
+.eis-pillar.is-active .eis-pillar-name { color: var(--accent); }
+.eis-pillar-issue { padding: .08rem .35rem; border-radius: 4px; background: var(--danger-soft); color: var(--danger); font-size: .69rem; font-weight: 700; white-space: nowrap; }
+.eis-pillar-pct { font-size: 1.24rem; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--text); }
+.eis-pillar-pts { font-size: .74rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.eis-pillar-bar { height: 2px; margin-top: .24rem; border-radius: 999px; background: color-mix(in srgb, var(--border) 85%, transparent); overflow: hidden; }
+.eis-pillar-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 200ms ease; }
 .eis-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .55rem; }
 .eis-controls label, .eis-source { display: grid; gap: .15rem; font-size: .83rem; }
 .eis-controls label { font-weight: 650; }
@@ -650,13 +711,17 @@ onBeforeUnmount(() => {
 .eis-evidence-btn { display: flex; justify-content: space-between; width: 100%; padding: .65rem; border: 0; border-radius: 8px; background: var(--bg3); color: var(--text); font: inherit; font-weight: 650; text-align: start; }
 .eis-evidence { padding: .65rem; }
 .eis-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-@media (max-width: 830px) { .eis-indicator { grid-template-columns: minmax(0, 1fr); gap: .55rem; } }
+@media (max-width: 830px) {
+    .eis-pillars { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .eis-pillar + .eis-pillar { border-inline-start: 0; }
+    .eis-pillar:nth-child(even) { border-inline-start: 1px solid var(--border); }
+    .eis-pillar:nth-child(n+3) { border-top: 1px solid var(--border); }
+    .eis-indicator { grid-template-columns: minmax(0, 1fr); gap: .55rem; }
+}
 @media (max-width: 560px) {
-    .eis-hero { align-items: start; flex-wrap: wrap; }
-    .eis-score { grid-template-columns: auto auto; justify-content: start; align-items: baseline; gap: .15rem .55rem; border: 0; padding: 0; text-align: start; }
-    .eis-score span:last-child { grid-column: 1 / -1; }
-    .eis-drawer { width: 100%; max-height: 100dvh; margin: auto 0 0; border-radius: 14px 14px 0 0; }
-    .eis-drawer th, .eis-drawer td { padding: .42rem; }
+    .eis-hero-top { padding: .95rem 1rem; }
+    .eis-score { justify-items: start; width: 100%; border-inline-start: 0; border-top: 1px solid var(--border); padding-inline-start: 0; padding-top: .7rem; text-align: start; }
+    .eis-pillar { padding: .7rem .85rem; }
     .eis-indicator { gap: .35rem; }
     .eis-measure dl { background: var(--surface-2); padding: .3rem .45rem; border-radius: 6px; }
     .eis-conversion th, .eis-conversion td { padding: .48rem .38rem; }
