@@ -7,7 +7,7 @@ import { downloadKasirTemplate, generatePenutupanKasRtf } from '../lib/api'
 
 const route = useRoute()
 const downloading = ref(false)
-
+const syncNotice = ref({ type: '', message: '' })
 const templates = {
     'pemeriksaan-mendadak': {
         eyebrow: 'Kasir',
@@ -198,6 +198,41 @@ async function downloadTemplate() {
         downloading.value = false
     }
 }
+
+function pullFromRekapKasir() {
+    try {
+        const raw = localStorage.getItem('natunasakti-kasir-rekap-v1')
+        if (!raw) {
+            syncNotice.value = { type: 'warn', message: 'Belum ada data tersimpan di Rekap Excel Kasir.' }
+            return
+        }
+        const saved = JSON.parse(raw)
+        const savedRows = Array.isArray(saved?.rows) ? saved.rows : []
+        const savedForm = saved?.form || {}
+        const periodMismatch = (savedForm.bulan && Number(savedForm.bulan) !== Number(penutupan.bulan))
+            || (savedForm.tahun && Number(savedForm.tahun) !== Number(penutupan.tahun))
+
+        for (const bukuRow of bukuRows.value) {
+            const matching = savedRows.filter(r => r.buku === bukuRow.nama)
+            const penerimaan = matching.reduce((sum, r) => sum + numberValue(r.penerimaan), 0)
+            const pengeluaran = matching.reduce((sum, r) => sum + numberValue(r.pengeluaran), 0)
+            bukuRow.penerimaan = Math.round(penerimaan / 1000) * 1000
+            bukuRow.pengeluaran = Math.round(pengeluaran / 1000) * 1000
+        }
+        if (savedForm.saldoBank != null) penutupan.saldoBank = Math.round(numberValue(savedForm.saldoBank) / 1000) * 1000
+        if (savedForm.materai != null) penutupan.materai = Math.round(numberValue(savedForm.materai) / 1000) * 1000
+        if (savedForm.penjelasan) penutupan.penjelasan = savedForm.penjelasan
+
+        const savedLabel = savedForm.bulan && savedForm.tahun
+            ? `${BULAN[Number(savedForm.bulan) - 1] || savedForm.bulan} ${savedForm.tahun}`
+            : 'periode tersimpan'
+        syncNotice.value = periodMismatch
+            ? { type: 'warn', message: `Data ditarik dari Rekap Kasir (${savedLabel}), berbeda dengan periode Penutupan Kas saat ini — cek saldo awal & pecahan tunai.` }
+            : { type: 'ok', message: `Angka penerimaan, pengeluaran, saldo bank, dan materai ditarik dari Rekap Kasir (${savedRows.length} transaksi).` }
+    } catch (err) {
+        syncNotice.value = { type: 'warn', message: `Gagal membaca Rekap Kasir: ${err.message}` }
+    }
+}
 </script>
 
 <template>
@@ -264,6 +299,15 @@ async function downloadTemplate() {
                         </label>
                     </div>
 
+                    <div class="ns-rekap-pull-bar">
+                        <button type="button" class="ns-btn ns-btn-ghost" @click="pullFromRekapKasir">
+                            <Icon name="refresh" :size="14" />
+                            Tarik dari Rekap Kasir
+                        </button>
+                        <span v-if="syncNotice.message" class="ns-rekap-pull-notice" :class="`is-${syncNotice.type}`" role="status">
+                            {{ syncNotice.message }}
+                        </span>
+                    </div>
                     <div class="ns-roman-list">
                         <div v-for="row in bukuRomanRows" :key="row.roman" class="ns-roman-row">
                             <div class="ns-roman-title">{{ row.roman }}. {{ row.title }}</div>
@@ -510,6 +554,23 @@ async function downloadTemplate() {
     border-radius: 10px;
 }
 
+.ns-rekap-pull-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+}
+.ns-rekap-pull-notice {
+    font-size: 12px;
+    font-weight: 600;
+}
+.ns-rekap-pull-notice.is-ok {
+    color: var(--success, #15803d);
+}
+.ns-rekap-pull-notice.is-warn {
+    color: var(--warning, #b45309);
+}
 .ns-document-stack {
     display: grid;
     gap: 16px;

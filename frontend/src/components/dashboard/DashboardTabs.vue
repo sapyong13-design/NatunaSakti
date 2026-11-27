@@ -40,7 +40,7 @@ async function onTabKeydown(event, index) {
 <style scoped>
 .dashboard-tab-list { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--ns-border, #d8dee4); }
 .dashboard-tab-list button { font: inherit; font-weight: 600; color: inherit; background: transparent; border: 0; border-bottom: 3px solid transparent; padding: 12px 16px; cursor: pointer; }
-.dashboard-tab-list button[aria-selected="true"] { color: var(--ns-primary, #2563eb); border-bottom-color: currentColor; }
-.dashboard-tab-list button:focus-visible, [role="tabpanel"]:focus-visible { outline: 2px solid var(--ns-primary, #2563eb); outline-offset: 3px; }
+.dashboard-tab-list button[aria-selected="true"] { color: var(--accent, var(--ns-primary, #2563eb)); border-bottom-color: currentColor; }
+.dashboard-tab-list button:focus-visible, [role="tabpanel"]:focus-visible { outline: 2px solid var(--accent, var(--ns-primary, #2563eb)); outline-offset: 3px; }
 [hidden] { display: none !important; }
 </style>

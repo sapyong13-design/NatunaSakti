@@ -34,3 +34,25 @@ export async function getEisScore(period, signal) {
 export function getEisFindings(period, label, index, signal) {
     return request('/findings', { period, label, index }, 'GET', findingsStatuses, signal)
 }
+
+export async function getEisTrend(signal) {
+    const response = await fetch(`${API_BASE}/eis/trend`, {
+        cache: 'no-store',
+        signal: AbortSignal.any([signal, AbortSignal.timeout(15000)])
+    })
+    const result = await response.json()
+    if (!Array.isArray(result?.items)) throw new Error('Data tren EIS tidak tersedia.')
+    return result.items
+}
+
+export async function getMisStatus(signal) {
+    const response = await fetch(`${API_BASE}/eis/mis-status`, {
+        cache: 'no-store',
+        signal: AbortSignal.any([signal, AbortSignal.timeout(15000)])
+    })
+    const result = await response.json()
+    if (!result || !['ready', 'unavailable'].includes(result.status)) {
+        throw new Error('Respons status MIS tidak valid.')
+    }
+    return result
+}

@@ -96,7 +96,8 @@ function getSidangDates(row) {
                             </span>
                         </td>
                         <td class="ns-sticky-col ns-col-nomor">
-                            <span class="ns-nomor" :title="row.nomor_perkara">{{ row.nomor_perkara }}</span>
+                            <RouterLink v-if="row.id" class="ns-nomor ns-nomor-link" :to="{ name: 'Data', query: { perkara: row.id } }" :title="`Buka detail ${row.nomor_perkara}`">{{ row.nomor_perkara }}</RouterLink>
+                            <span v-else class="ns-nomor" :title="row.nomor_perkara">{{ row.nomor_perkara }}</span>
                         </td>
                         <td class="ns-col-nama">
                             <span class="ns-nama" :title="row.para_pihak">{{ row.para_pihak || '—' }}</span>
@@ -135,6 +136,13 @@ function getSidangDates(row) {
 </template>
 
 <style scoped>
+.ns-nomor-link {
+    color: var(--accent);
+    text-decoration: none;
+}
+.ns-nomor-link:hover {
+    text-decoration: underline;
+}
 .ns-report-table-wrap {
     background: var(--surface);
     border: 1px solid var(--border);

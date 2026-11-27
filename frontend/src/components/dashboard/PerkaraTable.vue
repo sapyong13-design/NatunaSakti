@@ -10,11 +10,12 @@ const props = defineProps({
     rows: { type: Array, required: true },
     startIndex: { type: Number, default: 0 },
     upcomingPerkaraNumbers: { type: Array, default: () => [] },
-    density: { type: String, default: 'default' }
+    density: { type: String, default: 'default' },
+    sortBy: { type: String, default: 'register' },
+    sortDir: { type: String, default: 'desc' }
 })
 
-const emit = defineEmits(['rowClick', 'menuAction'])
-
+const emit = defineEmits(['rowClick', 'menuAction', 'sort'])
 // Context menu state
 const contextMenu = ref({
     show: false,
@@ -102,7 +103,34 @@ function formatDate(value) {
     return formatDateIndoShort(value)
 }
 
+const todayWibIso = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+}).format(new Date())
 
+function isTodayIso(iso) {
+    return Boolean(iso && iso.slice(0, 10) === todayWibIso)
+}
+
+function isOverdue(row) {
+    if (Number(row?.tahun_masuk) < 2016) return false
+    const status = String(row?.sipp_status || '').toLowerCase()
+    if (status === 'minutasi' || status === 'putusan') return false
+    const match = String(row?.sipp_lama_proses || '').match(/(\d+)\s*hari/i)
+    return Boolean(match && Number(match[1]) > 150)
+}
+
+function sortIndicator(column) {
+    if (props.sortBy !== column) return '↕'
+    return props.sortDir === 'asc' ? '↑' : '↓'
+}
+
+function ariaSort(column) {
+    if (props.sortBy !== column) return 'none'
+    return props.sortDir === 'asc' ? 'ascending' : 'descending'
+}
 </script>
 
 <template>
@@ -116,9 +144,14 @@ function formatDate(value) {
                 <caption class="ns-sr-only">Register perkara SIPP lokal. Anonimisasi merupakan flag publikasi, bukan penggantian nama.</caption>
                 <colgroup><col class="col-no"/><col class="col-number"/><col class="col-party"/><col class="col-kind"/><col class="col-date"/><col class="col-status"/><col class="col-days"/><col class="col-anon"/></colgroup>
                 <thead><tr>
-                    <th scope="col">No</th><th scope="col">Nomor perkara</th><th scope="col">Nama pihak</th>
-                    <th scope="col">Klasifikasi</th><th scope="col">Register</th><th scope="col">Status</th>
-                    <th scope="col" class="align-right">Hari</th><th scope="col" class="align-center"><abbr title="Flag anonimisasi publikasi SIPP">Anon.</abbr></th>
+                    <th scope="col">No</th>
+                    <th scope="col" :aria-sort="ariaSort('nomor')"><button type="button" class="ns-sort-btn" :class="{ 'is-active': sortBy === 'nomor' }" @click="emit('sort', 'nomor')">Nomor perkara <span>{{ sortIndicator('nomor') }}</span></button></th>
+                    <th scope="col">Nama pihak</th>
+                    <th scope="col">Klasifikasi</th>
+                    <th scope="col" :aria-sort="ariaSort('register')"><button type="button" class="ns-sort-btn" :class="{ 'is-active': sortBy === 'register' }" @click="emit('sort', 'register')">Register <span>{{ sortIndicator('register') }}</span></button></th>
+                    <th scope="col" :aria-sort="ariaSort('status')"><button type="button" class="ns-sort-btn" :class="{ 'is-active': sortBy === 'status' }" @click="emit('sort', 'status')">Status <span>{{ sortIndicator('status') }}</span></button></th>
+                    <th scope="col" class="align-right" :aria-sort="ariaSort('hari')"><button type="button" class="ns-sort-btn is-right" :class="{ 'is-active': sortBy === 'hari' }" @click="emit('sort', 'hari')">Hari <span>{{ sortIndicator('hari') }}</span></button></th>
+                    <th scope="col" class="align-center"><abbr title="Flag anonimisasi publikasi SIPP">Anon.</abbr></th>
                 </tr></thead>
                 <tbody>
                     <tr v-if="!rows.length"><td colspan="8" class="ns-empty-cell"><strong>Tidak ada perkara</strong><p>Coba ubah pencarian atau filter.</p></td></tr>
@@ -137,8 +170,19 @@ function formatDate(value) {
                             </td>
                             <td class="cell-kind" data-label="Klasifikasi"><span class="ns-classification" :title="row.sipp_klasifikasi || row.nama_perkara">{{ row.sipp_klasifikasi || row.nama_perkara || '—' }}</span></td>
                             <td class="ns-date" data-label="Register"><time :datetime="row.sipp_tanggal_register || undefined">{{ formatDate(row.sipp_tanggal_register) }}</time></td>
-                            <td class="cell-status" data-label="Status"><StatusBadge v-if="row.sipp_status" :status="row.sipp_status" size="sm"/><span v-else class="ns-muted">Belum diisi</span></td>
-                            <td class="ns-days align-right" data-label="Hari proses" :title="row.sipp_lama_proses || 'Belum tersedia'">{{ row.sipp_lama_proses?.replace(/\s*Hari/i, '') || '—' }}</td>
+                            <td class="cell-status" data-label="Status">
+                                <StatusBadge v-if="row.sipp_status" :status="row.sipp_status" size="sm"/>
+                                <span v-else class="ns-muted">Belum diisi</span>
+                                <span
+                                    v-if="row.next_sidang_tanggal && row.sipp_status !== 'Minutasi'"
+                                    class="ns-next-hearing"
+                                    :class="{ 'is-today': isTodayIso(row.next_sidang_tanggal) }"
+                                    :title="row.next_sidang_agenda || 'Jadwal sidang berikutnya'"
+                                >
+                                    {{ isTodayIso(row.next_sidang_tanggal) ? 'Sidang hari ini' : `Sidang ${formatDate(row.next_sidang_tanggal)}` }}
+                                </span>
+                            </td>
+                            <td class="ns-days align-right" :class="{ 'is-overdue': isOverdue(row) }" data-label="Hari proses" :title="isOverdue(row) ? `${row.sipp_lama_proses} (Aktif > 150 hari / batas 5 bln SEMA 2/2014)` : (row.sipp_lama_proses || 'Belum tersedia')">{{ row.sipp_lama_proses?.replace(/\s*Hari/i, '') || '—' }}</td>
                             <td class="cell-anon align-center" data-label="Anonimisasi">
                                 <input v-if="['T', 'Y'].includes(row.sipp_pihak_dipublikasikan)" type="checkbox" :checked="row.sipp_pihak_dipublikasikan === 'T'" :aria-label="`Anonimisasi perkara ${row.nomor_perkara}`" :title="row.sipp_pihak_dipublikasikan === 'T' ? 'Anonimisasi: Ya' : 'Anonimisasi: Tidak'" disabled />
                                 <span v-else class="ns-unknown" aria-label="Anonimisasi belum diketahui" title="Flag anonimisasi belum diisi pada SIPP">—</span>
@@ -171,9 +215,16 @@ function formatDate(value) {
 .ns-register-heading span, .ns-register-footer { font-size: 12px; color: var(--text-2); }
 .ns-table-scroll { overflow: auto; max-height: min(640px, 72vh); scrollbar-gutter: stable; scrollbar-color: var(--border) transparent; }
 .ns-data-table { width: 100%; min-width: 1000px; table-layout: fixed; border-spacing: 0; border-collapse: separate; font-size: 13px; line-height: 1.4; color: var(--text); }
-.col-no { width: 42px; }.col-number { width: 210px; }.col-party { width: auto; }.col-kind { width: 150px; }.col-date { width: 104px; }.col-status { width: 120px; }.col-days { width: 60px; }.col-anon { width: 56px; }
+.col-no { width: 42px; }.col-number { width: 210px; }.col-party { width: auto; }.col-kind { width: 150px; }.col-date { width: 104px; }.col-status { width: 138px; }.col-days { width: 64px; }.col-anon { width: 56px; }
 .ns-data-table th { position: sticky; top: 0; z-index: 2; text-align: left; background: var(--bg-2); color: var(--text-2); font-size: 12px; font-weight: 600; padding: 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-.ns-data-table td { padding: 10px 12px; vertical-align: middle; border-bottom: 1px solid var(--border); }
+.ns-sort-btn { display: inline-flex; align-items: center; gap: 4px; border: 0; padding: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.ns-sort-btn.is-right { width: 100%; justify-content: flex-end; }
+.ns-sort-btn span { opacity: 0.45; font-size: 11px; }
+.ns-sort-btn.is-active, .ns-sort-btn:hover { color: var(--accent); }
+.ns-sort-btn.is-active span { opacity: 1; }
+.ns-next-hearing { display: block; margin-top: 4px; font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ns-next-hearing.is-today { color: var(--warning, #d97706); font-weight: 600; }
+.ns-days.is-overdue { color: var(--danger, #dc2626); font-weight: 700; }
 .ns-data-row { height: 64px; }
 .ns-data-row:hover { background: var(--surface-2); }
 .ns-data-row.is-expanded { background: var(--accentSoft); }

@@ -466,34 +466,39 @@ app.get('/api/laporan/bulanan/:jenis/data', (req, res) => {
 
         // 2. Perkara yang punya jadwal sidang di bulan ini
         const sidangRows = db.prepare(`
-            SELECT DISTINCT p.*, j.tanggal as sidang_tanggal
+            SELECT p.id, j.tanggal
             FROM perkara p
             INNER JOIN jadwal_sidang j ON j.nomor_perkara = p.nomor_perkara
             WHERE p.jenis_perkara = ?
+            AND j.nomor IS NOT NULL
             AND j.tanggal IS NOT NULL
             AND j.tanggal != ''
+            ORDER BY j.id
         `).all(jenisCapital);
 
-        const withSidangInMonth = new Set();
+        const sidangById = new Map();
         for (const row of sidangRows) {
-            const parsed = parseAnySippDate(row.sidang_tanggal);
+            const parsed = parseAnySippDate(row.tanggal);
             if (isDatePartsWithinPeriod(parsed, period)) {
-                withSidangInMonth.add(row.id);
+                if (!sidangById.has(row.id)) sidangById.set(row.id, []);
+                sidangById.get(row.id).push(row.tanggal);
             }
         }
 
         // 3. Merge: perkara yang daftar di bulan itu ATAU sidang di bulan itu
-        const allIds = new Set([...registeredInMonth, ...withSidangInMonth]);
+        const allIds = new Set([...registeredInMonth, ...sidangById.keys()]);
         const result = [];
         for (const id of allIds) {
             const row = db.prepare('SELECT * FROM perkara WHERE id = ?').get(id);
             if (row) {
                 const registered = registeredInMonth.has(id);
-                const sidang = withSidangInMonth.has(id);
+                const sidangDates = sidangById.get(id) || [];
+                const sidang = sidangDates.length > 0;
                 result.push({
                     ...row,
                     laporan_terdaftar_bulan_ini: registered,
                     laporan_sidang_bulan_ini: sidang,
+                    laporan_tanggal_sidang: sidangDates,
                     laporan_kategori: registered && sidang
                         ? 'Terdaftar & Sidang'
                         : registered
@@ -677,20 +682,46 @@ app.get('/api/perkara', (req, res) => {
         const stmt = db.prepare(query);
         let data = stmt.all(...params);
 
-        // Add first_sidang_soon flag for perkara with upcoming first sidang
+        // Batch-load jadwal summary in one query (eliminates N+1 per-row queries)
+        const todayWib = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Jakarta',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).format(new Date());
+        const jadwalMeta = new Map();
+        const allJadwal = db.prepare(`
+            SELECT nomor_perkara, nomor, tanggal, agenda
+            FROM jadwal_sidang
+            WHERE nomor IS NOT NULL
+            ORDER BY nomor ASC
+        `).all();
+
+        for (const j of allJadwal) {
+            let meta = jadwalMeta.get(j.nomor_perkara);
+            if (!meta) {
+                meta = { count: 0, firstNomor: j.nomor, nextTanggal: null, nextAgenda: null };
+                jadwalMeta.set(j.nomor_perkara, meta);
+            }
+            meta.count++;
+            if (j.tanggal && /^\d{4}-\d{2}-\d{2}/.test(j.tanggal)) {
+                const iso = j.tanggal.slice(0, 10);
+                if (iso >= todayWib && (!meta.nextTanggal || iso < meta.nextTanggal)) {
+                    meta.nextTanggal = iso;
+                    meta.nextAgenda = j.agenda || null;
+                }
+            }
+        }
+
         data = data.map(perkara => {
-            // Check if this perkara has an upcoming first sidang
-            const jadwalCheck = db.prepare(`
-                SELECT nomor, COUNT(*) as count
-                FROM jadwal_sidang
-                WHERE nomor_perkara = ? AND nomor IS NOT NULL
-            `).get(perkara.nomor_perkara);
-
-            const isFirstSidang = jadwalCheck && jadwalCheck.count > 0 && jadwalCheck.nomor === 1;
-
+            const meta = jadwalMeta.get(perkara.nomor_perkara);
+            const isFirstSidang = Boolean(meta && meta.count > 0 && meta.firstNomor === 1);
             return {
                 ...perkara,
-                first_sidang_soon: isFirstSidang ? true : false
+                first_sidang_soon: isFirstSidang,
+                sidang_count: meta?.count || 0,
+                next_sidang_tanggal: meta?.nextTanggal || null,
+                next_sidang_agenda: meta?.nextAgenda || null
             };
         });
 
@@ -1306,12 +1337,11 @@ syncTask.start();
 console.log('[CRON] Auto-sync enabled (runs every hour at minute 0)');
 
 function refreshMonthlyEis() {
-    // The cache records the latest attempt per Jakarta calendar day.
+    // The cache records the latest attempt per Jakarta calendar day for the current month.
     eisOfficial.refresh(currentEisPeriod()).catch(error => {
         console.error('[EIS] Daily refresh error:', error.name);
     });
 }
-
 cron.schedule('0 * * * *', refreshMonthlyEis, { timezone: 'Asia/Jakarta' });
 
 // Start server

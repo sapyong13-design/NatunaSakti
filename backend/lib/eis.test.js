@@ -65,3 +65,26 @@ test('preserves last good EIS snapshot when Badilum fails and limits automatic r
         db.close();
     }
 });
+
+test('does not auto-refresh previous months unless forced', async () => {
+    const db = new Database(':memory:');
+    try {
+        const now = new Date('2026-11-27T06:00:00Z');
+        let calls = 0;
+        const tabs = ['kinerja', 'kepatuhan', 'kelengkapan', 'kesesuaian', 'konversi'].map(id => ({
+            id, rows: [{ label: 'Contoh', description: '', headers: ['Jumlah'], details: [{ values: ['1'] }], points: '1' }]
+        }));
+        const official = createOfficialEis(db, {
+            clock: () => now,
+            reader: async () => { calls++; return { status: 'ready', tabs }; }
+        });
+        assert.equal((await official.refresh('2026-10')).status, 'empty');
+        assert.equal(calls, 0);
+        assert.equal((await official.refresh('2026-10', { force: true })).status, 'ready');
+        assert.equal(calls, 1);
+        assert.equal((await official.refresh('2026-10')).status, 'ready');
+        assert.equal(calls, 1);
+    } finally {
+        db.close();
+    }
+});

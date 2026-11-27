@@ -62,3 +62,20 @@ test('sortDashboardRows does not mutate the input rows', () => {
         '29/Pid.Sus/2026/PN Ntn'
     ])
 })
+
+test('sortDashboardRows supports sorting by hari proses descending and ascending', () => {
+    const rows = [
+        { nomor_perkara: '1/Pid/2026', sipp_tanggal_register: '05 Mei 2026', sipp_lama_proses: '20 Hari' },
+        { nomor_perkara: '2/Pid/2026', sipp_tanggal_register: '06 Mei 2026', sipp_lama_proses: '180 Hari' },
+        { nomor_perkara: '3/Pid/2026', sipp_tanggal_register: '07 Mei 2026', sipp_lama_proses: '5 Hari' }
+    ]
+
+    assert.deepEqual(
+        sortDashboardRows(rows, { sortBy: 'hari', sortDir: 'desc' }).map(r => r.nomor_perkara),
+        ['2/Pid/2026', '1/Pid/2026', '3/Pid/2026']
+    )
+    assert.deepEqual(
+        sortDashboardRows(rows, { sortBy: 'hari', sortDir: 'asc' }).map(r => r.nomor_perkara),
+        ['3/Pid/2026', '1/Pid/2026', '2/Pid/2026']
+    )
+})

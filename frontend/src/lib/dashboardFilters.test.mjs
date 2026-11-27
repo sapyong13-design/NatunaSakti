@@ -38,3 +38,18 @@ test('status bersidang excludes finalized minutasi rows', () => {
 
     assert.deepEqual(result.map(row => row.nomor_perkara), ['2/Pdt/2026', '3/Pid/2026'])
 })
+
+test('bulan and triage filters narrow rows and build active filter chips', () => {
+    const sample = [
+        { nomor_perkara: '1/Pid/2026', para_pihak: 'A', jenis_perkara: 'Pidana', tahun_masuk: 2026, sipp_tanggal_register: '2026-05-05', sipp_status: 'Persidangan', sipp_lama_proses: '180 Hari', sipp_pihak_dipublikasikan: 'Y' },
+        { nomor_perkara: '2/Pdt/2026', para_pihak: 'B', jenis_perkara: 'Perdata', tahun_masuk: 2026, sipp_tanggal_register: '2026-06-10', sipp_status: 'Minutasi', tanggal_putus: '2026-07-01', sipp_pihak_dipublikasikan: 'T' }
+    ]
+    const filters = { ...createDefaultFilters(), bulan: '5', triage: 'overdue_150' }
+    const result = applyPerkaraFilters(sample, filters, '2026-11-27')
+
+    assert.deepEqual(result.map(row => row.nomor_perkara), ['1/Pid/2026'])
+    assert.deepEqual(getActiveFilterChips(filters), [
+        { key: 'bulan', label: 'Mei' },
+        { key: 'triage', label: 'Aktif > 150 hari' }
+    ])
+})

@@ -6,6 +6,7 @@ import MingguanFilterBar from '../components/report/MingguanFilterBar.vue'
 import ReportTable from '../components/report/ReportTable.vue'
 import ReportHistoryModal from '../components/report/ReportHistoryModal.vue'
 import { getPerkaraLaporanMingguan, downloadLaporanMingguan, getLaporanHistory, deleteLaporanHistory } from '../lib/api'
+import { buildReportPreviewSummary, isPerdataEksekusiRow, isDispensasiNikahRow, isReportRowIncomplete, isTilangRow } from '../lib/reportPreviewSummary'
 
 const route = useRoute()
 
@@ -24,7 +25,20 @@ const errorMessage = ref('')
 const historyOpen = ref(false)
 const historyLoading = ref(false)
 const historyItems = ref([])
+const previewFilter = ref('all')
 
+const summary = computed(() => buildReportPreviewSummary(rows.value, jenisCanonical.value))
+const filteredRows = computed(() => {
+    if (previewFilter.value === 'registered') return rows.value.filter(r => r.laporan_terdaftar_periode_ini)
+    if (previewFilter.value === 'hearing') return rows.value.filter(r => r.laporan_sidang_periode_ini)
+    if (previewFilter.value === 'incomplete') return rows.value.filter(isReportRowIncomplete)
+    if (previewFilter.value === 'tilang') return rows.value.filter(isTilangRow)
+    if (previewFilter.value === 'anonMinutasi') return rows.value.filter(r => r.sipp_status === 'Minutasi' && r.sipp_pihak_dipublikasikan === 'T')
+    if (previewFilter.value === 'eksekusi') return rows.value.filter(isPerdataEksekusiRow)
+    if (previewFilter.value === 'dispensasi') return rows.value.filter(isDispensasiNikahRow)
+    if (previewFilter.value === 'minutasi') return rows.value.filter(r => r.sipp_status === 'Minutasi')
+    return rows.value
+})
 async function fetchData() {
     if (!start.value || !end.value) {
         errorMessage.value = 'Pilih rentang tanggal terlebih dahulu'
@@ -43,7 +57,7 @@ async function fetchData() {
     }
 }
 
-watch(() => route.params.jenis, () => { rows.value = [] })
+watch(() => route.params.jenis, () => { previewFilter.value = 'all'; rows.value = [] })
 
 async function handleExport() {
     if (!start.value || !end.value) {
@@ -119,6 +133,33 @@ async function removeHistory(item) {
             @export="handleExport"
             @history="openHistory"
         />
+        <div v-if="!loading && rows.length" class="ns-report-summary" aria-label="Ringkasan komposisi laporan">
+            <div class="ns-report-summary-chips">
+                <button type="button" class="ns-summary-chip" :class="{ 'is-active': previewFilter === 'all' }" @click="previewFilter = 'all'">
+                    Semua <strong>{{ summary.total }}</strong>
+                </button>
+                <button
+                    v-for="sec in summary.sections"
+                    :key="sec.key"
+                    type="button"
+                    class="ns-summary-chip"
+                    :class="{ 'is-active': previewFilter === sec.key }"
+                    @click="previewFilter = previewFilter === sec.key ? 'all' : sec.key"
+                >
+                    {{ sec.label }} <strong>{{ sec.value }}</strong>
+                </button>
+                <button
+                    v-if="summary.incomplete > 0"
+                    type="button"
+                    class="ns-summary-chip is-warn"
+                    :class="{ 'is-active': previewFilter === 'incomplete' }"
+                    :title="`Anonimisasi belum diisi: ${summary.missingAnon} · Minutasi tanpa tgl putus: ${summary.missingPutus}`"
+                    @click="previewFilter = previewFilter === 'incomplete' ? 'all' : 'incomplete'"
+                >
+                    Perlu cek data <strong>{{ summary.incomplete }}</strong>
+                </button>
+            </div>
+        </div>
 
         <div v-if="errorMessage" class="ns-report-error" role="alert">
             <strong>Proses laporan gagal</strong>
@@ -126,8 +167,7 @@ async function removeHistory(item) {
             <button type="button" @click="fetchData">Coba lagi</button>
         </div>
 
-        <ReportTable :rows="rows" :loading="loading" />
-
+        <ReportTable :rows="filteredRows" :loading="loading" />
         <ReportHistoryModal
             :show="historyOpen"
             :items="historyItems"
@@ -140,6 +180,45 @@ async function removeHistory(item) {
 </template>
 
 <style scoped>
+.ns-report-summary {
+    margin: 0 0 12px;
+}
+.ns-report-summary-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.ns-summary-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.ns-summary-chip strong {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+.ns-summary-chip.is-active {
+    border-color: var(--accent);
+    background: var(--accentSoft);
+    color: var(--accent);
+}
+.ns-summary-chip.is-warn {
+    border-color: rgba(245, 158, 11, 0.35);
+    color: var(--warning, #b45309);
+}
+.ns-summary-chip.is-warn.is-active {
+    background: rgba(245, 158, 11, 0.14);
+    border-color: var(--warning, #d97706);
+}
 .ns-report-error {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;

@@ -4,6 +4,7 @@ const { getEisFindings } = require('../lib/eisFindings');
 const { getMonthlySippAudit } = require('../services/eisSippAudit');
 const { localAudit, getLocalCompliance } = require('../services/eisCompliance');
 const { scoreSnapshot } = require('../lib/eisScore');
+const { fetchMisSyncStatus } = require('../services/misSyncStatus');
 
 const monthlyAudits = new Map([
     ['Pencatatan Saksi', 'witness'],
@@ -26,7 +27,7 @@ function officialExpectation(snapshot, tab) {
     return expectation;
 }
 
-module.exports = function createEisRouter(db, official) {
+module.exports = function createEisRouter(db, official, { misReader = fetchMisSyncStatus } = {}) {
     const router = express.Router();
     router.use((req, res, next) => {
         res.set('Cache-Control', 'no-store');
@@ -43,6 +44,27 @@ module.exports = function createEisRouter(db, official) {
     });
 
     router.get('/', (req, res) => res.json(official.get(req.eisPeriod)));
+
+    router.get('/trend', (req, res) => {
+        const rows = typeof official.list === 'function' ? official.list() : [];
+        const items = rows.slice(-12).map(({ period, snapshot }) => {
+            const score = scoreSnapshot(snapshot);
+            const components = Object.fromEntries(
+                score.components.map(c => [c.id, c.official?.konversi ?? c.konversi ?? null])
+            );
+            return {
+                period,
+                fetchedAt: snapshot?.fetchedAt ?? null,
+                total: score.officialTotal ?? score.total ?? null,
+                components
+            };
+        });
+        res.json({ items });
+    });
+
+    router.get('/mis-status', async (req, res) => {
+        res.json(await misReader());
+    });
 
     router.get('/score', (req, res) => {
         const { snapshot } = official.get(req.eisPeriod);

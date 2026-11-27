@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { getDashboardAlerts, getDashboardAttentionStats, isPerkaraAktif } from './perkaraStats.js'
+import { getDashboardAlerts, getDashboardAttentionStats, getOperationalTriageStats, isPerkaraAktif } from './perkaraStats.js'
 
 test('isPerkaraAktif excludes finalized perkara even when first_sidang_soon is true', () => {
     assert.equal(isPerkaraAktif({
@@ -33,4 +33,18 @@ test('dashboard alerts only show actionable sync problems', () => {
     assert.equal(alerts.length, 1)
     assert.equal(alerts[0].key, 'unsynced')
     assert.equal(alerts[0].value, 2)
+})
+
+test('getOperationalTriageStats surfaces actionable SLA, hearing, and incomplete counts', () => {
+    const triage = getOperationalTriageStats([
+        { tahun_masuk: 2026, sipp_status: 'Persidangan', sipp_lama_proses: '165 Hari', sipp_pihak_dipublikasikan: 'Y', next_sidang_tanggal: '2026-11-29' },
+        { tahun_masuk: 2025, sipp_status: 'Minutasi', tanggal_putus: null, sipp_pihak_dipublikasikan: 'T' },
+        { tahun_masuk: 2026, sipp_status: 'Minutasi', tanggal_putus: '2026-10-01', sipp_pihak_dipublikasikan: null }
+    ], { total: 3, sipp_synced: 3 }, '2026-11-27')
+
+    assert.deepEqual(triage.map(item => [item.key, item.value]), [
+        ['upcoming_sidang', 1],
+        ['overdue_150', 1],
+        ['incomplete', 2]
+    ])
 })

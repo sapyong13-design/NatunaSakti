@@ -18,7 +18,7 @@ const isDark = ref(document.documentElement.dataset.mode === 'dark')
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
 
 const totalStats = computed(() => {
-    if (!props.data.length) return { total: 0, pidana: 0, perdata: 0, perikanan: 0, trend: 0 }
+    if (!props.data.length) return { total: 0, pidana: 0, perdata: 0, perikanan: 0, trend: null, trendText: 'Belum ada pembanding' }
     const stats = props.data.reduce((acc, item) => ({
         total: acc.total + (item.pidana || 0) + (item.perdata || 0) + (item.perikanan || 0),
         pidana: acc.pidana + (item.pidana || 0),
@@ -26,13 +26,25 @@ const totalStats = computed(() => {
         perikanan: acc.perikanan + (item.perikanan || 0)
     }), { total: 0, pidana: 0, perdata: 0, perikanan: 0 })
 
-    // Calculate trend vs previous period
-    const prevTotal = Math.round(stats.total * 0.85)
-    stats.trend = stats.total - prevTotal
+    const countOf = (item) => (item?.pidana || 0) + (item?.perdata || 0) + (item?.perikanan || 0)
+    const nonZero = props.data.filter(item => countOf(item) > 0)
+    let trend = null
+    let trendText = 'Periode tunggal'
+    if (nonZero.length >= 2) {
+        const curr = nonZero[nonZero.length - 1]
+        const prev = nonZero[nonZero.length - 2]
+        const currVal = countOf(curr)
+        const prevVal = countOf(prev)
+        if (prevVal > 0) {
+            trend = Math.round(((currVal - prevVal) / prevVal) * 100)
+            const prevLabel = curr.year ? prev.year : (prev.month || 'lalu')
+            const currLabel = curr.year ? curr.year : (curr.month || 'ini')
+            trendText = `${trend >= 0 ? '+' : ''}${trend}% (${prevLabel}→${currLabel})`
+        }
+    }
 
-    return stats
+    return { ...stats, trend, trendText }
 })
-
 const chartTitle = computed(() => {
     return props.mode === 'yearly' ? 'Trend Pendaftaran (Tahunan)' : 'Trend Pendaftaran (Bulanan)'
 })
@@ -148,9 +160,14 @@ onMounted(() => {
                 <span class="ns-trend-stat-label">Perikanan</span>
             </div>
             <div class="ns-trend-stat-spacer"></div>
-            <div class="ns-trend-trend" :class="{ 'is-up': totalStats.trend > 0, 'is-down': totalStats.trend < 0 }">
+            <div
+                v-if="totalStats.trend !== null"
+                class="ns-trend-trend"
+                :class="{ 'is-up': totalStats.trend > 0, 'is-down': totalStats.trend < 0 }"
+                title="Perubahan dua periode terakhir yang memiliki pendaftaran"
+            >
                 <Icon :name="totalStats.trend >= 0 ? 'trendUp' : 'trendDown'" :size="12" />
-                <span>{{ Math.abs(totalStats.trend) }}% vs lalu</span>
+                <span>{{ totalStats.trendText }}</span>
             </div>
         </div>
     </div>

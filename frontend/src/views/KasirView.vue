@@ -84,13 +84,27 @@ const rekap = computed(() => {
     })
 })
 
+const kategoriSummary = computed(() => {
+    return kategoriOptions.map(kategori => {
+        const related = rows.value.filter(row => row.kategori === kategori)
+        const penerimaan = related.reduce((sum, row) => sum + toNumber(row.penerimaan), 0)
+        const pengeluaran = related.reduce((sum, row) => sum + toNumber(row.pengeluaran), 0)
+        return {
+            kategori,
+            count: related.length,
+            penerimaan,
+            pengeluaran,
+            saldo: penerimaan - pengeluaran
+        }
+    }).filter(item => item.count > 0)
+})
+
 const totalPenerimaan = computed(() => rekap.value.reduce((sum, row) => sum + row.penerimaan, 0))
 const totalPengeluaran = computed(() => rekap.value.reduce((sum, row) => sum + row.pengeluaran, 0))
 const saldoPembukuan = computed(() => totalPenerimaan.value - totalPengeluaran.value)
 const saldoKas = computed(() => toNumber(form.saldoBank) + toNumber(form.uangTunai) + toNumber(form.materai))
 const selisih = computed(() => saldoPembukuan.value - saldoKas.value)
 const namaBulan = computed(() => BULAN[form.bulan - 1] || '')
-
 function toNumber(value) {
     const n = Number(value)
     return Number.isFinite(n) ? n : 0
@@ -299,6 +313,9 @@ onMounted(loadLocal)
                 <div>
                     <span>Selisih</span>
                     <strong :class="{ danger: selisih !== 0 }">{{ formatCurrency(selisih) }}</strong>
+                    <span class="ns-kasir-balance-badge" :class="selisih === 0 ? 'is-ok' : 'is-diff'">
+                        {{ selisih === 0 ? 'Seimbang' : 'Perlu cek selisih' }}
+                    </span>
                 </div>
             </div>
         </section>
@@ -393,6 +410,30 @@ onMounted(loadLocal)
                     </tbody>
                 </table>
             </div>
+
+            <div v-if="kategoriSummary.length" class="ns-panel-title" style="margin-top: 16px;">Ringkasan Per Kategori</div>
+            <div v-if="kategoriSummary.length" class="ns-table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Kategori</th>
+                            <th>Transaksi</th>
+                            <th>Penerimaan</th>
+                            <th>Pengeluaran</th>
+                            <th>Saldo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="item in kategoriSummary" :key="item.kategori">
+                            <td>{{ item.kategori }}</td>
+                            <td>{{ item.count }}</td>
+                            <td>{{ formatCurrency(item.penerimaan) }}</td>
+                            <td>{{ formatCurrency(item.pengeluaran) }}</td>
+                            <td>{{ formatCurrency(item.saldo) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </section>
 
         <section v-show="activeSheet === 'input'" class="ns-panel">
@@ -482,6 +523,23 @@ onMounted(loadLocal)
     align-items: stretch;
 }
 
+.ns-kasir-balance-badge {
+    display: inline-block;
+    width: fit-content;
+    margin-top: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+}
+.ns-kasir-balance-badge.is-ok {
+    background: rgba(16, 185, 129, 0.14);
+    color: var(--success, #15803d);
+}
+.ns-kasir-balance-badge.is-diff {
+    background: rgba(239, 68, 68, 0.14);
+    color: var(--danger, #dc2626);
+}
 .ns-panel {
     background: var(--surface);
     border: 1px solid var(--border);

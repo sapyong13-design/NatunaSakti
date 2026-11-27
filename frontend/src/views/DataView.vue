@@ -18,7 +18,7 @@ import EmptyState from '../components/base/EmptyState.vue'
 import Toggles from '../components/dashboard/Toggles.vue'
 import Icon from '../components/Icon.vue'
 import { getPerkara, getPerkaraById, getSippStatus, getPerkaraTrendMonthly, getPerkaraTrendYearly } from '../lib/api'
-import { getDashboardAlerts, isPerkaraAktif } from '../lib/perkaraStats'
+import { getOperationalTriageStats, isPerkaraAktif } from '../lib/perkaraStats'
 import {
     applyPerkaraFilters,
     createDefaultFilters,
@@ -51,8 +51,11 @@ const defaultFilters = createDefaultFilters()
 const search = ref(defaultFilters.search)
 const filterJenis = ref(defaultFilters.jenis)
 const filterTahun = ref(defaultFilters.tahun)
+const filterBulan = ref(defaultFilters.bulan)
 const filterStatus = ref(defaultFilters.status)
-
+const filterTriage = ref(defaultFilters.triage)
+const sortBy = ref('register')
+const sortDir = ref('desc')
 const selectedRow = ref(null)
 const scrollPosition = ref(0)
 const syncClusterRef = ref(null)
@@ -92,17 +95,25 @@ function syncRouteState() {
     router.replace({ query })
 }
 
+const todayWibIso = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+}).format(new Date())
+
 const filtered = computed(() => {
     const result = applyPerkaraFilters(rows.value, {
         search: search.value,
         jenis: filterJenis.value,
         tahun: filterTahun.value,
-        status: filterStatus.value
-    })
+        bulan: filterBulan.value,
+        status: filterStatus.value,
+        triage: filterTriage.value
+    }, todayWibIso)
 
-    return sortDashboardRows(result)
+    return sortDashboardRows(result, { sortBy: sortBy.value, sortDir: sortDir.value })
 })
-
 // Pagination
 const totalPages = computed(() => Math.ceil(filtered.value.length / itemsPerPage))
 const paginatedRows = computed(() => {
@@ -138,21 +149,27 @@ const activeFilterSummary = computed(() => getActiveFilterSummary({
     search: search.value,
     jenis: filterJenis.value,
     tahun: filterTahun.value,
-    status: filterStatus.value
+    bulan: filterBulan.value,
+    status: filterStatus.value,
+    triage: filterTriage.value
 }))
 
 const activeFilterChips = computed(() => getActiveFilterChips({
     search: search.value,
     jenis: filterJenis.value,
     tahun: filterTahun.value,
-    status: filterStatus.value
+    bulan: filterBulan.value,
+    status: filterStatus.value,
+    triage: filterTriage.value
 }))
 
 const hasActiveFilters = computed(() => hasFilters({
     search: search.value,
     jenis: filterJenis.value,
     tahun: filterTahun.value,
-    status: filterStatus.value
+    bulan: filterBulan.value,
+    status: filterStatus.value,
+    triage: filterTriage.value
 }))
 
 function resetFilters() {
@@ -161,17 +178,36 @@ function resetFilters() {
     filterJenis.value = filters.jenis
     filterStatus.value = filters.status
     filterTahun.value = filters.tahun
+    filterBulan.value = filters.bulan
+    filterTriage.value = filters.triage
     currentPage.value = 1
 }
 
 function removeFilterChip(key) {
     if (key === 'jenis') filterJenis.value = 'Semua'
     if (key === 'tahun') filterTahun.value = ''
+    if (key === 'bulan') filterBulan.value = ''
     if (key === 'status') filterStatus.value = 'Semua'
+    if (key === 'triage') filterTriage.value = ''
     if (key === 'search') search.value = ''
     currentPage.value = 1
 }
 
+function toggleTriage(item) {
+    if (!item.clickable) return
+    filterTriage.value = filterTriage.value === item.key ? '' : item.key
+    currentPage.value = 1
+}
+
+function toggleSort(column) {
+    if (sortBy.value === column) {
+        sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+    } else {
+        sortBy.value = column
+        sortDir.value = column === 'nomor' ? 'asc' : 'desc'
+    }
+    currentPage.value = 1
+}
 function handleEmptyAction(action) {
     if (action.key === 'sync') triggerSippSync()
     if (action.key === 'reset') resetFilters()
@@ -241,8 +277,7 @@ const syncRate = computed(() => {
     return ((syncStatus.value.sipp_synced / syncStatus.value.total) * 100).toFixed(1)
 })
 
-const attentionStats = computed(() => getDashboardAlerts(rows.value, syncStatus.value))
-
+const attentionStats = computed(() => getOperationalTriageStats(rows.value, syncStatus.value, todayWibIso))
 const tahunOptions = computed(() => {
     const set = new Set(rows.value.map(r => r.tahun_masuk).filter(Boolean))
     return Array.from(set).sort((a, b) => b - a)
@@ -264,10 +299,9 @@ async function loadTrendData() {
 }
 
 // Reset page when filters change
-watch([search, filterJenis, filterTahun, filterStatus], () => {
+watch([search, filterJenis, filterTahun, filterBulan, filterStatus, filterTriage], () => {
     currentPage.value = 1
 })
-
 watch([search, filterJenis, filterTahun, filterStatus, viewMode, density, currentPage], syncRouteState)
 watch(() => route.query, applyRouteState)
 watch(() => route.name === 'Data' ? route.query.perkara : null, async (id, previous, onCleanup) => {
@@ -286,6 +320,7 @@ watch(() => route.name === 'Data' ? route.query.perkara : null, async (id, previ
 }, { immediate: true })
 
 watch(filterTahun, () => {
+    filterBulan.value = ''
     loadTrendData()
 })
 
@@ -313,12 +348,14 @@ function onRowDeleted(nomor) {
     selectedRow.value = null
 }
 
-function onMonthClick(month) {
-    // Filter table to show data for selected month
-    const monthNum = monthNames.indexOf(month.month?.slice(0, 3).toLowerCase()) + 1
+function onMonthClick(bar) {
+    if (!filterTahun.value && bar?.year) {
+        filterTahun.value = String(bar.year)
+        return
+    }
+    const monthNum = monthNames.indexOf(String(bar?.month || bar?.label || '').slice(0, 3).toLowerCase()) + 1
     if (monthNum > 0) {
-        search.value = ''
-        console.log('Filter by month:', month)
+        filterBulan.value = filterBulan.value === String(monthNum) ? '' : String(monthNum)
     }
 }
 
@@ -401,6 +438,15 @@ onMounted(() => {
         >
             <StatsStrip :stats="stats" />
         </PageHeader>
+        <div v-if="route.query.from === 'eis'" class="ns-eis-return-bar">
+            <span>Dibuka dari Monitoring EIS<template v-if="route.query.period"> · {{ route.query.period }}</template></span>
+            <RouterLink
+                class="ns-eis-return-link"
+                :to="{ name: 'MonitoringEis', query: { period: route.query.period || undefined, tab: route.query.tab || undefined } }"
+            >
+                ← Kembali ke Monitoring EIS
+            </RouterLink>
+        </div>
 
         <DashboardTabs>
         <template #data>
@@ -509,19 +555,21 @@ onMounted(() => {
             </div>
         </div>
 
-        <div v-if="attentionStats.length" class="ns-attention-strip" aria-label="Peringatan dashboard">
-            <div
+        <div v-if="attentionStats.length" class="ns-attention-strip" aria-label="Peringatan operasional dashboard">
+            <component
+                :is="item.clickable ? 'button' : 'div'"
                 v-for="item in attentionStats"
                 :key="item.key"
+                :type="item.clickable ? 'button' : undefined"
                 class="ns-attention-item"
-                :class="`is-${item.tone}`"
+                :class="[`is-${item.tone}`, { 'is-clickable': item.clickable, 'is-active': filterTriage === item.key }]"
+                @click="toggleTriage(item)"
             >
                 <span class="ns-attention-dot"></span>
                 <span class="ns-attention-label">{{ item.label }}</span>
                 <strong class="ns-attention-value">{{ item.value }}</strong>
-            </div>
+            </component>
         </div>
-
         <div v-if="loadError" class="ns-dashboard-error" role="alert">
             <div class="ns-dashboard-error-icon">
                 <Icon name="alert" :size="18" />
@@ -561,10 +609,12 @@ onMounted(() => {
                 :start-index="(currentPage - 1) * itemsPerPage"
                 :upcoming-perkara-numbers="upcomingPerkaraNumbers"
                 :density="density"
+                :sort-by="sortBy"
+                :sort-dir="sortDir"
                 @row-click="handleRowClick"
                 @menu-action="handleMenuAction"
+                @sort="toggleSort"
             />
-
             <!-- Kanban View -->
             <KanbanBoard
                 v-else
@@ -922,6 +972,40 @@ onMounted(() => {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 10px;
+}
+.ns-attention-item.is-clickable {
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    transition: border-color 150ms ease, background 150ms ease;
+}
+.ns-attention-item.is-clickable:hover,
+.ns-attention-item.is-active {
+    border-color: var(--accent);
+    background: var(--accentSoft);
+}
+.ns-attention-item.is-info .ns-attention-dot {
+    background: var(--info, #60a5fa);
+}
+.ns-eis-return-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    background: var(--accentSoft);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+    font-size: 13px;
+}
+.ns-eis-return-link {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+}
+.ns-eis-return-link:hover {
+    text-decoration: underline;
 }
 
 .ns-attention-dot {

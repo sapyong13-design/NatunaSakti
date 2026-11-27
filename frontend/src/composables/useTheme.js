@@ -34,34 +34,35 @@ const lightTheme = {
 }
 
 const darkTheme = {
-    // Midnight Court - Navy Deep + Warm Cream
-    bg: '#1A1816',
-    bg2: '#242020',
-    bg3: '#2D2826',
-    surface: 'rgba(255,255,255,0.04)',
-    surface2: 'rgba(255,255,255,0.03)',
-    surface3: 'rgba(255,255,255,0.07)',
-    border: 'rgba(212,184,150,0.15)',
-    text: '#FAF8F5',
-    text2: 'rgba(250,248,245,0.8)',
-    text3: 'rgba(250,248,245,0.5)',
-    // Primary — Gold Accent for midnight
-    accent: '#C9A962',
-    accent2: '#D4B872',
-    accentSoft: 'rgba(201,169,98,0.14)',
-    accentGlow: 'rgba(201,169,98,0.2)',
-    // Semantic — adjusted for midnight
-    danger: '#E57373',
-    dangerSoft: 'rgba(229,115,115,0.15)',
-    success: '#81C784',
-    successSoft: 'rgba(129,199,132,0.15)',
-    warn: '#FFD54F',
-    warnSoft: 'rgba(255,213,79,0.12)',
-    info: '#C9A962',
-    gradientBg: 'linear-gradient(180deg, #1A1816 0%, #242020 100%)',
-    // Tooltip colors
-    bgTooltip: '#FAF8F5',
-    textTooltip: '#1A1816'
+    // Midnight Slate & Burnished Gold — Crisp Judicial Authority
+    bg: '#0C1017',
+    bg2: '#131923',
+    bg3: '#1A2230',
+    bgDark: '#131923',
+    surface: 'rgba(19, 25, 35, 0.9)',
+    surface2: 'rgba(148, 163, 184, 0.09)',
+    surface3: 'rgba(148, 163, 184, 0.16)',
+    border: 'rgba(148, 163, 184, 0.16)',
+    text: '#F1F5F9',
+    text2: '#A6B3C6',
+    text3: '#7C8BA1',
+    // Primary — Warm Champagne Gold
+    accent: '#E2B95B',
+    accent2: '#F0CC7A',
+    accentSoft: 'rgba(226, 185, 91, 0.14)',
+    accentGlow: 'rgba(226, 185, 91, 0.24)',
+    // Semantic — Calibrated for Midnight Slate
+    danger: '#F87171',
+    dangerSoft: 'rgba(248, 113, 113, 0.14)',
+    success: '#4ADE80',
+    successSoft: 'rgba(74, 222, 128, 0.14)',
+    warn: '#FBBF24',
+    warnSoft: 'rgba(251, 191, 36, 0.14)',
+    info: '#60A5FA',
+    gradientBg: 'radial-gradient(1100px 520px at 82% -8%, rgba(226, 185, 91, 0.06), transparent 60%), radial-gradient(900px 460px at 12% 100%, rgba(56, 189, 248, 0.05), transparent 62%), linear-gradient(180deg, #0B0F16 0%, #101621 100%)',
+    // Tooltip & Primary button text colors
+    bgTooltip: '#F1F5F9',
+    textTooltip: '#0C1017'
 }
 
 function initialMode() {
@@ -72,7 +73,19 @@ function initialMode() {
 }
 
 function kebab(s) {
-    return s.replace(/[A-Z]/g, c => '-' + c.toLowerCase())
+    return s
+        .replace(/([a-z])([A-Z])/g, '$1-$2')
+        .toLowerCase()
+}
+
+const TOKEN_ALIASES = {
+    bg2: '--bg-2',
+    bg3: '--bg-3',
+    surface2: '--surface-2',
+    surface3: '--surface-3',
+    text2: '--text-2',
+    text3: '--text-3',
+    accent2: '--accent-2'
 }
 
 function applyTheme(m) {
@@ -85,9 +98,13 @@ function applyTheme(m) {
     root.dataset.mode = m
     for (const [key, value] of Object.entries(t)) {
         root.style.setProperty(`--${kebab(key)}`, value)
+        if (TOKEN_ALIASES[key]) {
+            root.style.setProperty(TOKEN_ALIASES[key], value)
+        }
     }
-
-    // Remove transition class after animation
+    if (m === 'light') {
+        root.style.removeProperty('--bg-dark')
+    }
     setTimeout(() => {
         root.classList.remove('ns-theme-transitioning')
     }, 300)

@@ -24,15 +24,14 @@ const deleting = ref(false)
 const panelRef = ref(null)
 const actionError = ref('')
 
-// Get month from Indonesian date string
+// Get month and year from Indonesian/ISO date string
 function getMonthFromIndoDate(dateStr) {
     if (!dateStr) return null
     const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
                     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
     const date = parseDateIndo(dateStr)
-    return date ? months[date.getMonth()] : null
+    return date ? `${months[date.getMonth()]} ${date.getFullYear()}` : null
 }
-
 // Format date to Indonesian
 function formatDate(date) {
     return formatDateIndo(date)
@@ -290,6 +289,15 @@ watch(() => props.open, async (open) => {
                             <div>{{ row.sipp_status || 'Status tidak diketahui' }}</div>
                             <div class="ns-detail-status-sub">Lama proses: {{ row.sipp_lama_proses || '—' }}</div>
                         </div>
+                    </div>
+                    <div v-if="(row.sipp_status === 'Minutasi' && !row.tanggal_putus) || (Number(row.tahun_masuk) >= 2023 && !['T', 'Y'].includes(row.sipp_pihak_dipublikasikan))" class="ns-detail-warning" role="status">
+                        <Icon name="alert" :size="14" />
+                        <span>
+                            Kelengkapan SIPP:
+                            <template v-if="row.sipp_status === 'Minutasi' && !row.tanggal_putus">tanggal putus belum terisi</template>
+                            <template v-if="row.sipp_status === 'Minutasi' && !row.tanggal_putus && Number(row.tahun_masuk) >= 2023 && !['T', 'Y'].includes(row.sipp_pihak_dipublikasikan)"> · </template>
+                            <template v-if="Number(row.tahun_masuk) >= 2023 && !['T', 'Y'].includes(row.sipp_pihak_dipublikasikan)">flag anonimisasi belum diisi</template>
+                        </span>
                     </div>
 
                     <div class="ns-detail-section">
@@ -613,6 +621,19 @@ watch(() => props.open, async (open) => {
     }
 }
 
+.ns-detail-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--warning, #b45309);
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.32);
+}
 /* Progress Bar Styles */
 .ns-jadwal-progress-wrap {
     margin-bottom: 16px;

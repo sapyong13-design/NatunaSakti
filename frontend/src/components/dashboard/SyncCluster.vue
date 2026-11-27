@@ -100,6 +100,7 @@ async function handleSync() {
         }
 
         lastSync.value = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+        window.dispatchEvent(new CustomEvent('sipp-synced'))
         emit('synced')
     }
 

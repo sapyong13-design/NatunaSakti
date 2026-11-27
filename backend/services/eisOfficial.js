@@ -301,6 +301,12 @@ function createOfficialEis(db, { clock = () => new Date(), reader = readOfficial
         )
     `);
     const read = db.prepare('SELECT * FROM eis_official_monthly WHERE period = ?');
+    const readReady = db.prepare(`
+        SELECT period, status, attempted_at, snapshot_json
+        FROM eis_official_monthly
+        WHERE status = 'ready' AND snapshot_json IS NOT NULL
+        ORDER BY period ASC
+    `);
     const claim = db.prepare(`
         INSERT INTO eis_official_monthly (period, attempt_day) VALUES (?, ?)
         ON CONFLICT(period) DO UPDATE SET attempt_day = excluded.attempt_day
@@ -333,7 +339,6 @@ function createOfficialEis(db, { clock = () => new Date(), reader = readOfficial
         const attemptedAt = started.toISOString();
         if (!force && period !== today.slice(0, 7)) return get(period);
         if (!claim.run(period, today, Number(force)).changes) return get(period);
-
         // Claim the day before network I/O, so even a restart during I/O won't repeat the
         // automatic attempt. The prior status/snapshot remains readable until a new result.
         const work = Promise.resolve().then(async () => {
@@ -359,7 +364,16 @@ function createOfficialEis(db, { clock = () => new Date(), reader = readOfficial
         }
     }
 
-    return { get, refresh };
+    function list() {
+        return readReady.all().map(row => ({
+            period: row.period,
+            status: row.status,
+            attemptedAt: row.attempted_at,
+            snapshot: JSON.parse(row.snapshot_json)
+        }));
+    }
+
+    return { get, list, refresh };
 }
 
 module.exports = { createOfficialEis };

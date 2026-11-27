@@ -4,12 +4,15 @@ import { useTheme } from '../../composables/useTheme'
 import LiveIndicator from './LiveIndicator.vue'
 import NotificationDropdown from './NotificationDropdown.vue'
 import Icon from '../Icon.vue'
-import { getPerkara } from '../../lib/api'
+import { getPerkara, getSippStatus } from '../../lib/api'
 
 let checkInterval = null
 
 const theme = useTheme()
 const lastSync = ref('--')
+const lastSyncTitle = ref('')
+const syncStatusTone = ref('ok')
+const syncStatusLabel = ref('Sync OK')
 const newPerkara = ref([])
 const lastKnownCount = ref(0)
 
@@ -20,12 +23,45 @@ defineProps({
 defineEmits(['toggle-menu'])
 defineExpose({ checkNewPerkara })
 
+function updateSyncIndicator(countData) {
+    const iso = countData?.last_sync
+    if (!iso || !Number.isFinite(Date.parse(iso))) {
+        lastSync.value = 'Belum sync'
+        lastSyncTitle.value = 'Belum ada riwayat sinkronisasi SIPP'
+        syncStatusTone.value = 'warn'
+        syncStatusLabel.value = 'Perlu Sync'
+        return
+    }
+
+    const date = new Date(iso)
+    const ageHours = (Date.now() - date.getTime()) / 3600000
+    const timeText = new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+    }).format(date)
+
+    lastSync.value = `${timeText} WIB`
+    lastSyncTitle.value = `Sinkronisasi terakhir: ${date.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB (${countData?.sipp_synced ?? 0}/${countData?.total ?? 0} perkara)`
+
+    if ((countData?.total || 0) > (countData?.sipp_synced || 0)) {
+        syncStatusTone.value = 'warn'
+        syncStatusLabel.value = 'Parsial'
+    } else if (ageHours > 24) {
+        syncStatusTone.value = 'warn'
+        syncStatusLabel.value = 'Cache >24j'
+    } else {
+        syncStatusTone.value = 'ok'
+        syncStatusLabel.value = 'Sync OK'
+    }
+}
+
 async function checkNewPerkara() {
     try {
-        // Get total count first
-        const API_BASE = 'http://localhost:3000/api'
-        const countRes = await fetch(`${API_BASE}/perkara/sipp/status`)
-        const countData = await countRes.json()
+        const countData = await getSippStatus()
+        updateSyncIndicator(countData)
         const currentTotal = countData.total || 0
 
         // Get stored count from localStorage
@@ -47,9 +83,11 @@ async function checkNewPerkara() {
         lastKnownCount.value = currentTotal
     } catch (err) {
         console.error('Check new perkara failed:', err.message)
+        syncStatusTone.value = 'error'
+        syncStatusLabel.value = 'Offline'
+        lastSync.value = 'API tidak terjangkau'
     }
 }
-
 function clearNotifications() {
     newPerkara.value = []
     // Update stored count to current total
@@ -90,7 +128,7 @@ onUnmounted(() => {
             <div class="ns-c-org-sub">Mahkamah Agung Republik Indonesia</div>
         </div>
         <div class="ns-topbar-actions">
-            <LiveIndicator :syncing="false" :last-sync="lastSync" />
+            <LiveIndicator :syncing="false" :status="syncStatusTone" :label="syncStatusLabel" :last-sync="lastSync" :title="lastSyncTitle" />
             <NotificationDropdown :items="newPerkara" @clear="clearNotifications" />
             <button
                 class="ns-icon-btn"

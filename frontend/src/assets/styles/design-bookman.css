@@ -164,6 +164,9 @@
   background: linear-gradient(180deg, var(--accent-soft), transparent);
   pointer-events: none; z-index: 0;
 }
+.ns-skin-c[data-mode="dark"] .ns-c-hero-bg {
+  background: linear-gradient(180deg, rgba(226, 185, 91, 0.045), transparent 85%);
+}
 .ns-skin-c .ns-sidebar {
   background: var(--bg-2);
   border-right: 1px solid var(--border);

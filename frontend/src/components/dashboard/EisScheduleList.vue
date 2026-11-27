@@ -4,7 +4,8 @@ import { computed, ref } from 'vue'
 const props = defineProps({
     rows: { type: Array, required: true },
     kind: { type: String, required: true },
-    checkedAt: { type: String, required: true }
+    checkedAt: { type: String, required: true },
+    returnContext: { type: Object, default: () => ({}) }
 })
 const dayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' })
 const labelFormat = new Intl.DateTimeFormat('id-ID', { timeZone: 'UTC', day: 'numeric', month: 'short' })
@@ -67,7 +68,7 @@ function labelDate(date) {
             <li v-for="row in group.rows" :key="row.sourceId" class="schedule-entry">
                 <time :datetime="row.tanggal">{{ labelDate(row.tanggal) }}</time>
                 <div class="schedule-case">
-                    <RouterLink v-if="row.id" :to="{ name: 'Data', query: { perkara: row.id } }">{{ row.nomorPerkara }}</RouterLink>
+                    <RouterLink v-if="row.id" :to="{ name: 'Data', query: { perkara: row.id, ...returnContext } }">{{ row.nomorPerkara }}</RouterLink>
                     <strong v-else>{{ row.nomorPerkara }}</strong>
                     <p v-if="kind === 'bas' && row.docName" class="schedule-file">{{ row.docName }}</p>
                     <details v-if="row.agenda || kind === 'bas'" class="schedule-extra">

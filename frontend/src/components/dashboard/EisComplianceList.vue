@@ -1,7 +1,10 @@
 <script setup>
 import { computed, ref } from 'vue'
 
-const props = defineProps({ audit: { type: Object, required: true } })
+const props = defineProps({
+    audit: { type: Object, required: true },
+    returnContext: { type: Object, default: () => ({}) }
+})
 const filters = [
     { id: 'review', label: 'Perlu dicek' },
     { id: 'matched', label: 'Memenuhi cek lokal' },
@@ -37,7 +40,7 @@ function civilDate(value) {
         <ul v-else class="compliance-list" :aria-label="filters.find(item => item.id === filter).label">
             <li v-for="(row, i) in rows" :key="i">
                 <header>
-                    <RouterLink v-if="row.id" :to="{ name: 'Data', query: { perkara: row.id } }">{{ row.nomorPerkara }}</RouterLink>
+                    <RouterLink v-if="row.id" :to="{ name: 'Data', query: { perkara: row.id, ...returnContext } }">{{ row.nomorPerkara }}</RouterLink>
                     <strong v-else>{{ row.nomorPerkara || 'Nomor perkara tidak tercatat' }}</strong>
                     <span :data-state="row.state" :data-nonpdf="row.nonPdf ? 'true' : null">{{ row.note }}</span>
                 </header>
